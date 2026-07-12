@@ -21,6 +21,15 @@ Build the Rack plugin with the Rack SDK + Makefile workflow (`RACK_DIR`, `make`,
 `make dist`, `plugin.json`, panel SVGs, the `rack::` C++ API) — see the
 `vcv-rack-plugin-dev` skill.
 
+## Contribution workflow
+
+This is a public repo with a tracked remote. Every substantive change goes
+through a **branch + PR cycle tied to a GitHub issue**: open (or reference) an
+issue describing the change, work on a feature branch, and merge via a pull
+request that references the issue — no direct commits to `main`. Trivial
+changes (typo/doc fixes, comment tweaks, similar quick edits) may skip the
+issue and commit directly, but when in doubt use the full cycle.
+
 ## What DROID is
 
 DROID is a **CV processing system for Eurorack** built around a *master* module
