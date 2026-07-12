@@ -1,0 +1,44 @@
+# scrub = 1 ignores the transport state and outputs the tape sample at the
+# position selected by `scrubposition` (0 = start, 1 = end). While scrubbing the
+# playled is 1 and the other LEDs are 0.
+#
+# Transport is driven by the recordbutton (not `mode`) so the LED outputs are
+# actually driven -- with `mode` patched the manual says the buttons and LEDs
+# are ignored, so this test would not exercise the LED behaviour it documents.
+patch <<<
+[recorder]
+    cvin          = I1
+    recordbutton  = I2
+    scrub         = I5
+    scrubposition = I6
+    cvout         = O1
+    recordled     = O3
+    playled       = O2
+    stopled       = O4
+>>>
+# record 5 samples 0.20,0.30,0.40,0.50,0.60 (recordled lit during record)
+@0 set I2 1
+@0 set I1 0.20
+@0 expect O3 1
+@0 expect O2 0
+@0 expect O4 0
+@1 set I2 0
+@1 set I1 0.30
+@2 set I1 0.40
+@3 set I1 0.50
+@4 set I1 0.60
+# scrub: position selects the sample; playled=1, others 0. The transport is
+# still in RECORD, but scrub suspends it -- no new samples are appended, so the
+# tape stays 5 samples long and the position mapping is stable.
+@5 set I5 1
+@5 set I6 0
+@5 expect O1 0.20 tol 1e-5
+@5 expect O2 1
+@5 expect O3 0
+@5 expect O4 0
+@6 set I6 0.5
+@6 expect O1 0.40 tol 1e-5
+@7 set I6 1
+@7 expect O1 0.60 tol 1e-5
+@8 set I6 0.2
+@8 expect O1 0.30 tol 1e-5

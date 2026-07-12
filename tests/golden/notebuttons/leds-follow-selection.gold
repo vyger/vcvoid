@@ -1,0 +1,34 @@
+# notebuttons: LED persistence. led<selected> is held on persistently (radio-
+# button style, per the buttongroup analogy); every other LED is off. The LED
+# tracks the SELECTED note, not the finger, so it stays lit after release and
+# moves only when a new note is selected.
+#   t0: startnote default 0 -> L1.1 on, L1.3 off
+#   t1 press button3 (note 2) -> L1.3 on, L1.1 off
+#   t2 release -> L1.3 still on (persistent), L1.1 off
+#   t3 press button1 (note 0) -> L1.1 on, L1.3 off
+#   t4 release -> L1.1 still on
+tickrate 100
+patch <<<
+[b32]
+
+[notebuttons]
+    button1 = B1.1
+    button3 = B1.3
+    led1    = L1.1
+    led3    = L1.3
+    output  = O1
+>>>
+@0 expect L1.1 1 tol 1e-4
+@0 expect L1.3 0 tol 1e-4
+@1 set B1.3 1
+@1 expect L1.1 0 tol 1e-4
+@1 expect L1.3 1 tol 1e-4
+@2 set B1.3 0
+@2 expect L1.1 0 tol 1e-4
+@2 expect L1.3 1 tol 1e-4
+@3 set B1.1 1
+@3 expect L1.1 1 tol 1e-4
+@3 expect L1.3 0 tol 1e-4
+@4 set B1.1 0
+@4 expect L1.1 1 tol 1e-4
+@4 expect L1.3 0 tol 1e-4

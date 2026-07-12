@@ -1,0 +1,13 @@
+# chord three-voice mode: output4 unconnected activates 3-voice mode. C major
+# default; the three voices take the first three interval-order notes = C,E,G.
+# No duplication (exactly enough notes). pitch=0, spread=0.
+#   O1=C(0), O2=E(4), O3=G(7)
+patch <<<
+[chord]
+    output1 = O1
+    output2 = O2
+    output3 = O3
+>>>
+@0 expect O1 0 tol 1e-5
+@0 expect O2 0.0333333 tol 1e-5
+@0 expect O3 0.0583333 tol 1e-5

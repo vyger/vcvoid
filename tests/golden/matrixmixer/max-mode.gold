@@ -1,0 +1,22 @@
+# matrixmixer: mixmax = 1 makes each output the MAXIMUM of its enabled inputs
+# instead of the sum (useful for combining envelopes without them getting too
+# loud). button11 and button21 both route to output1; inputs 0.3 and 0.7.
+#   sum would be 1.0, but max = 0.7.
+tickrate 100
+patch <<<
+[matrixmixer]
+    startvalue = 0
+    mixmax   = 1
+    input1   = I1
+    input2   = I2
+    output1  = O1
+    button11 = I5
+    button21 = I6
+>>>
+@0 set I1 0.3
+@0 set I2 0.7
+@1 set I5 1
+@2 set I5 0
+@3 set I6 1
+@4 set I6 0
+@5 expect O1 0.7 tol 1e-4

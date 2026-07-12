@@ -1,0 +1,26 @@
+# switchedpot: the `bipolar` gate maps each virtual pot's 0..1 value to -1..+1
+# (2v-1). switch1=B1.1, bipolar=I1, output1=O1.
+#   t0 phys .5, sw1 on, bipolar on : v1 .5  -> out 2*.5-1 = 0
+#   t1 phys ->1: v1 1.0            -> out 2*1-1 = 1
+#   t2 phys ->0: v1 pickup 1->0    -> out 2*0-1 = -1
+#   t3 bipolar off: v1 0           -> out v1 = 0
+tickrate 100
+patch <<<
+[p2b8]
+
+[switchedpot]
+    pot     = P1.1
+    bipolar = I1
+    switch1 = B1.1
+    output1 = O1
+>>>
+@0 set P1.1 0.5
+@0 set B1.1 1
+@0 set I1 1
+@0 expect O1 0 tol 1e-4
+@1 set P1.1 1.0
+@1 expect O1 1 tol 1e-4
+@2 set P1.1 0.0
+@2 expect O1 -1 tol 1e-4
+@3 set I1 0
+@3 expect O1 0 tol 1e-4

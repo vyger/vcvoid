@@ -1,0 +1,18 @@
+# gatetool: manual example -- inputgate -> outputgate with no gatelength copies the
+# input gate length unchanged (gatestretch defaults 0, mingatelength default 0.01 s
+# = 1 tick < input length, no maxgatelength). tickrate 100.
+#
+# Input gate high t0..t19 (D = 20 ticks). Output tracks it exactly: high t0..t19,
+# low from t20 (at the fall, D=20, stretch 0 -> length 20, off at tick 20).
+tickrate 100
+patch <<<
+[gatetool]
+    inputgate  = I1
+    outputgate = O1
+>>>
+@0 set I1 1
+@0 expect O1 1 tol 1e-4
+@19 expect O1 1 tol 1e-4
+@20 set I1 0
+@20 expect O1 0 tol 1e-4
+@25 expect O1 0 tol 1e-4

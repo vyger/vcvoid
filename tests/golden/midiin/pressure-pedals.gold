@@ -1,0 +1,42 @@
+# midiin: aftertouch pressure + pedals (manual "Pedals", lines 193-215; outputs
+# lines 364, 377-378). Channel pressure (0xD0) sets EVERY voice's pressure;
+# polyphonic key pressure (0xA0) sets only the voice holding that note (line
+# 364). Pressure 0..127 -> 0..1. Portamento pedal (CC65) -> `portamento` output,
+# soft pedal (CC67) -> `soft` output, both 1 while down (>=64). Damper pedal
+# (CC64, line 199) sustains: a note-off while it is down keeps the gate high
+# until the pedal is released.
+tickrate 1000
+patch <<<
+[midiin]
+    pitch1     = O1
+    pitch2     = O2
+    gate1      = O3
+    gate2      = O4
+    pressure1  = O5
+    pressure2  = O6
+    portamento = O7
+    soft       = O8
+>>>
+@0 midisend trs noteon 1 60 100
+@1 midisend trs noteon 1 64 100
+@1 expect O3 1
+@1 expect O4 1
+@2 midisend trs aftertouch 1 90
+@2 expect O5 0.708661 tol 0.0001
+@2 expect O6 0.708661 tol 0.0001
+@3 midisend trs polyaftertouch 1 60 40
+@3 expect O5 0.314961 tol 0.0001
+@3 expect O6 0.708661 tol 0.0001
+@4 midisend trs cc 1 65 127
+@4 expect O7 1
+@5 midisend trs cc 1 65 0
+@5 expect O7 0
+@6 midisend trs cc 1 67 100
+@6 expect O8 1
+@7 midisend trs cc 1 67 0
+@7 expect O8 0
+@8 midisend trs cc 1 64 127
+@9 midisend trs noteoff 1 60 0
+@9 expect O3 1
+@10 midisend trs cc 1 64 0
+@10 expect O3 0

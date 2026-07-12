@@ -1,0 +1,28 @@
+# roundrobin = 0 (default): the search for a free output always starts at
+# output1, so a monophonic melody keeps reusing the lowest-numbered output
+# (out2 stays idle) -- the deterministic behaviour the manual describes for
+# chords. Contrast with roundrobin.gold.
+patch <<<
+[polytool]
+    pitchinput1  = I1
+    gateinput1   = I2
+    pitchoutput1 = O1
+    pitchoutput2 = O2
+    gateoutput1  = O3
+    gateoutput2  = O4
+>>>
+@0 set I1 0.1
+@0 set I2 1
+@0 expect O1 0.1 tol 1e-5
+@0 expect O3 1
+@0 expect O2 0
+@0 expect O4 0
+@1 set I2 0
+@1 expect O3 0
+# next note reuses out1 (scan from output1 finds it free); out2 never used
+@2 set I1 0.2
+@2 set I2 1
+@2 expect O1 0.2 tol 1e-5
+@2 expect O3 1
+@2 expect O2 0
+@2 expect O4 0

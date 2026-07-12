@@ -1,0 +1,25 @@
+# minifonion manual example 2: root=2 (D), degree=7 (natural minor / aeolian).
+# scale 7 columns I..VII at C = {0,2,3,5,7,8,10}; +2 (root D) mod 12, pitch-ordered
+# = {0,2,4,5,7,9,10} = D E F G A A# C. direction default 1 (upward).
+patch <<<
+[minifonion]
+    input  = I1
+    output = O2
+    root   = 2
+    degree = 7
+>>>
+# pc0 (C) is in D minor -> passthrough
+@0 set I1 0
+@0 expect O2 0 tol 1e-5
+# 1 semi (pc1) not in scale; up -> 2 semi (pc2, D)
+@1 set I1 0.0083333
+@1 expect O2 0.0166667 tol 1e-5
+# 3 semi (pc3) not in scale; up -> 4 semi (pc4 = E) allowed
+@2 set I1 0.025
+@2 expect O2 0.0333333 tol 1e-5
+# 6 semi (pc6) not in scale; up -> 7 semi (pc7 = G) allowed
+@3 set I1 0.05
+@3 expect O2 0.0583333 tol 1e-5
+# 11 semi (pc11, B) not in scale; up wraps to 12 semi (pc0, C) = 0.1
+@4 set I1 0.0916667
+@4 expect O2 0.1 tol 1e-5

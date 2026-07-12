@@ -1,0 +1,8 @@
+# A bare case with no case/value/else inputs connected: all case inputs default
+# to 0 (none non-zero) and else defaults to 0, so the output is 0.
+patch <<<
+[case]
+    output = O1
+>>>
+@0 expect O1 0
+@1 expect O1 0

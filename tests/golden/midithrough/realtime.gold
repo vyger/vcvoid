@@ -1,0 +1,19 @@
+# midithrough: system realtime messages (clock/start/stop/continue) are ordinary
+# 3-byte events and are forwarded exactly like channel-voice events. Manual
+# midithrough.md forwards "MIDI data" without special-casing message class; only
+# Sysex is excluded (lines 100-101), and Sysex cannot even reach this engine (a
+# MidiEvent is a fixed 3-byte POD, so there is nothing to drop here).
+patch <<<
+[midithrough]
+    fromtrs = 1
+    tousb = 1
+>>>
+@0 midisend trs clock
+@0 expectmidi usb clock
+@0 expectmidi usb none
+@1 midisend trs start
+@1 expectmidi usb start
+@2 midisend trs stop
+@2 expectmidi usb stop
+@3 midisend trs continue
+@3 expectmidi usb continue

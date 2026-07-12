@@ -1,0 +1,91 @@
+# adc worked example 2 (manual/circuits/adc.md): 3 bits over a shifted range
+# minimum=0.1, maximum=0.5. Here minimum/maximum are driven as live CV inputs
+# (I2/I3) rather than constants, exercising that all three inputs read through
+# the standard A*B+C input math. Band width = (0.5-0.1)/8 = 0.05.
+#
+#   band  input(mid)  ((in-0.1)/0.4)*8   value  b1 b2 b3
+#   0     0.125       0.5                0      0  0  0
+#   1     0.175       1.5                1      0  0  1
+#   2     0.225       2.5                2      0  1  0
+#   3     0.275       3.5                3      0  1  1
+#   4     0.325       4.5                4      1  0  0
+#   5     0.375       5.5                5      1  0  1
+#   6     0.425       6.5                6      1  1  0
+#   7     0.475       7.5                7      1  1  1
+patch <<<
+[adc]
+    input = I1
+    minimum = I2
+    maximum = I3
+    bit1 = O1
+    bit2 = O2
+    bit3 = O3
+>>>
+
+# establish the CV range once (registers persist across ticks)
+@0 set I2 0.1
+@0 set I3 0.5
+
+# below minimum -> all zeros
+@0 set I1 0.05
+@0 expect O1 0
+@0 expect O2 0
+@0 expect O3 0
+
+# exactly at minimum -> value 0 -> all zeros
+@1 set I1 0.1
+@1 expect O1 0
+@1 expect O2 0
+@1 expect O3 0
+
+@2 set I1 0.125
+@2 expect O1 0
+@2 expect O2 0
+@2 expect O3 0
+
+@3 set I1 0.175
+@3 expect O1 0
+@3 expect O2 0
+@3 expect O3 1
+
+@4 set I1 0.225
+@4 expect O1 0
+@4 expect O2 1
+@4 expect O3 0
+
+@5 set I1 0.275
+@5 expect O1 0
+@5 expect O2 1
+@5 expect O3 1
+
+@6 set I1 0.325
+@6 expect O1 1
+@6 expect O2 0
+@6 expect O3 0
+
+@7 set I1 0.375
+@7 expect O1 1
+@7 expect O2 0
+@7 expect O3 1
+
+@8 set I1 0.425
+@8 expect O1 1
+@8 expect O2 1
+@8 expect O3 0
+
+@9 set I1 0.475
+@9 expect O1 1
+@9 expect O2 1
+@9 expect O3 1
+
+# exactly at maximum -> all ones (max maps to 111...)
+@10 set I1 0.5
+@10 expect O1 1
+@10 expect O2 1
+@10 expect O3 1
+
+# above maximum -> all ones
+@11 set I1 0.6
+@11 expect O1 1
+@11 expect O2 1
+@11 expect O3 1

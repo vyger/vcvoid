@@ -1,0 +1,14 @@
+# steps=3 -> three levels: minimum(0), (min+max)/2 (0.5), maximum(1).
+# i = floor(u*3). Unclocked, single block, seed-1 stream:
+#   draws -> i = 0,0,1,0,1,0 -> 0, 0, 0.5, 0, 0.5, 0
+patch <<<
+[random]
+    steps  = 3
+    output = O1
+>>>
+@0 expect O1 0
+@1 expect O1 0
+@2 expect O1 0.5 tol 1e-6
+@3 expect O1 0
+@4 expect O1 0.5 tol 1e-6
+@5 expect O1 0

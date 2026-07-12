@@ -1,0 +1,33 @@
+# "If you change `end` to be the current level of the transient, it seems to
+# stop, but in fact the slope is just zero and it still lasts until the duration
+# is over." So the output stalls at the current level, but the phase (an
+# internal CLOCK, not the normalized position) keeps running to 1, and
+# endoftransient fires only when the full duration has elapsed.
+# start=0, end=0.5, duration=1 s (tickrate 10). At t5 the output is at 0.25 and
+# `end` is set to exactly 0.25: output holds 0.25, phase keeps counting
+# 0.6, 0.7 ... 1.0, and eot goes high at t10 (not at t5).
+tickrate 10
+patch <<<
+[transient]
+    start          = 0
+    end            = I1
+    duration       = 1
+    output         = O1
+    phase          = O2
+    endoftransient = O3
+>>>
+@0 set I1 0.5
+@5 expect O1 0.25 tol 1e-4
+@5 expect O2 0.5 tol 1e-4
+# end -> current level: slope becomes zero, but the transient is NOT finished
+@6 set I1 0.25
+@6 expect O1 0.25 tol 1e-4
+@6 expect O2 0.6 tol 1e-4
+@6 expect O3 0
+@9 expect O1 0.25 tol 1e-4
+@9 expect O2 0.9 tol 1e-4
+@9 expect O3 0
+# duration elapsed: now it is really over
+@10 expect O1 0.25 tol 1e-4
+@10 expect O2 1.0 tol 1e-4
+@10 expect O3 1

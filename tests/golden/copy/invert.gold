@@ -1,0 +1,12 @@
+# manual example: inversion via 10V - I1 (0V->10V, 2V->8V, 10V->0V)
+patch <<<
+[copy]
+    input = 10V - I1
+    output = O1
+>>>
+@0 set I1 0.2
+@0 expect O1 0.8
+@1 set I1 1.0
+@1 expect O1 0.0
+@2 set I1 0.0
+@2 expect O1 1.0

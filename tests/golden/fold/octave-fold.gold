@@ -1,0 +1,24 @@
+# fold worked example: keep a CV within [minimum, maximum] by adding/subtracting
+# foldby (one octave = 1V = 0.1). minimum=1.2V (0.12), maximum=2.5V (0.25).
+# Below minimum -> add foldby until >= minimum; above maximum -> subtract until
+# <= maximum. The manual's exact pairs:
+#   0.7V (0.07) -> 1.7V (0.17)
+#   2.0V (0.20) -> 2.0V (0.20)   (already in range)
+#  -4.3V (-0.43) -> 1.7V (0.17)  (folds up 6 octaves)
+#   4.4V (0.44) -> 2.4V (0.24)   (folds down 2 octaves)
+patch <<<
+[fold]
+    input   = I1
+    foldby  = 1V
+    minimum = 1.2V
+    maximum = 2.5V
+    output  = O1
+>>>
+@0 set I1 0.07
+@0 expect O1 0.17 tol 1e-6
+@1 set I1 0.2
+@1 expect O1 0.2 tol 1e-6
+@2 set I1 -0.43
+@2 expect O1 0.17 tol 1e-6
+@3 set I1 0.44
+@3 expect O1 0.24 tol 1e-6

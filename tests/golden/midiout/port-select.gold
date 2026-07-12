@@ -1,0 +1,34 @@
+# midiout port selection (manual lines 68-134, 344-345). Unlike midiin, trs/usb
+# are GATES here. Per the table (lines 77-87): usb=1 alone -> USB only; usb=1 and
+# trs=1 -> BOTH ports carry the same stream. The first circuit sets usb=1 and no
+# trs, so its note goes to USB only (TRS stays silent). The second circuit sets
+# usb=1 and trs=1, so its note is emitted on both ports. pitchstabilization=0 so
+# note-ons land immediately on the gate edge.
+tickrate 1000
+x7 1
+patch <<<
+[midiout]
+    usb   = 1
+    pitch = I1
+    gate  = I2
+    pitchstabilization = 0
+    activesensing = 0
+
+[midiout]
+    usb   = 1
+    trs   = 1
+    pitch = I3
+    gate  = I4
+    pitchstabilization = 0
+    activesensing = 0
+>>>
+@0 set I1 0.3
+@0 set I3 0
+@1 set I2 1
+@1 expectmidi trs none
+@1 expectmidi usb noteon 1 60 127
+@2 set I2 0
+@2 set I4 1
+@2 expectmidi trs noteon 1 24 127
+@2 expectmidi usb noteoff 1 60 127
+@2 expectmidi usb noteon 1 24 127

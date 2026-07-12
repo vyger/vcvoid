@@ -1,0 +1,26 @@
+# direction search: C lydian allowed = {0,2,4,6,7,9,11}. Drive `direction` via I2
+# (0 nearest/tie-up, 1 up, 2 down). C# (pc1) sits equidistant between C and D, so
+# nearest ties up to D. G# (pc8) has genuine up/down neighbours A(9)/G(7).
+patch <<<
+[minifonion]
+    input     = I1
+    output    = O2
+    direction = I2
+>>>
+# input C# (1 semi); direction up -> D (2 semi)
+@0 set I1 0.0083333
+@0 set I2 1
+@0 expect O2 0.0166667 tol 1e-5
+# direction down -> C (0)
+@1 set I2 2
+@1 expect O2 0 tol 1e-5
+# direction nearest (0): C and D both 1 semi away -> tie up -> D (2 semi)
+@2 set I2 0
+@2 expect O2 0.0166667 tol 1e-5
+# input G# (8 semi); direction down -> G (7 semi)
+@3 set I1 0.0666667
+@3 set I2 2
+@3 expect O2 0.0583333 tol 1e-5
+# direction up -> A (9 semi)
+@4 set I2 1
+@4 expect O2 0.075 tol 1e-5

@@ -1,0 +1,29 @@
+# midifileplayer: external clocking (manual "Speed and Clocking"): each clock
+# on the `clock` input plays one 16th note of content (div 96 -> 24 file ticks
+# per clock); the file's own tempo and `speed` are ignored.
+# CHOSEN READING (the manual says clocks are internally multiplied for full
+# resolution but gives no algorithm): clock edge n snaps the position to
+# (n-1)*24 ticks (firing everything due), then advances smoothly toward n*24
+# at the rate implied by the measured edge period, never crossing the next
+# boundary early. So the tick-0 note-on fires on edge 1 and the noteoff at
+# tick 96 = boundary 4 fires exactly on edge 5.
+# Edges every 600 engine ticks: 0, 600, 1200, 1800, 2400 -> gate falls @2400.
+midifile 1 4D546864000000060000000100604D54726B0000000C00903C6460803C0000FF2F00
+patch <<<
+[midifileplayer]
+    loop = 0
+    clock = I1
+    gate = O1
+>>>
+@0 set I1 1
+@0 expect O1 1
+@100 set I1 0
+@600 set I1 1
+@700 set I1 0
+@1200 set I1 1
+@1300 set I1 0
+@1800 set I1 1
+@1900 set I1 0
+@2390 expect O1 1
+@2400 set I1 1
+@2400 expect O1 0

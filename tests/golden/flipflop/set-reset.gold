@@ -1,0 +1,13 @@
+# manual example: set/reset variant. "set" forces the bit to 1, "reset"
+# forces it to 0.
+patch <<<
+[flipflop]
+    set = I1
+    reset = I2
+    output = O1
+>>>
+@0 expect O1 0
+@1 set I1 1
+@1 expect O1 1
+@2 set I2 1
+@2 expect O1 0

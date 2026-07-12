@@ -1,0 +1,21 @@
+# midiout triggerdelay (manual lines 293-321, 353). A fixed gate delay in ms.
+# Using triggerdelay disables pitchstabilization unless it is set to 1 explicitly
+# (line 353). Here triggerdelay=5 with stabilization implicitly disabled, so the
+# note-on lands exactly 5 ms after the gate edge (t=1 -> t=6), regardless of
+# whether the pitch has settled.
+tickrate 1000
+x7 1
+patch <<<
+[midiout]
+    pitch = I1
+    gate  = I2
+    triggerdelay = 5
+    activesensing = 0
+>>>
+@0 set I1 0.3
+@1 set I2 1
+@1 expectmidi trs none
+@5 expectmidi trs none
+@6 expectmidi trs noteon 1 60 127
+@10 set I2 0
+@10 expectmidi trs noteoff 1 60 127

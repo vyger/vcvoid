@@ -1,0 +1,24 @@
+# display: trigger popup.  Spec: display.md "a trigger into this input forces the
+# text in text or value to be displayed. It is not watched for changes any longer."
+# When `trigger` is PATCHED, change detection is disabled: a constant value never
+# auto-shows; only a rising edge on `trigger` pushes the (possibly unchanged)
+# value onto the screen.
+#   t0,t1: value 0.42 present but trigger low       -> screen OFF
+#   t2:    trigger rises                            -> popup 0.42
+#   t3:    trigger falls, value unchanged           -> screen keeps 0.42 (owned)
+#   t5:    trigger rises again on the SAME value     -> popup forced through again
+tickrate 100
+patch <<<
+[db8e]
+[display]
+    value   = 0.42
+    trigger = I1
+>>>
+@0 expectdisplay D1 off
+@1 expectdisplay D1 off
+@2 set I1 1
+@2 expectdisplay D1 value 0.42 tol 1e-6
+@3 set I1 0
+@3 expectdisplay D1 value 0.42 tol 1e-6
+@5 set I1 1
+@5 expectdisplay D1 value 0.42 tol 1e-6

@@ -1,0 +1,46 @@
+# button: long/short press. longpresstime = 0.1 s -> 10 ticks at tickrate 100.
+# Because `longpress` is connected, the toggle is DEFERRED to release and
+# suppressed if the hold reached the threshold. `shortpress` fires a 10 ms
+# trigger (1 tick here) on a short release. `longpress` is a level gate, high
+# from the threshold until release.
+#
+# Short press (held 2 ticks < 10):
+#   t1 press (defer, no toggle yet; state stays 0 -> output 0)
+#   t3 release -> short -> toggle to state 1, shortpress pulse (tick 3 only)
+# Long press (held >=10 ticks):
+#   t5 press (defer). heldTicks reaches 10 at tick 14.
+#   t16: held 12 ticks -> longpress gate high; state unchanged (still 1)
+#   t17 release -> was long -> NO toggle, NO shortpress; longpress falls to 0
+tickrate 100
+patch <<<
+[p2b8]
+
+[button]
+    button        = B1.1
+    led           = L1.1
+    output        = O1
+    longpress     = O2
+    shortpress    = O3
+    longpresstime = 0.1
+>>>
+@0 expect O1 0 tol 1e-4
+@1 set B1.1 1
+@1 expect O1 0 tol 1e-4
+@1 expect O2 0 tol 1e-4
+@1 expect O3 0 tol 1e-4
+@3 set B1.1 0
+@3 expect O1 1 tol 1e-4
+@3 expect O2 0 tol 1e-4
+@3 expect O3 1 tol 1e-4
+@4 expect O3 0 tol 1e-4
+@5 set B1.1 1
+@5 expect O1 1 tol 1e-4
+@8 expect O2 0 tol 1e-4
+@8 expect O3 0 tol 1e-4
+@16 expect O2 1 tol 1e-4
+@16 expect O3 0 tol 1e-4
+@16 expect O1 1 tol 1e-4
+@17 set B1.1 0
+@17 expect O2 0 tol 1e-4
+@17 expect O3 0 tol 1e-4
+@17 expect O1 1 tol 1e-4

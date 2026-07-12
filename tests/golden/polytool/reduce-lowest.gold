@@ -1,0 +1,33 @@
+# voiceallocation = 2 (lowest): when all outputs are busy the LOWEST-pitch note
+# is cancelled. Three voices (pitches 0.3, 0.5) -> two outputs; the new note 0.4
+# steals the lowest (0.3 on out1).
+patch <<<
+[polytool]
+    pitchinput1     = I1
+    gateinput1      = I2
+    pitchinput2     = I3
+    gateinput2      = I4
+    pitchinput3     = I5
+    gateinput3      = I6
+    voiceallocation = 2
+    pitchoutput1    = O1
+    pitchoutput2    = O2
+    gateoutput1     = O3
+    gateoutput2     = O4
+>>>
+@0 set I1 0.3
+@0 set I2 1
+@0 expect O1 0.3 tol 1e-5
+@0 expect O3 1
+@1 set I3 0.5
+@1 set I4 1
+@1 expect O2 0.5 tol 1e-5
+@1 expect O4 1
+@1 expect O1 0.3 tol 1e-5
+# v3 (0.4) on, all busy: lowest is out1 (0.3) -> stolen
+@2 set I5 0.4
+@2 set I6 1
+@2 expect O1 0.4 tol 1e-5
+@2 expect O3 1
+@2 expect O2 0.5 tol 1e-5
+@2 expect O4 1

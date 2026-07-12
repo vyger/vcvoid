@@ -1,0 +1,31 @@
+# contour: abortattack=1. Manual (contour.md 145): the end of the gate will
+# "immediately stop the attack phase and move on to hold. Note: In this case
+# the value of the envelope will not reach the maximum level." tickrate 100.
+# attack=1 -> 10 ticks; hold=0.055 -> 5.5 ticks (off the exact tick boundary,
+# per house convention, so float dt accumulation can't shift the phase edge:
+# hold completes during t10); release=0.05 -> 10 ticks; decay patched to prove
+# it is skipped. Gate high t0..t4.
+#   attack t0..t4: 0 -> 0.4 (level after t4's eval; gate falls at t5)
+#   hold   t5..t9: frozen at 0.4 (NOT at the 1.0 peak)
+#   release t10..t20: 0.4 -> 0, idle after
+tickrate 100
+patch <<<
+[contour]
+    gate        = I1
+    abortattack = 1
+    attack      = 1
+    hold        = 0.055
+    decay       = 0.05
+    release     = 0.05
+    output      = O1
+>>>
+@0 set I1 1
+@0 expect O1 0 tol 1e-4
+@4 expect O1 0.4 tol 1e-4
+@5 set I1 0
+@5 expect O1 0.4 tol 1e-4
+@9 expect O1 0.4 tol 1e-4
+@10 expect O1 0.4 tol 1e-4
+@15 expect O1 0.2 tol 1e-4
+@20 expect O1 0 tol 1e-4
+@60 expect O1 0 tol 1e-4

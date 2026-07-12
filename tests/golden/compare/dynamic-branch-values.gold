@@ -1,0 +1,22 @@
+# "Dynamic output values": the branch values can be live signals, read each
+# tick, not just constants. ifless=I3, else=I4; the output tracks whichever
+# branch value applies.
+patch <<<
+[compare]
+    input   = I1
+    compare = 0.5
+    ifless  = I3
+    else    = I4
+    output  = O1
+>>>
+# input 0.3 < 0.5 -> less -> ifless value (0.2)
+@0 set I1 0.3
+@0 set I3 0.2
+@0 set I4 0.9
+@0 expect O1 0.2
+# ifless value changes live -> output follows (still less)
+@1 set I3 0.7
+@1 expect O1 0.7
+# input now > 0.5 -> greater -> else value (0.9)
+@2 set I1 0.8
+@2 expect O1 0.9

@@ -1,0 +1,12 @@
+# Unconnected `input` defaults to 0 (Inputs table) -> never a rising edge ->
+# no decision is ever made and both outputs remain at 0 V for all ticks.
+patch <<<
+[bernoulli]
+    output1 = O1
+    output2 = O2
+>>>
+
+@0 expect O1 0
+@0 expect O2 0
+@3 expect O1 0
+@3 expect O2 0

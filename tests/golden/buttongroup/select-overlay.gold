@@ -1,0 +1,52 @@
+# buttongroup: select gates button processing + led writing, but buttonoutput
+# and output keep running (buttonoutput is documented as "always functional").
+# A press made while deselected causes no phantom edge on reselect. select = I7;
+# buttonoutput1 = O2. minactive 0 / maxactive 2, startbutton 0 (empty).
+#   t0 selected, empty -> output 0, led1 0, buttonoutput1 0
+#   t1 press1 -> {1}   -> output 0.1, led1 1, buttonoutput1 0.1
+#   t3 deselect -> output/buttonoutput still live (0.1); led1 left untouched (1)
+#   t4/5 press+release while DESELECTED -> not processed ({1} unchanged)
+#   t6 reselect -> no phantom edge -> still {1} -> led1 1, output 0.1
+#   t7 press1 (selected) -> toggle off -> {} -> output 0, led1 0, buttonoutput1 0
+tickrate 100
+patch <<<
+[p2b8]
+
+[buttongroup]
+    select    = I7
+    button1   = B1.1
+    button2   = B1.2
+    led1      = L1.1
+    led2      = L1.2
+    buttonoutput1 = O2
+    value1    = 0.1
+    value2    = 0.2
+    minactive = 0
+    maxactive = 2
+    startbutton = 0
+    output    = O1
+>>>
+@0 set I7 1
+@0 expect O1 0 tol 1e-4
+@0 expect L1.1 0 tol 1e-4
+@0 expect O2 0 tol 1e-4
+@1 set B1.1 1
+@1 expect O1 0.1 tol 1e-4
+@1 expect L1.1 1 tol 1e-4
+@1 expect O2 0.1 tol 1e-4
+@2 set B1.1 0
+@3 set I7 0
+@3 expect O1 0.1 tol 1e-4
+@3 expect O2 0.1 tol 1e-4
+@3 expect L1.1 1 tol 1e-4
+@4 set B1.1 1
+@5 set B1.1 0
+@5 expect O1 0.1 tol 1e-4
+@6 set I7 1
+@6 expect O1 0.1 tol 1e-4
+@6 expect L1.1 1 tol 1e-4
+@7 set B1.1 1
+@7 expect O1 0 tol 1e-4
+@7 expect L1.1 0 tol 1e-4
+@7 expect O2 0 tol 1e-4
+@8 set B1.1 0

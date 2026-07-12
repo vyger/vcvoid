@@ -1,0 +1,39 @@
+# display: a blocked TEXT write retries and lands when the owner's linger expires,
+# symmetric with the value case in linger-hold-yield.gold.
+#
+# SPEC-GAP: display.md's linger prose reads as delay-not-discard ("forces your text
+# to linger ... even if other circuits would want to change the display's contents").
+# Task-6 final review adjudicated text writers to RETRY exactly like value writers:
+# the text baseline (prevText_) advances only on an ACCEPTED write, so a text blocked
+# by another circuit's linger holds pending and lands on expiry. Hardware-unconfirmed;
+# no golden asserted the old drop-forever behavior, and this restores value/text
+# coherence. Mirrors linger-hold-yield.gold (value) tick-for-tick.
+#
+# Two circuits target D1.  Circuit A ("Alpha", linger = 0.05 s = 5 ticks @ tickrate
+# 100) writes first and owns.  Circuit B wants "Beta" but is gated empty until t2;
+# once non-empty it re-attempts every tick (its prevText_ never advances while blocked,
+# so "Beta" != baseline each tick), and a non-owner write lands only at tick >= linger.
+#   t0: A writes "Alpha" -> owner A, lingerUntil = 0 + 5 = 5.  B empty (I2=0), quiet.
+#   t2: I2=1 -> B wants "Beta"; 2 < 5  -> blocked, screen stays "Alpha".
+#   t3,t4:               -> 3,4 < 5    -> still blocked, "Alpha".
+#   t5: linger expired   -> 5 >= 5     -> B accepted, screen "Beta", owner B.
+#   t6: B owns, holds "Beta".
+tickrate 100
+patch <<<
+[db8e]
+
+[display]
+    text   = "Alpha"
+    linger = 0.05
+
+[display]
+    text = "Beta" * I2
+>>>
+@0 expectdisplay D1 text "Alpha"
+@1 expectdisplay D1 text "Alpha"
+@2 set I2 1
+@2 expectdisplay D1 text "Alpha"
+@3 expectdisplay D1 text "Alpha"
+@4 expectdisplay D1 text "Alpha"
+@5 expectdisplay D1 text "Beta"
+@6 expectdisplay D1 text "Beta"

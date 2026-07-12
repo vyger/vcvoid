@@ -1,0 +1,30 @@
+# pingpong=1: the transient swings start->end->start forever. duration=0.5 s = 5
+# ticks per leg (tickrate 10). endoftransient triggers only after a FULL cycle
+# (back at start), not at the end-value. phase is the internal clock as if
+# start=0/end=1, with start/end exchanged on the return leg: it runs 0->1
+# forward then 1->0 on the way back.
+tickrate 10
+patch <<<
+[transient]
+    start          = 0
+    end            = 0.5
+    duration       = 0.5
+    pingpong       = 1
+    output         = O1
+    phase          = O2
+    endoftransient = O3
+>>>
+# forward leg to end (t5)
+@5 expect O1 0.5 tol 1e-4
+@5 expect O2 1.0 tol 1e-4
+@5 expect O3 0
+# return leg back toward start
+@6 expect O1 0.4 tol 1e-4
+@6 expect O2 0.8 tol 1e-4
+# back at start after a full cycle -> eot pulse
+@10 expect O1 0 tol 1e-4
+@10 expect O2 0 tol 1e-4
+@10 expect O3 1
+@11 expect O1 0.1 tol 1e-4
+@11 expect O3 0
+@15 expect O1 0.5 tol 1e-4

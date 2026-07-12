@@ -1,0 +1,23 @@
+# lfo: manual example -- `taptempo` combined with `rate`. "sending -1 V into
+# rate will create an LFO running at half clock speed". Same 4 Hz clock as
+# taptempo.gold; rate=-1V (-0.1) halves it to 2 Hz. sync patched so phase is
+# deterministic. At 2 Hz the sawtooth only reaches ~0.5 in one 1500-tick gap.
+tickrate 6000
+patch <<<
+[lfo]
+    taptempo = I1
+    sync     = I1
+    rate     = -1V
+    sawtooth = O1
+>>>
+
+@100  set I1 1
+@101  set I1 0
+@1600 set I1 1
+@1601 set I1 0
+@3100 set I1 1
+@3101 set I1 0
+
+# After edge 2 (reset at tick 1600), freq = 4 Hz / 2 = 2 Hz, inc = 1/3000.
+@2350 expect O1 0.25   tol 2e-3   # 750 ticks after reset -> phase 0.25
+@3099 expect O1 0.4997 tol 3e-3   # 1499 ticks -> phase ~0.4997 (just before next edge)

@@ -1,0 +1,53 @@
+# queue: on each clock rising edge, cells shift forward (last dropped) and the
+# current input is copied into cell 1. Outputs 1..4 default to positions 1..4,
+# so they show the last-4 inputs. Also checks edge-triggering: holding the clock
+# high does not re-shift. I1=input I2=clock; O1..O4 = outputs 1..4.
+patch <<<
+[queue]
+    input   = I1
+    clock   = I2
+    output1 = O1
+    output2 = O2
+    output3 = O3
+    output4 = O4
+>>>
+@0 expect O1 0
+@0 expect O2 0
+# push 0.1
+@1 set I1 0.1
+@1 set I2 1
+@1 expect O1 0.1
+@1 expect O2 0
+@2 set I2 0
+# push 0.2
+@3 set I1 0.2
+@3 set I2 1
+@3 expect O1 0.2
+@3 expect O2 0.1
+@4 set I2 0
+# push 0.3
+@5 set I1 0.3
+@5 set I2 1
+@5 expect O1 0.3
+@5 expect O2 0.2
+@5 expect O3 0.1
+@6 set I2 0
+# push 0.4
+@7 set I1 0.4
+@7 set I2 1
+@7 expect O1 0.4
+@7 expect O2 0.3
+@7 expect O3 0.2
+@7 expect O4 0.1
+@8 set I2 0
+# push 0.5
+@9 set I1 0.5
+@9 set I2 1
+@9 expect O1 0.5
+@9 expect O2 0.4
+@9 expect O3 0.3
+@9 expect O4 0.2
+# clock held high (no rising edge) + input changes -> NO shift
+@10 set I1 0.9
+@10 expect O1 0.5
+@10 expect O2 0.4

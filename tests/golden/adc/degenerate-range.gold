@@ -1,0 +1,46 @@
+# adc degenerate ranges (minimum >= maximum -- undocumented; the two documented
+# clamp rules are applied in their listed order, minimum first and INCLUSIVE:
+# "The lowest assumed input value. This value and all lower values are
+# converted to the bit sequence 000000000000"). So with minimum == maximum,
+# input == minimum must be all ZEROS (the min rule claims the exact value),
+# and only inputs strictly above emit all ones. Same for an inverted range
+# (minimum > maximum): anything at/below minimum -> zeros, above -> ones.
+patch <<<
+[adc]
+    input   = I1
+    minimum = 0.3
+    maximum = 0.3
+    bit1 = O1
+    bit2 = O2
+>>>
+
+patch <<<
+[adc]
+    input   = I1
+    minimum = 0.5
+    maximum = 0.2
+    bit1 = O3
+    bit2 = O4
+>>>
+
+# block A (min == max == 0.3)
+@0 set I1 0.2
+@0 expect O1 0
+@0 expect O2 0
+@1 set I1 0.3
+@1 expect O1 0
+@1 expect O2 0
+@2 set I1 0.4
+@2 expect O1 1
+@2 expect O2 1
+
+# block B (inverted: min 0.5 > max 0.2): at/below min -> zeros, above -> ones
+@3 set I1 0.35
+@3 expect O3 0
+@3 expect O4 0
+@4 set I1 0.5
+@4 expect O3 0
+@4 expect O4 0
+@5 set I1 0.6
+@5 expect O3 1
+@5 expect O4 1

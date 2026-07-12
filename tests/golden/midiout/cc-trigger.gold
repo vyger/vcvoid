@@ -1,0 +1,27 @@
+# midiout cctrigger mode (manual line 366). When a cctrigger input is patched, the
+# matching CC no longer auto-updates (no initial send, no change-driven updates);
+# it emits the current value only when a trigger arrives. Here CC#20 is emitted
+# on each cctrigger1 edge, carrying whatever cc1 is at that moment. 0.5 -> 64,
+# 0.25 -> 32.
+tickrate 1000
+x7 1
+patch <<<
+[midiout]
+    ccnumber1  = 20
+    cc1        = I1
+    cctrigger1 = I2
+    activesensing = 0
+    delayinitialccs = 0
+>>>
+@0 set I1 0.5
+@0 expectmidi trs none
+@5 set I2 1
+@5 expectmidi trs cc 1 20 64
+@6 set I2 0
+@6 expectmidi trs none
+@10 set I1 0.25
+@10 expectmidi trs none
+@11 set I2 1
+@11 expectmidi trs cc 1 20 32
+@12 set I2 0
+@12 expectmidi trs none

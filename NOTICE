@@ -1,0 +1,47 @@
+vcvoid
+Copyright (C) 2026 Chris Jones
+
+This program is free software: you can redistribute it and/or modify it under
+the terms of the GNU General Public License as published by the Free Software
+Foundation, either version 3 of the License, or (at your option) any later
+version. See the LICENSE file for the full text.
+
+================================================================================
+Trademarks
+================================================================================
+
+"DROID" is a trademark of Der Mann mit der Maschine (Zürich, Switzerland).
+vcvoid is an independent, unofficial emulation of the DROID hardware and is
+NOT affiliated with, sponsored by, or endorsed by Der Mann mit der Maschine.
+DROID product, module, and circuit names are used solely to describe
+compatibility and behavior.
+
+================================================================================
+Third-party materials
+================================================================================
+
+1. Faceplate art  —  plugin/res/faceplates/*.png
+   © Der Mann mit der Maschine. One-time derivatives of the faceplate renders
+   in the DROID Forge repository (https://github.com/Zarkuun/droidforge),
+   which is licensed GPL-3.0, made with the author's permission: all
+   DROID/DMMDM branding was removed and a vcvoid wordmark added (set in
+   Share Tech Mono, SIL Open Font License). Redistributed here under GPL-3
+   compatibility. Reuse in a VCV Library submission is pending the author's
+   explicit permission, tracked at
+   https://github.com/vyger/vcvoid/issues/1.
+
+2. Structured DROID manual  —  manual/
+   A restructured, machine-readable derivative of the official DROID manual
+   (firmware blue-7), © Der Mann mit der Maschine. Included as
+   documentation-of-record to support a faithful emulation; not original work
+   of this project. The original source PDF (droid-manual-blue-7.pdf) is NOT
+   redistributed by this repository (it is git-ignored).
+
+3. DROID Forge  —  tools/droidcheck (vendored at build time; git-ignored)
+   © Der Mann mit der Maschine / Zarkuun, GPL-3.0. Used headlessly as the
+   patch-validation parity oracle and as the source of droidfirmware.json,
+   from which engine/gen/ jack tables are code-generated.
+
+4. VCV Rack SDK
+   © VCV / Andrew Belt. The plugin is built against the VCV Rack SDK per its
+   licensing terms; the SDK itself is not included in this repository.

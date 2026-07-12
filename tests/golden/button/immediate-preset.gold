@@ -1,0 +1,28 @@
+# button: immediate preset switching. `preset` patched, no load/save triggers ->
+# changing `preset` auto-saves the old slot and loads the new one. preset = I6.
+#   t0..t2: preset 0, toggle state to 1
+#   t3: preset -> 1: save preset0 = 1, load preset1 (seeded startvalue 0) -> 0
+#   t5: toggle preset1 to state 1
+#   t7: preset -> 0: save preset1 = 1, load preset0 (=1) -> state 1
+tickrate 100
+patch <<<
+[p2b8]
+
+[button]
+    button = B1.1
+    led    = L1.1
+    output = O1
+    preset = I6
+>>>
+@0 set I6 0
+@0 expect O1 0 tol 1e-4
+@1 set B1.1 1
+@1 expect O1 1 tol 1e-4
+@2 set B1.1 0
+@3 set I6 1
+@3 expect O1 0 tol 1e-4
+@5 set B1.1 1
+@5 expect O1 1 tol 1e-4
+@6 set B1.1 0
+@7 set I6 0
+@7 expect O1 1 tol 1e-4

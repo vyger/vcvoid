@@ -1,0 +1,28 @@
+# `steps` quantizes to N evenly-spaced levels: level_i = minimum +
+# i/(steps-1)*(maximum-minimum), i = floor(u*steps) in [0, steps-1].
+# Block A steps=2 -> only minimum(0) or maximum(1). Block B steps=1 -> the single
+# average (minimum+maximum)/2 with no randomness (and draws nothing, so it does
+# not perturb block A's seed-1 stream).
+# steps=2 seed-1 draws -> i = 0,0,1,0,1 -> 0,0,1,0,1.
+patch <<<
+[random]
+    steps  = 2
+    output = O1
+>>>
+
+patch <<<
+[random]
+    steps   = 1
+    minimum = 0.2
+    maximum = 0.6
+    output  = O2
+>>>
+
+@0 expect O1 0
+@0 expect O2 0.4 tol 1e-6
+@1 expect O1 0
+@1 expect O2 0.4 tol 1e-6
+@2 expect O1 1
+@2 expect O2 0.4 tol 1e-6
+@3 expect O1 0
+@4 expect O1 1

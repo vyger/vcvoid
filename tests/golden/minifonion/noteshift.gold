@@ -1,0 +1,31 @@
+# selectnoteshift + noteshift walking. Triad selected {0,4,7}; the full scale
+# (for noteshift) is C lydian {0,2,4,6,7,9,11}. Input is C (quantizes to pc0).
+# selectnoteshift walks the SELECTED list, noteshift the SCALE list, sns first.
+patch <<<
+[minifonion]
+    input           = I1
+    output          = O2
+    select1         = 1
+    select3         = 1
+    select5         = 1
+    selectnoteshift = I3
+    noteshift       = I4
+>>>
+# sns=+1 only: C ->(selected)-> E (4 semi)
+@0 set I1 0
+@0 set I3 1
+@0 set I4 0
+@0 expect O2 0.0333333 tol 1e-5
+# nos=+1 only: C ->(scale)-> D (2 semi)
+@1 set I3 0
+@1 set I4 1
+@1 expect O2 0.0166667 tol 1e-5
+# both: sns first C->E(4), then nos on scale E->F# (6 semi = 0.05). Order matters:
+# reversed would give C->D(scale) then D floored into triad +1 -> E (4 semi).
+@2 set I3 1
+@2 set I4 1
+@2 expect O2 0.05 tol 1e-5
+# sns=-1: C steps down one selected note -> G below middle C (pc7, -5 semi)
+@3 set I3 -1
+@3 set I4 0
+@3 expect O2 -0.0416667 tol 1e-5

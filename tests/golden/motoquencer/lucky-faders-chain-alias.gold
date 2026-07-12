@@ -1,0 +1,72 @@
+# motoquencer luckyfaders on a linktonext chain must reroll ONLY the fader-owner's
+# shown lane -- NOT alias to a lane on a non-owner instance.
+#
+# Two linked instances share ONE fader bank. The chain reads a single fadermode
+# off the main (index 0); `fadermode / 10` picks the owner, and each instance's
+# LOCAL shown lane is clampi(rawFm - 10*chainIndex_, 0, 7). With fadermode 0 the
+# MAIN owns the faders and shows lane 0 (pitch); the linked instance (index 1)
+# gets a local lane clampi(0 - 10, 0, 7) = 0 -- an ALIAS shown nowhere.
+#
+# REGRESSION: luckyfaders used to reroll that aliased lane on the non-owner, so a
+# luckyfaders trigger scrambled the LINKED instance's pitch (O2) even though its
+# faders were released. The fix no-ops luckyfaders on any non-owner instance.
+#   main   (index 0, owner): defaultcv 0.0 -> pitch rest 0.0 -> O1 rerolled on fire.
+#   linked (index 1, alias): defaultcv 0.5 -> pitch 0.5      -> O2 MUST hold on
+#                            every step (all four stay 0.5; the bug scrambled them).
+# CV is latched at step entry, so a shared clock (I3) is stepped after the fire to
+# read each step's stored pitch. Values pinned to seed 1 (regenerate by capturing
+# the "got" values if the RNG draw order changes).
+seed 1
+tickrate 100
+patch <<<
+[m4]
+
+[motoquencer]
+    fadermode   = I1
+    linktonext  = 1
+    numfaders   = 4
+    numsteps    = 4
+    quantize    = 0
+    cvbase      = 0
+    cvrange     = 1
+    holdcv      = 0
+    defaultcv   = 0
+    clock       = I3
+    luckyfaders = I2
+    cv          = O1
+
+[motoquencer]
+    numfaders   = 4
+    numsteps    = 4
+    quantize    = 0
+    cvbase      = 0
+    cvrange     = 1
+    holdcv      = 0
+    defaultcv   = 0.5
+    clock       = I3
+    luckyfaders = I2
+    cv          = O2
+>>>
+# boot: fadermode 0 -> main owns.
+@0 set I1 0
+@0 expect O1 0 tol 1e-4
+# fire luckyfaders on both instances (shared trigger I2).
+@1 set I2 1
+@2 set I2 0
+# step the shared clock and read each step's stored pitch. The LINKED lane must be
+# UNTOUCHED at 0.5 on every step; the MAIN (owner) lane was rerolled off 0.0.
+@4 set I3 1
+@4 expect O1 0.558488 tol 1e-5
+@4 expect O2 0.5 tol 1e-4
+@5 set I3 0
+@6 set I3 1
+@6 expect O1 0.173574 tol 1e-5
+@6 expect O2 0.5 tol 1e-4
+@7 set I3 0
+@8 set I3 1
+@8 expect O1 0.147250 tol 1e-5
+@8 expect O2 0.5 tol 1e-4
+@9 set I3 0
+@10 set I3 1
+@10 expect O1 0.101457 tol 1e-5
+@10 expect O2 0.5 tol 1e-4

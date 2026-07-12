@@ -1,0 +1,24 @@
+# gatetool: manual example -- with taptempo patched, gatelength is a FRACTION of
+# one clock tick, not seconds. tickrate 100. taptempo clock rises at t0, t20, t40:
+# period is learned from the first two edges = 20 ticks. gatelength 0.3 -> 30% of
+# one clock tick = 0.3 * 20 = 6 ticks.
+#
+# inputtrigger at t25 (after the period is known): output gate high t25..t30
+# (6 ticks), low from t31.
+tickrate 100
+patch <<<
+[gatetool]
+    inputtrigger = I1
+    taptempo     = I2
+    gatelength   = 0.3
+    outputgate   = O1
+>>>
+@0 set I2 1
+@1 set I2 0
+@20 set I2 1
+@21 set I2 0
+@25 set I1 1
+@25 expect O1 1 tol 1e-4
+@26 set I1 0
+@30 expect O1 1 tol 1e-4
+@31 expect O1 0 tol 1e-4

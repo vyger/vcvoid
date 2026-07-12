@@ -1,0 +1,56 @@
+# clockedtrigger: a trigger is stored pending until the next clock, then emitted
+# once at `clockedtrigger`. The `value` input is frozen at trigger time and
+# released to `clockedvalue` on the clock. `pendingtrigger`/`pendingvalue` peek
+# the held state.
+# I1=clock I2=trigger I4=value; O1=clockedtrigger O2=clockedvalue
+# O3=pendingtrigger O4=pendingvalue.
+patch <<<
+[clockedtrigger]
+    clock          = I1
+    trigger        = I2
+    value          = I4
+    clockedtrigger = O1
+    clockedvalue   = O2
+    pendingtrigger = O3
+    pendingvalue   = O4
+>>>
+
+@0 expect O1 0
+@0 expect O2 0
+@0 expect O3 0
+@0 expect O4 0
+
+# trigger seen, value 0.5 frozen -> pending (no clock yet, nothing released)
+@1 set I2 1
+@1 set I4 0.5
+@1 expect O1 0
+@1 expect O2 0
+@1 expect O3 1
+@1 expect O4 0.5
+
+# trigger released; value input changes to 0.9 but the frozen value stays 0.5
+@2 set I2 0
+@2 set I4 0.9
+@2 expect O1 0
+@2 expect O2 0
+@2 expect O3 1
+@2 expect O4 0.5
+
+# clock arrives -> emit clockedtrigger once, release frozen 0.5 (not 0.9)
+@3 set I1 1
+@3 expect O1 1
+@3 expect O2 0.5
+@3 expect O3 0
+
+# clock low: clockedtrigger back to 0, clockedvalue holds 0.5
+@4 set I1 0
+@4 expect O1 0
+@4 expect O2 0.5
+@4 expect O3 0
+
+# a second clock with nothing pending does nothing; clockedvalue still 0.5
+@5 set I1 1
+@5 expect O1 0
+@5 expect O2 0.5
+@5 expect O3 0
+@6 set I1 0

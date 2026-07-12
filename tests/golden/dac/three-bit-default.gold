@@ -1,0 +1,29 @@
+# dac worked example 1: 3 bits over the default range 0..1. bit1=MSB.
+# value = sum(bit_k * 2^(N-k)); output = value / (2^N - 1) = value/7.
+# (fractional values use tol 1e-5 since 1/7 isn't exactly representable.)
+patch <<<
+[dac]
+    bit1   = I1
+    bit2   = I2
+    bit3   = I3
+    output = O1
+>>>
+@0 expect O1 0
+@1 set I3 1
+@1 expect O1 0.142857 tol 1e-5
+@2 set I3 0
+@2 set I2 1
+@2 expect O1 0.285714 tol 1e-5
+@3 set I3 1
+@3 expect O1 0.428571 tol 1e-5
+@4 set I2 0
+@4 set I3 0
+@4 set I1 1
+@4 expect O1 0.571429 tol 1e-5
+@5 set I3 1
+@5 expect O1 0.714286 tol 1e-5
+@6 set I3 0
+@6 set I2 1
+@6 expect O1 0.857143 tol 1e-5
+@7 set I3 1
+@7 expect O1 1.0

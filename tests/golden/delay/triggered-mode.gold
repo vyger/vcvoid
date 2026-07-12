@@ -1,0 +1,35 @@
+# delay: triggered mode. With `sample` patched, the tape records a new CV only on
+# each positive edge of `sample`; between edges the last sampled value is held, so
+# CV changes between triggers are ignored (records stepped CVs only). timewindow=0
+# here, so each sample freezes immediately. tickrate 100, delay 0.3 s = 30 ticks.
+#
+# sample edges at t0, t10, t20. cvin (I1) at those edges: 0.5, 0.8, -0.3. The mid-
+# trigger change (I1 -> 0.9 at t5) is ignored because no edge occurs there.
+# Recorded (held) tape:  t0..9 = 0.5, t10..19 = 0.8, t20+ = -0.3
+# cvout (O1) reads (t-30):
+#   t30 -> buf[0]  -> 0.5
+#   t35 -> buf[5]  -> 0.5   (proves the t5 change was NOT recorded)
+#   t40 -> buf[10] -> 0.8
+#   t50 -> buf[20] -> -0.3
+tickrate 100
+patch <<<
+[delay]
+    cvin   = I1
+    sample = I2
+    cvout  = O1
+    delay  = 0.3
+>>>
+@0 set I1 0.5
+@0 set I2 1
+@1 set I2 0
+@5 set I1 0.9
+@10 set I1 0.8
+@10 set I2 1
+@11 set I2 0
+@20 set I1 -0.3
+@20 set I2 1
+@21 set I2 0
+@30 expect O1 0.5 tol 1e-4
+@35 expect O1 0.5 tol 1e-4
+@40 expect O1 0.8 tol 1e-4
+@50 expect O1 -0.3 tol 1e-4

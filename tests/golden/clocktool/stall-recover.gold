@@ -1,0 +1,37 @@
+# clocktool (finding F7): after an indefinite clock stall the output must resume
+# on the next real edge. During a long silent gap the frac interpolation (capped
+# at 2.0) manufactures a couple of phantom output beats, inflating the internal
+# lastOut_ counter. Before the fix those phantom beats had to be "paid off" by
+# several resuming edges, so the output stayed flat for beats after the clock
+# came back (only a reset unwedged it). The fix resyncs the output phase on an
+# edge that arrives more than two periods late.
+#
+# divide=1 multiply=1, period 10 (tickrate 100), 1-tick gates. Edges at t0,t10
+# learn the period; then the clock goes silent until t100 (a 9-period stall);
+# then it resumes. The output must pulse again at t100, t110, t120.
+tickrate 100
+patch <<<
+[clocktool]
+    clock    = I1
+    divide   = 1
+    multiply = 1
+    output   = O1
+>>>
+@0 set I1 1
+@0 expect O1 1
+@1 set I1 0
+@10 set I1 1
+@10 expect O1 1
+@11 set I1 0
+# --- long silent stall (no edges from t11 to t99) ---
+# --- clock resumes at t100: output must follow immediately ---
+@100 set I1 1
+@100 expect O1 1
+@101 set I1 0
+@101 expect O1 0
+@110 set I1 1
+@110 expect O1 1
+@111 set I1 0
+@120 set I1 1
+@120 expect O1 1
+@121 set I1 0

@@ -1,0 +1,38 @@
+# `changed` outputs a 10 ms trigger whenever the quantized output changes to a
+# NEW value. At tickrate 100, 10 ms = 1 tick. steps=10 (step 0.01). The first
+# quantization does not fire changed (no prior value to change from); an input
+# change that lands on the same output does not fire it either.
+tickrate 100
+patch <<<
+[quantizer]
+    input   = I1
+    steps   = 10
+    output  = O1
+    changed = O2
+>>>
+# first value: no changed
+@0 set I1 0.02
+@0 expect O1 0.02 tol 1e-5
+@0 expect O2 0
+# new value 0.04 -> changed fires for 1 tick
+@1 set I1 0.037
+@1 expect O1 0.04 tol 1e-5
+@1 expect O2 1
+# same input -> same output, changed back to 0
+@2 set I1 0.037
+@2 expect O1 0.04 tol 1e-5
+@2 expect O2 0
+# new value 0.06 -> changed
+@3 set I1 0.061
+@3 expect O1 0.06 tol 1e-5
+@3 expect O2 1
+# input changes but rounds to the same 0.06 -> no changed
+@4 set I1 0.064
+@4 expect O1 0.06 tol 1e-5
+@4 expect O2 0
+# new value 0.05 -> changed
+@5 set I1 0.05
+@5 expect O1 0.05 tol 1e-5
+@5 expect O2 1
+@6 set I1 0.05
+@6 expect O2 0

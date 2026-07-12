@@ -1,0 +1,30 @@
+# motoquencer: direction=1 plays the steps backwards. Four steps edited to distinct
+# pitches (0, 0.05, 0.1, 0.15 V), then clocked; cv comes out reversed: step3, 2, 1,
+# 0 -> 0.15, 0.1, 0.05, 0.0 and wraps.
+tickrate 100
+patch <<<
+[m4]
+[motoquencer]
+    clock     = I1
+    direction = 1
+    cv        = O1
+>>>
+@1 move F1 0.0
+@1 move F2 0.2142857
+@1 move F3 0.5
+@1 move F4 0.7142857
+# clocking: reversed order 3,2,1,0
+@2 set I1 1
+@2 expect O1 0.15 tol 1e-4
+@3 set I1 0
+@4 set I1 1
+@4 expect O1 0.1 tol 1e-4
+@5 set I1 0
+@6 set I1 1
+@6 expect O1 0.05 tol 1e-4
+@7 set I1 0
+@8 set I1 1
+@8 expect O1 0.0 tol 1e-4
+@9 set I1 0
+@10 set I1 1
+@10 expect O1 0.15 tol 1e-4

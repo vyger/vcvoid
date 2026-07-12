@@ -1,0 +1,30 @@
+# clocktool (finding F7): the stall-recovery must also hold when multiplying.
+# multiply=2, period 10 (tickrate 100): output pulses at each input edge and once
+# midway. Edges at t0,t10 learn the period; a long silent stall follows; the clock
+# resumes at t100. Before the fix the phantom beats accumulated during the stall
+# (twice as fast, since multiply=2) suppressed the resuming output for several
+# beats. After the fix the multiplied output resumes on the first real edge: a
+# pulse at t100, the mid pulse at t105, and the next edge pulse at t110.
+tickrate 100
+patch <<<
+[clocktool]
+    clock    = I1
+    divide   = 1
+    multiply = 2
+    output   = O1
+>>>
+@0 set I1 1
+@0 expect O1 1
+@1 set I1 0
+@10 set I1 1
+@11 set I1 0
+# --- long silent stall (no edges from t11 to t99) ---
+# --- clock resumes at t100: multiplied output must follow immediately ---
+@100 set I1 1
+@100 expect O1 1
+@101 set I1 0
+@105 expect O1 1
+@106 expect O1 0
+@110 set I1 1
+@110 expect O1 1
+@111 set I1 0

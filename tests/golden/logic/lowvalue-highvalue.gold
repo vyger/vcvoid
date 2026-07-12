@@ -1,0 +1,23 @@
+# `lowvalue`/`highvalue` replace the default 0/1 output levels for the boolean
+# outputs. Here low=0.2, high=0.8 over two inputs.
+patch <<<
+[logic]
+    input1    = I1
+    input2    = I2
+    lowvalue  = 0.2
+    highvalue = 0.8
+    and       = O1
+    or        = O2
+>>>
+# 00: and low, or low
+@0 expect O1 0.2
+@0 expect O2 0.2
+# 11: and high, or high
+@1 set I1 1
+@1 set I2 1
+@1 expect O1 0.8
+@1 expect O2 0.8
+# 10: and low, or high
+@2 set I2 0
+@2 expect O1 0.2
+@2 expect O2 0.8

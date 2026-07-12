@@ -1,0 +1,28 @@
+# encoder: the built-in push button. `button` output = pushed state, but only
+# while the circuit is selected (select gates it). Driven by the `push` verb.
+# select = I1 (a positive gate selects).
+#   @0 not pushed -> button 0
+#   @1 select on + push down -> button 1
+#   @2 deselect (still pushed) -> button 0 (select-gated off)
+#   @3 reselect -> button 1
+#   @4 release -> button 0
+tickrate 100
+patch <<<
+[e4]
+
+[encoder]
+    encoder = E1.1
+    output  = O1
+    button  = O2
+    select  = I1
+>>>
+@0 expect O2 0 tol 1e-4
+@1 set I1 1
+@1 push E1.1 1
+@1 expect O2 1 tol 1e-4
+@2 set I1 0
+@2 expect O2 0 tol 1e-4
+@3 set I1 1
+@3 expect O2 1 tol 1e-4
+@4 push E1.1 0
+@4 expect O2 0 tol 1e-4

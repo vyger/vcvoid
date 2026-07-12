@@ -1,0 +1,18 @@
+# lfo: manual worked example (Bipolar output, Level and Offset).
+# "a sine wave at 5 Hz to O4 that is gently oscillating between 2 V and 3.5 V"
+# level=1.5V (0.15), offset=2V (0.2), unipolar sine u in [0,1].
+# out = u*0.15 + 0.2  ->  min 0.2 (2 V), max 0.35 (3.5 V).
+# hz=5, tickrate 6000 -> one cycle = 1200 ticks. inc=1/1200.
+# Sample ticks: 0->phase0 (u=0), 300->0.25 (u=0.5), 600->0.5 (u=1).
+tickrate 6000
+patch <<<
+[lfo]
+    hz     = 5
+    level  = 1.5V
+    offset = 2V
+    sine   = O4
+>>>
+
+@0   expect O4 0.2   tol 1e-3   # 2.0 V (trough)
+@300 expect O4 0.275 tol 1e-3   # u=0.5 -> 2.75 V
+@600 expect O4 0.35  tol 1e-3   # 3.5 V (peak)

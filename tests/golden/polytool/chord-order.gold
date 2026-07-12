@@ -1,0 +1,31 @@
+# Three simultaneous input notes -> three outputs, assigned in input-voice index
+# order to the lowest free outputs (roundrobin off). This pins the deterministic
+# chord mapping: simultaneous rising edges are processed in ascending voice
+# index, each taking the next free output.
+patch <<<
+[polytool]
+    pitchinput1  = I1
+    gateinput1   = I2
+    pitchinput2  = I3
+    gateinput2   = I4
+    pitchinput3  = I5
+    gateinput3   = I6
+    pitchoutput1 = O1
+    pitchoutput2 = O2
+    pitchoutput3 = O3
+    gateoutput1  = O4
+    gateoutput2  = O5
+    gateoutput3  = O6
+>>>
+@0 set I1 0.1
+@0 set I2 1
+@0 set I3 0.2
+@0 set I4 1
+@0 set I5 0.3
+@0 set I6 1
+@0 expect O1 0.1 tol 1e-5
+@0 expect O4 1
+@0 expect O2 0.2 tol 1e-5
+@0 expect O5 1
+@0 expect O3 0.3 tol 1e-5
+@0 expect O6 1

@@ -1,0 +1,44 @@
+# cvlooper: always records cvin; while loopswitch is off it passes cvin -> cvout.
+# Steady clock, period 5 ticks; length=2 -> loop window = 10 samples. A ramp
+# cvin=0.01*t is fed t0..t19, then at t20 loopswitch turns on and the last 10
+# samples (t10..t19 -> 0.10..0.19) are replayed, looping every 10 ticks.
+tickrate 100
+patch <<<
+[cvlooper]
+    cvin       = I1
+    clock      = I2
+    loopswitch = I3
+    length     = 2
+    cvout      = O1
+>>>
+@0 set I2 1
+@0 set I1 0
+@0 expect O1 0 tol 1e-4
+@1 set I2 0
+@1 set I1 0.01
+@1 expect O1 0.01 tol 1e-4
+@5 set I2 1
+@5 set I1 0.05
+@5 expect O1 0.05 tol 1e-4
+@6 set I2 0
+@6 set I1 0.06
+@10 set I2 1
+@10 set I1 0.1
+@11 set I2 0
+@11 set I1 0.11
+@15 set I2 1
+@15 set I1 0.15
+@16 set I2 0
+@16 set I1 0.16
+@19 set I1 0.19
+@19 expect O1 0.19 tol 1e-4
+# loop on from t20: replays the last 10 samples (0.10 .. 0.19)
+@20 set I2 1
+@20 set I1 0
+@20 set I3 1
+@20 expect O1 0.1 tol 1e-4
+@25 set I2 1
+@25 expect O1 0.15 tol 1e-4
+@29 expect O1 0.19 tol 1e-4
+@30 set I2 1
+@30 expect O1 0.1 tol 1e-4

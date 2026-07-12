@@ -1,0 +1,43 @@
+# pot: two virtual pots overlaid on one physical pot P1.1, gated by select.
+# Connecting `select` puts both in virtual mode. Only the SELECTED pot tracks the
+# physical movement (potshape::pickup); the deselected one freezes but keeps
+# emitting. prevPhys is tracked even while deselected, so re-selecting causes no
+# phantom jump. Both virtual pots start at 0.5 (startvalue default). select1=I1,
+# select2=I2.
+#   t0 phys .5, pot1 sel: v1 stays .5, v2 frozen .5           -> O1 .5  O2 .5
+#   t1 phys ->1: pot1 pickup .5->1.0 (both reach 1 together)  -> O1 1   O2 .5
+#   t2 hand over: deselect pot1, select pot2 (phys still 1)   -> O1 1   O2 .5
+#   t3 phys ->.5: pot2 pickup .5->.25 (v2 -= .5*.5/1); v1 frozen 1
+#                                                             -> O1 1   O2 .25
+#   t4 phys ->0 : pot2 pickup .25->0 (both reach 0 together)  -> O1 1   O2 0
+tickrate 100
+patch <<<
+[p2b8]
+
+[pot]
+    pot    = P1.1
+    select = I1
+    output = O1
+
+[pot]
+    pot    = P1.1
+    select = I2
+    output = O2
+>>>
+@0 set P1.1 0.5
+@0 set I1 1
+@0 expect O1 0.5 tol 1e-4
+@0 expect O2 0.5 tol 1e-4
+@1 set P1.1 1.0
+@1 expect O1 1 tol 1e-4
+@1 expect O2 0.5 tol 1e-4
+@2 set I1 0
+@2 set I2 1
+@2 expect O1 1 tol 1e-4
+@2 expect O2 0.5 tol 1e-4
+@3 set P1.1 0.5
+@3 expect O1 1 tol 1e-4
+@3 expect O2 0.25 tol 1e-4
+@4 set P1.1 0.0
+@4 expect O1 1 tol 1e-4
+@4 expect O2 0 tol 1e-4

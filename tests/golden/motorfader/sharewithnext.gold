@@ -1,0 +1,40 @@
+# motorfader: sharewithnext. Two circuits control ONE output. The first has
+# sharewithnext = 1 and no output of its own; it hands its value to the second,
+# which owns the output. Exactly one of the pair is selected at a time -- the
+# shared output tracks whichever fader is currently selected, and each fader
+# keeps its own value.
+#   A (fader 1, sharewithnext) selected when I1 == 1
+#   B (fader 2, owns O1)       selected when I1 == 0
+tickrate 100
+patch <<<
+[m4]
+
+[motorfader]
+    fader         = 1
+    select        = I1
+    selectat      = 1
+    sharewithnext = 1
+
+[motorfader]
+    fader    = 2
+    select   = I1
+    selectat = 0
+    output   = O1
+>>>
+@0 set I1 1
+@0 expect O1 0 tol 1e-4
+# A selected: moving F1 drives the shared output
+@1 move F1 0.7
+@1 expect O1 0.7 tol 1e-4
+@1 expect F1 0.7 tol 1e-4
+# switch to B: output follows B's own fader (F2), starts at B's stored 0
+@2 set I1 0
+@2 expect O1 0 tol 1e-4
+@2 expect F2 0 tol 1e-4
+@3 move F2 0.4
+@3 expect O1 0.4 tol 1e-4
+@3 expect F2 0.4 tol 1e-4
+# back to A: output tracks A again; the motor recalls A's 0.7 on F1
+@4 set I1 1
+@4 expect O1 0.7 tol 1e-4
+@4 expect F1 0.7 tol 1e-4

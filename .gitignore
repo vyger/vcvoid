@@ -1,0 +1,18 @@
+.DS_Store
+tools/droidcheck/build/
+tools/droidcheck/vendor/
+.superpowers/
+build/
+droid-manual-blue-7.pdf
+plugin/build/
+plugin/dist/
+plugin/plugin.dylib
+plugin/plugin.so
+plugin/plugin.dll
+# The engine is built from ../engine; the SDK writes its .o/.d objects here
+# (the build/../engine/ path collapses out of build/). Purely generated.
+plugin/engine/
+.claude/scheduled_tasks.lock
+docs/todo-uat.md
+docs/superpowers/
+manual/images/

@@ -1,0 +1,36 @@
+# matrixmixer: LEDs mirror the toggle state, and `select` gates BOTH button
+# processing and LED writing (for overlays) while the outputs keep running.
+# startvalue 0; button11 = I5; led11 = O2; select = I7.
+#   t0: selected, clear -> O1 (output) 0, O2 (led) 0
+#   t2: press button11 while selected -> node on -> O1 = 0.5, led O2 = 1
+#   t3: deselect -> outputs still run (O1 = 0.5), LEDs no longer written
+#   t4/5: press button11 while DESELECTED -> NOT toggled (O1 stays 0.5)
+#   t6: LED holds its last written value (1), since deselected doesn't write it
+#   t7: reselect -> node still on -> led O2 = 1, O1 = 0.5
+tickrate 100
+patch <<<
+[matrixmixer]
+    startvalue = 0
+    input1   = I1
+    output1  = O1
+    button11 = I5
+    led11    = O2
+    select   = I7
+>>>
+@0 set I7 1
+@0 set I1 0.5
+@0 expect O1 0 tol 1e-4
+@0 expect O2 0 tol 1e-4
+@1 set I5 1
+@2 set I5 0
+@2 expect O1 0.5 tol 1e-4
+@2 expect O2 1 tol 1e-4
+@3 set I7 0
+@3 expect O1 0.5 tol 1e-4
+@4 set I5 1
+@5 set I5 0
+@5 expect O1 0.5 tol 1e-4
+@6 expect O2 1 tol 1e-4
+@7 set I7 1
+@7 expect O2 1 tol 1e-4
+@7 expect O1 0.5 tol 1e-4

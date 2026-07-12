@@ -1,0 +1,48 @@
+# Manual rule (timing.md:91): when timings make a later beat come BEFORE an
+# earlier one, the later beat is NOT played (dropped for good). timing =
+# [0.9, -0.9], P=20: beat2 (step0) -> 58, beat3 (step1) would land at 42,
+# before beat2 -> dropped. Same for beats 5 and 7. Output: 58,98,138 only,
+# nothing at 42/82/122 or the dropped beats' own edges 60/100/140.
+tickrate 100
+patch <<<
+[timing]
+    clock  = I1
+    output = O1
+    timing1 = 0.9
+    timing2 = -0.9
+>>>
+@0 set I1 1
+@0 expect O1 1
+@1 set I1 0
+@1 expect O1 0
+@20 set I1 1
+@20 expect O1 1
+@21 set I1 0
+@21 expect O1 0
+@40 set I1 1
+@40 expect O1 0
+@41 set I1 0
+@42 expect O1 0
+@58 expect O1 1
+@59 expect O1 0
+@60 set I1 1
+@60 expect O1 0
+@61 set I1 0
+@80 set I1 1
+@80 expect O1 0
+@81 set I1 0
+@82 expect O1 0
+@98 expect O1 1
+@99 expect O1 0
+@100 set I1 1
+@100 expect O1 0
+@101 set I1 0
+@120 set I1 1
+@120 expect O1 0
+@121 set I1 0
+@122 expect O1 0
+@138 expect O1 1
+@139 expect O1 0
+@140 set I1 1
+@140 expect O1 0
+@141 set I1 0

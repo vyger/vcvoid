@@ -1,0 +1,30 @@
+# Spread and detune combine (fifths off):
+#   output1 = input
+#   output2 = input + spread_offset/2 + detune_offset
+#   output3 = input + spread_offset   - detune_offset
+patch <<<
+[octave]
+    input   = I1
+    spread  = I2
+    detune  = I3
+    output1 = O1
+    output2 = O2
+    output3 = O3
+>>>
+# input 0, spread 1.0 (4 oct -> 0.40), detune 1.0 (4 st at 0 V = 0.0333333)
+# out2 = 0 + 0.20 + 0.0333333 = 0.2333333
+# out3 = 0 + 0.40 - 0.0333333 = 0.3666667
+@0 set I1 0
+@0 set I2 1
+@0 set I3 1
+@0 expect O1 0 tol 1e-5
+@0 expect O2 0.2333333 tol 1e-5
+@0 expect O3 0.3666667 tol 1e-5
+# input 1 V, spread 0.25 (1 oct -> 0.10), detune 1.0 (2 st at 1 V = 0.0166667)
+# out2 = 0.1 + 0.05 + 0.0166667 = 0.1666667
+# out3 = 0.1 + 0.10 - 0.0166667 = 0.1833333
+@1 set I1 0.1
+@1 set I2 0.25
+@1 expect O1 0.1 tol 1e-5
+@1 expect O2 0.1666667 tol 1e-5
+@1 expect O3 0.1833333 tol 1e-5

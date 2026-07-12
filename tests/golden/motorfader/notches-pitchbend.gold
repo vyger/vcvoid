@@ -1,0 +1,21 @@
+# motorfader: notches = 1 -> pitch-bend wheel. It rests at the centre 0.5 and
+# outputs 0.5. While the touch plate is held it stays where the user puts it;
+# as soon as it is released (untouched) it snaps back to the centre.
+tickrate 100
+patch <<<
+[m4]
+
+[motorfader]
+    fader   = 1
+    notches = 1
+    output  = O1
+>>>
+@0 expect O1 0.5 tol 1e-4
+@0 expect F1 0.5 tol 1e-4
+@1 touch F1 1
+@1 move F1 0.8
+@1 expect O1 0.8 tol 1e-4
+@1 expect F1 0.8 tol 1e-4
+@2 touch F1 0
+@2 expect O1 0.5 tol 1e-4
+@2 expect F1 0.5 tol 1e-4

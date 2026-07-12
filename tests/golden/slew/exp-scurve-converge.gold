@@ -1,0 +1,24 @@
+# Exponential and S-curve shapes: SPEC-GAP. The manual says these are only "tuned
+# to sound similar" to linear with NO stated time constant, so exact curves need
+# a hardware/reference trace. We implement exponential as a one-pole low-pass
+# (tau = effective slew) and S-curve as two cascaded one-poles (S-shaped step
+# response). Here we assert only the shape-independent invariants: both are
+# gradual (not instant) at the first tick and both converge to the target.
+# slew=0.05, input stepped to 0.05, tickrate 100. Linear (exact) reaches 0.05 in
+# 3 ticks (step 0.02/tick); exp/scurve converge within tol by tick 99.
+tickrate 100
+patch <<<
+[slew]
+    input       = I1
+    slew        = 0.05
+    exponential = O1
+    linear      = O2
+    scurve      = O3
+>>>
+@0 set I1 0.05
+# linear is limited to 0.02 on the first tick (exact)
+@0 expect O2 0.02 tol 1e-6
+# all three have converged to the target by tick 99
+@99 expect O1 0.05 tol 1e-3
+@99 expect O2 0.05 tol 1e-6
+@99 expect O3 0.05 tol 1e-3

@@ -1,0 +1,20 @@
+# With gravity 0 and no shove, a mass at rest at position 0 stays at 0 (no force).
+# A `shove` gate then applies shoveforce (default 1) downwards and it starts to
+# move. This pins the documented "gravity 0 needs a shove/startpos to get going".
+tickrate 10
+patch <<<
+[spring]
+    gravity  = 0
+    shove    = I1
+    position = O1
+    velocity = O2
+>>>
+# at rest, no force -> stays put
+@0 expect O1 0 tol 1e-9
+@0 expect O2 0 tol 1e-9
+@1 expect O1 0 tol 1e-9
+@1 expect O2 0 tol 1e-9
+# shove on: a = shoveforce(1) -> v = 0.1, p = 0.01 (sim) -> outputs *0.1
+@2 set I1 1
+@2 expect O2 0.01 tol 1e-6
+@2 expect O1 0.001 tol 1e-6

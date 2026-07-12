@@ -1,0 +1,31 @@
+# The `precision` parameter widens equality: two values within `precision` count
+# as equal. Block A uses precision 0 (default, exact), block B uses precision 0.1.
+# ifequal=1, else=0.8. With input=0.5, compare=0.53 (diff 0.03): A sees "less"
+# (0.5<0.53) -> else 0.8; B sees "equal" (0.03 <= 0.1) -> 1. With input==compare
+# both output 1. (Values kept within ±1.0 to avoid the ±10 V output clamp.)
+patch <<<
+[compare]
+    input   = I1
+    compare = I2
+    ifequal = 1
+    else    = 0.8
+    output  = O1
+>>>
+
+patch <<<
+[compare]
+    input     = I1
+    compare   = I2
+    precision = 0.1
+    ifequal   = 1
+    else      = 0.8
+    output    = O2
+>>>
+
+@0 set I1 0.5
+@0 set I2 0.53
+@0 expect O1 0.8
+@0 expect O2 1
+@1 set I2 0.5
+@1 expect O1 1
+@1 expect O2 1

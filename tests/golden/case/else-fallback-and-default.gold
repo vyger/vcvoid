@@ -1,0 +1,29 @@
+# `else`: "In case none of the case inputs is non-zero, this value is copied to
+# the output." Default else = 0. Block A patches else to 0.7; block B leaves else
+# unpatched so its fallback is the default 0.
+patch <<<
+[case]
+    case1  = I1
+    value1 = I2
+    else   = I3
+    output = O1
+>>>
+
+patch <<<
+[case]
+    case1  = I4
+    value1 = I5
+    output = O2
+>>>
+
+# no case set -> A outputs its else (0.7), B outputs default else (0)
+@0 set I2 0.5
+@0 set I3 0.7
+@0 set I5 0.6
+@0 expect O1 0.7
+@0 expect O2 0
+
+# A's case1 set -> A outputs value1 (0.5); B unchanged (still 0)
+@1 set I1 1
+@1 expect O1 0.5
+@1 expect O2 0

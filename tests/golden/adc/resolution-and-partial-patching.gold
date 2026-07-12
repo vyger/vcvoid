@@ -1,0 +1,39 @@
+# Resolution is set by the HIGHEST patched bit output ("the LSB is the highest
+# output you actually patch"), and patching may be non-contiguous.
+# Two adc instances read the SAME input register I1 over the default range:
+#   block A: 2 bits -> bit1=O1, bit2=O2            (N=2, 4 levels)
+#   block B: bit1=O3, bit3=O4  (bit2 left unpatched) -> N=3, 8 levels
+# Block B proves resolution follows the highest patched index (3), not the
+# count of patched jacks (2): bit3 only carries a meaningful value if the range
+# was divided into 8 pieces. Its unpatched bit2 is simply not emitted.
+# SPEC-GAP: the manual assumes contiguous bit1..bitN patching; taking N as the
+# maximum connected index is the literal reading of "highest output you patch".
+#
+#   input     A floor(in*4)  b1 b2 | B floor(in*8) value  b1(O3) b3(O4)
+#   0.6875    2  = 10         1  0  | 5  = 101              1      1
+#   0.3125    1  = 01         0  1  | 2  = 010              0      0
+patch <<<
+[adc]
+    input = I1
+    bit1 = O1
+    bit2 = O2
+>>>
+
+patch <<<
+[adc]
+    input = I1
+    bit1 = O3
+    bit3 = O4
+>>>
+
+@0 set I1 0.6875
+@0 expect O1 1
+@0 expect O2 0
+@0 expect O3 1
+@0 expect O4 1
+
+@1 set I1 0.3125
+@1 expect O1 0
+@1 expect O2 1
+@1 expect O3 0
+@1 expect O4 0

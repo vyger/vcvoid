@@ -1,0 +1,32 @@
+# chord noteshift / selectnoteshift (shared note core, same as minifonion).
+# O1..O4: noteshift=1 shifts each output up one SCALE note. C major 7 voiced
+#   C/E/G/B -> D/F#/A/C(next oct) -> semis 2,6,9,12.
+# O5..O8: selectnoteshift=1 with a triad (select1/3/5 = C,E,G, voiced C,E,G,C)
+#   shifts each up one SELECTED note -> E,G,C(next oct),E -> semis 4,7,12,4.
+patch <<<
+[chord]
+    output1   = O1
+    output2   = O2
+    output3   = O3
+    output4   = O4
+    noteshift = 1
+>>>
+patch <<<
+[chord]
+    output1         = O5
+    output2         = O6
+    output3         = O7
+    output4         = O8
+    select1         = 1
+    select3         = 1
+    select5         = 1
+    selectnoteshift = 1
+>>>
+@0 expect O1 0.0166667 tol 1e-5
+@0 expect O2 0.05 tol 1e-5
+@0 expect O3 0.075 tol 1e-5
+@0 expect O4 0.1 tol 1e-5
+@0 expect O5 0.0333333 tol 1e-5
+@0 expect O6 0.0583333 tol 1e-5
+@0 expect O7 0.1 tol 1e-5
+@0 expect O8 0.0333333 tol 1e-5

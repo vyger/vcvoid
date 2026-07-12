@@ -1,0 +1,10 @@
+expect_load_error "Duplicate usage of O3"
+patch <<<
+[copy]
+    input = I1
+    output = O3
+
+[copy]
+    input = I2
+    output = O3
+>>>

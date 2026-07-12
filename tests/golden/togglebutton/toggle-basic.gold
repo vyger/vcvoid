@@ -1,0 +1,25 @@
+# togglebutton: each button rising edge flips the state; led = 0/1,
+# output = offvalue(0)/onvalue(1) with defaults.
+#   t1 press -> on  -> led 1, output 1
+#   t2 release       (state holds)
+#   t3 press -> off -> led 0, output 0
+tickrate 100
+patch <<<
+[p2b8]
+
+[togglebutton]
+    button = B1.1
+    led    = L1.1
+    output = O1
+>>>
+@0 expect L1.1 0 tol 1e-4
+@0 expect O1 0 tol 1e-4
+@1 set B1.1 1
+@1 expect L1.1 1 tol 1e-4
+@1 expect O1 1 tol 1e-4
+@2 set B1.1 0
+@2 expect L1.1 1 tol 1e-4
+@3 set B1.1 1
+@3 expect L1.1 0 tol 1e-4
+@3 expect O1 0 tol 1e-4
+@4 set B1.1 0

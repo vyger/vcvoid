@@ -1,0 +1,30 @@
+# midiout clock multiplication (manual lines 204-227, 383). The clock jack takes a
+# modular 16th-note clock and multiplies it by 6 to make a 24-PPQN MIDI clock: it
+# measures the input period and interpolates five artificial pulses between real
+# edges, so there are exactly six MIDI clocks per 16th. The first edge emits one
+# pulse only (no period known yet). Edges here are at t=1, t=61, t=121 (period 60
+# ms -> interpolated spacing 10 ms): between t=61 and t=121 there are six pulses
+# at 61,71,81,91,101,111.
+tickrate 1000
+x7 1
+patch <<<
+[midiout]
+    clock = I1
+    activesensing = 0
+>>>
+@1 set I1 1
+@1 expectmidi trs clock
+@2 set I1 0
+@2 expectmidi trs none
+@61 set I1 1
+@61 expectmidi trs clock
+@62 set I1 0
+@62 expectmidi trs none
+@71 expectmidi trs clock
+@81 expectmidi trs clock
+@91 expectmidi trs clock
+@101 expectmidi trs clock
+@111 expectmidi trs clock
+@112 expectmidi trs none
+@121 set I1 1
+@121 expectmidi trs clock

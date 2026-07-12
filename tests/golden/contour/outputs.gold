@@ -1,0 +1,23 @@
+# output/negated/inverted with level=0.8 (output attenuator). During the attack
+# ramp: output = envelope*level, negated = -output, inverted = level-output
+# (equals level when output is 0, and 0 when output reaches level).
+tickrate 100
+patch <<<
+[contour]
+    gate     = I1
+    attack   = 1
+    level    = 0.8
+    output   = O1
+    negated  = O2
+    inverted = O3
+>>>
+@0 set I1 1
+@0 expect O1 0 tol 1e-4
+@0 expect O2 0 tol 1e-4
+@0 expect O3 0.8 tol 1e-4
+@5 expect O1 0.4 tol 1e-4
+@5 expect O2 -0.4 tol 1e-4
+@5 expect O3 0.4 tol 1e-4
+@10 expect O1 0.8 tol 1e-4
+@10 expect O2 -0.8 tol 1e-4
+@10 expect O3 0 tol 1e-4

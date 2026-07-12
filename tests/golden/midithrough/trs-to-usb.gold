@@ -1,0 +1,14 @@
+# midithrough: forward events from the TRS input port to the USB output port.
+# Manual midithrough.md lines 20-26 (fromtrs/tousb select source/target) and the
+# MASTER+X7 port table lines 32-36 (value 1 = the X7 port of that type).
+# The event lands on USB only; the TRS out-queue stays empty (forwarding writes
+# to the OUT queue, never echoes back to the source port's out-queue).
+patch <<<
+[midithrough]
+    fromtrs = 1
+    tousb = 1
+>>>
+@0 midisend trs noteon 1 60 100
+@0 expectmidi usb noteon 1 60 100
+@0 expectmidi usb none
+@0 expectmidi trs none

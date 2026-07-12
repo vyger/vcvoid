@@ -1,0 +1,38 @@
+# vcotuner: in-tune reading at defaults (tuningnote -1 = nearest semitone,
+# concertpitch 440, basepitch 0 V, precision 3 cents). smooth = 0 disables the
+# one-pole so hz responds instantly.
+# Hand math: f_C0 = 440 * 2^(-21/12) = 130.8128 Hz (A1 is 21 semitones above
+# C0). probe 440 -> note = 12*log2(440/130.8128) = 21.0000 semitones; nearest
+# semitone ref = 21; cents = 0; pitch = referencepitch = 21 * 0.1/12 = 0.175
+# engine units (1.75 V).
+master 18
+patch <<<
+# LABELS: master=18
+[vcotuner]
+    smooth = 0
+    hz = _HZ
+    pitch = O1
+    referencepitch = O2
+    intune = O3
+    ledintune = O4
+    vcofound = O5
+    cents = _CENTS
+    tuning = O6
+
+[copy]
+    input = _HZ * 0.001
+    output = O7
+
+[copy]
+    input = _CENTS * 0.001
+    output = O8
+>>>
+@0 probe 440
+@0 expect _HZ 440 tol 0.05
+@0 expect O1 0.175 tol 0.0005
+@0 expect O2 0.175 tol 0.0005
+@0 expect O3 1
+@0 expect O4 1
+@0 expect O5 1
+@0 expect _CENTS 0 tol 0.01
+@0 expect O6 0 tol 0.00001

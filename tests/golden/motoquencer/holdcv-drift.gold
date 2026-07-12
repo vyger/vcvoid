@@ -1,0 +1,29 @@
+# motoquencer: mid-step CV drift (finding). holdcv's promise — "regardless of this
+# setting, the CV will never change inbetween. Any change of the CV faders, the
+# cvbase and cvrange and so on will only take effect when the next step is played."
+# The step pitch is latched/cached at step entry, so changing cvbase mid-step must
+# NOT move the held CV; the change only lands when the next step is entered.
+# quantize=0, cvrange=1, all steps at fader pos 0 -> step pitch = cvbase + 0.
+tickrate 100
+patch <<<
+[m4]
+[motoquencer]
+    clock    = I1
+    cvbase   = I2
+    cvrange  = 1
+    quantize = 0
+    numsteps = 2
+    cv       = O1
+    gate     = O2
+>>>
+# period-4 clock: edges at ticks 2 and 6.
+@2 set I1 1
+@2 expect O1 0 tol 1e-4
+@3 set I1 0
+# change cvbase mid-step -> held CV must stay put (no drift).
+@4 set I2 0.3
+@4 expect O1 0 tol 1e-4
+@5 expect O1 0 tol 1e-4
+# next step entered on the 2nd edge -> the cvbase change now takes effect.
+@6 set I1 1
+@6 expect O1 0.3 tol 1e-4

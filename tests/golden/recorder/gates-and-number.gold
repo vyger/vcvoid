@@ -1,0 +1,50 @@
+# The tape records eight gate tracks (0/1, high iff >= 0.1) and one integer
+# number (0..255) in parallel with the CV. Gates/number are stepped (no
+# interpolation). numberout is observed via an internal cable because O registers
+# clamp to +/-10 V while numbers reach 255.
+patch <<<
+[recorder]
+    gatein1   = I1
+    gatein2   = I2
+    numberin  = I3
+    mode      = I4
+    gateout1  = O1
+    gateout2  = O2
+    numberout = _NUM
+
+# a copy circuit reads _NUM so the probe cable has a real downstream reader
+[copy]
+    input  = _NUM
+    output = O5
+>>>
+# RECORD: gates/number captured; output passes the live values through
+@0 set I4 2
+@0 set I1 1
+@0 set I2 0
+@0 set I3 10
+@0 expect O1 1
+@0 expect O2 0
+@0 expect _NUM 10 tol 1e-5
+@1 set I1 0
+@1 set I2 1
+@1 set I3 20
+@1 expect O1 0
+@1 expect O2 1
+@1 expect _NUM 20 tol 1e-5
+@2 set I1 1
+@2 set I2 1
+@2 set I3 30
+@2 expect _NUM 30 tol 1e-5
+# PLAY: tape replays gate/number tracks
+@3 set I4 1
+@3 expect O1 1
+@3 expect O2 0
+@3 expect _NUM 10 tol 1e-5
+@4 expect O1 0
+@4 expect O2 1
+@4 expect _NUM 20 tol 1e-5
+@5 expect O1 1
+@5 expect O2 1
+@5 expect _NUM 30 tol 1e-5
+# hold last sample at the end (mode-driven)
+@6 expect _NUM 30 tol 1e-5

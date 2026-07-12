@@ -1,0 +1,11 @@
+# Default delay is 0.01 s (10 ms), NOT zero -- so controllers can settle first.
+# At tickrate 100, 0.01 s = 1 tick, so the trigger fires on tick 1.
+tickrate 100
+patch <<<
+[once]
+    trigger = O1
+>>>
+@0 expect O1 0
+@1 expect O1 1
+@2 expect O1 0
+@3 expect O1 0

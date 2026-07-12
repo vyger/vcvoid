@@ -1,0 +1,33 @@
+# midiout all-notes-off / all-sound-off (manual lines 376-377). allnotesoff sends
+# CC#123 (value 0); allsoundoff sends CC#120 (value 0). CHOSEN READING of "the
+# same as releasing all currently held keys" (line 376): the circuit also closes
+# its own note bookkeeping, so a gate that is still high when the reset fires
+# does NOT later emit a redundant note-off; the gate must fall and rise again to
+# start a new note. pitchstabilization=0 for immediate note-ons.
+tickrate 1000
+x7 1
+patch <<<
+[midiout]
+    pitch = I1
+    gate  = I2
+    allnotesoff = I3
+    allsoundoff = I4
+    pitchstabilization = 0
+    activesensing = 0
+>>>
+@0 set I1 0.3
+@1 set I2 1
+@1 expectmidi trs noteon 1 60 127
+@2 set I3 1
+@2 expectmidi trs cc 1 123 0
+@3 set I3 0
+@3 set I2 0
+@3 expectmidi trs none
+# gate rises again -> a fresh note
+@5 set I2 1
+@5 expectmidi trs noteon 1 60 127
+@6 set I4 1
+@6 expectmidi trs cc 1 120 0
+@7 set I4 0
+@7 set I2 0
+@7 expectmidi trs none

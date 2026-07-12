@@ -1,0 +1,10 @@
+# copy: plain pass-through (manual/circuits/copy.md)
+patch <<<
+[copy]
+    input = I1
+    output = O1
+>>>
+@0 set I1 0.25
+@0 expect O1 0.25
+@1 set I1 -0.4
+@1 expect O1 -0.4

@@ -1,0 +1,12 @@
+# octave defaults: nothing patched -> input=spread=detune=0, fifths off.
+# All three outputs equal the input (0 V). output1 is always an exact copy of
+# input (manual: "output1 was implemented just for sake of completeness").
+patch <<<
+[octave]
+    output1 = O1
+    output2 = O2
+    output3 = O3
+>>>
+@0 expect O1 0 tol 1e-5
+@0 expect O2 0 tol 1e-5
+@0 expect O3 0 tol 1e-5

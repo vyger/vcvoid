@@ -1,0 +1,12 @@
+# minimum/maximum scale the range: output = minimum + u*(maximum-minimum).
+# Unclocked, minimum=0.2, maximum=0.6 (range 0.4). Every value lies in [0.2,0.6].
+patch <<<
+[random]
+    minimum = 0.2
+    maximum = 0.6
+    output  = O1
+>>>
+@0 expect O1 0.20002519 tol 1e-6
+@1 expect O1 0.20629898 tol 1e-6
+@2 expect O1 0.44656163 tol 1e-6
+@3 expect O1 0.22864746 tol 1e-6

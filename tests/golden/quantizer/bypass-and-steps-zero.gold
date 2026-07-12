@@ -1,0 +1,31 @@
+# bypass=1 copies input straight to output (no quantization). steps<=0 means an
+# "infinite" number of steps -> quantization disabled (passthrough).
+patch <<<
+[quantizer]
+    input  = I1
+    steps  = 10
+    bypass = I2
+    output = O1
+>>>
+
+patch <<<
+[quantizer]
+    input  = I3
+    steps  = 0
+    output = O2
+>>>
+
+# not bypassed: 0.027 -> nearest 0.03 ; steps=0 block passes 0.037 through
+@0 set I1 0.027
+@0 set I2 0
+@0 set I3 0.037
+@0 expect O1 0.03 tol 1e-5
+@0 expect O2 0.037 tol 1e-5
+# bypass on: raw 0.027
+@1 set I2 1
+@1 set I3 -0.062
+@1 expect O1 0.027 tol 1e-5
+@1 expect O2 -0.062 tol 1e-5
+# bypass off again: back to quantized 0.03
+@2 set I2 0
+@2 expect O1 0.03 tol 1e-5

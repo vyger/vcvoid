@@ -1,0 +1,53 @@
+# nudge: LED gradient (needs both bounds). min=-0.2 max=0.2 -> center 0.
+# Above center: leddown off, ledup ramps 0..1 toward max (0.5 at half way, 1 at
+# max). Below center: mirrored. Exactly at center: BOTH maximally bright (the
+# manual stresses "exactly"); we return to center via the both-press reset so the
+# comparison is exact. ledup=L1.1, leddown=L1.3.
+#   t0 value 0 (center)      -> both 1
+#   t1 up -> 0.1             -> ledup 0.5, leddown 0
+#   t3 up -> 0.2 (max)       -> ledup 1
+#   t5 both-press reset -> 0 -> both 1
+#   t7 down -> -0.1          -> ledup 0, leddown 0.5
+#   t9 down -> -0.2 (min)    -> leddown 1
+#   t11 down -> clamped      -> still leddown 1
+tickrate 100
+patch <<<
+[p2b8]
+
+[nudge]
+    minimum    = -0.2
+    maximum    = 0.2
+    amount     = 0.1
+    buttonup   = B1.1
+    buttondown = B1.3
+    ledup      = L1.1
+    leddown    = L1.3
+    output     = O1
+>>>
+@0 expect L1.1 1 tol 1e-4
+@0 expect L1.3 1 tol 1e-4
+@1 set B1.1 1
+@1 expect L1.1 0.5 tol 1e-4
+@1 expect L1.3 0 tol 1e-4
+@2 set B1.1 0
+@3 set B1.1 1
+@3 expect L1.1 1 tol 1e-4
+@4 set B1.1 0
+@5 set B1.1 1
+@5 set B1.3 1
+@5 expect L1.1 1 tol 1e-4
+@5 expect L1.3 1 tol 1e-4
+@5 expect O1 0 tol 1e-4
+@6 set B1.1 0
+@6 set B1.3 0
+@7 set B1.3 1
+@7 expect L1.1 0 tol 1e-4
+@7 expect L1.3 0.5 tol 1e-4
+@8 set B1.3 0
+@9 set B1.3 1
+@9 expect L1.3 1 tol 1e-4
+@10 set B1.3 0
+@11 set B1.3 1
+@11 expect L1.3 1 tol 1e-4
+@11 expect O1 -0.2 tol 1e-4
+@12 set B1.3 0

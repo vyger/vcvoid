@@ -1,0 +1,8 @@
+# Nothing patched to any input: startvalue defaults to 0 (Inputs table), so
+# the flip flop starts at 0 and stays there with no triggers connected.
+patch <<<
+[flipflop]
+    output = O1
+>>>
+@0 expect O1 0
+@5 expect O1 0

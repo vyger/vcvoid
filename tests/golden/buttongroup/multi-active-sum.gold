@@ -1,0 +1,44 @@
+# buttongroup: minactive=0, maxactive=3 -> up to three independent toggles; the
+# output is the SUM of the active buttons' values. startbutton=0 starts empty.
+# values 0.1/0.2/0.4.
+#   t1 press1 -> {1}     -> output 0.1
+#   t3 press2 -> {1,2}   -> output 0.3
+#   t5 press3 -> {1,2,3} -> output 0.7
+#   t7 press2 -> {1,3}   -> output 0.5  (toggle off, allowed by minactive 0)
+tickrate 100
+patch <<<
+[p2b8]
+
+[buttongroup]
+    button1   = B1.1
+    button2   = B1.2
+    button3   = B1.3
+    led1      = L1.1
+    led2      = L1.2
+    led3      = L1.3
+    value1    = 0.1
+    value2    = 0.2
+    value3    = 0.4
+    minactive = 0
+    maxactive = 3
+    startbutton = 0
+    output    = O1
+>>>
+@0 expect O1 0 tol 1e-4
+@0 expect L1.1 0 tol 1e-4
+@1 set B1.1 1
+@1 expect O1 0.1 tol 1e-4
+@1 expect L1.1 1 tol 1e-4
+@2 set B1.1 0
+@3 set B1.2 1
+@3 expect O1 0.3 tol 1e-4
+@3 expect L1.2 1 tol 1e-4
+@4 set B1.2 0
+@5 set B1.3 1
+@5 expect O1 0.7 tol 1e-4
+@5 expect L1.3 1 tol 1e-4
+@6 set B1.3 0
+@7 set B1.2 1
+@7 expect O1 0.5 tol 1e-4
+@7 expect L1.2 0 tol 1e-4
+@8 set B1.2 0

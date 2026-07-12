@@ -1,0 +1,21 @@
+# `gate`: while the gate is high the output tracks the input continuously; when
+# the gate goes low the output sticks to the last value it had just before.
+patch <<<
+[sample]
+    input  = I1
+    gate   = I3
+    output = O1
+>>>
+@0 set I1 0.5
+@0 expect O1 0
+# gate high -> track input
+@1 set I3 1
+@1 expect O1 0.5
+@2 set I1 0.8
+@2 expect O1 0.8
+# gate low -> freeze at last tracked value (0.8)
+@3 set I3 0
+@3 set I1 0.2
+@3 expect O1 0.8
+@4 set I1 0.9
+@4 expect O1 0.8

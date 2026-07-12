@@ -1,0 +1,31 @@
+# display: useasdefault re-asserts the default view once a popup's linger expires.
+# Spec: display.md "the default view of the display ... always be shown if nothing
+# else is shown."  Circuit A is the default (useasdefault=1, constant value 0.11,
+# linger 0.03 s = 3 ticks).  Circuit B is a transient popup (linger 0.03 s).
+#   t0: A shows its default 0.11 (owner A, lingerUntil 3)
+#   t3: B changes to 0.55; A's linger has expired so B takes the screen
+#       (owner B, lingerUntil 3+3 = 6). A does NOT re-assert here: it is still the
+#       recorded owner as it runs, so the re-assert guard (owner != this) is false.
+#   t4,t5: B holds 0.55 (B's linger not yet expired -> A cannot re-assert)
+#   t6: B's linger expired AND owner != A  -> A re-asserts the default 0.11
+#   t7: A holds the default
+tickrate 100
+patch <<<
+[db8e]
+
+[display]
+    value        = 0.11
+    useasdefault = 1
+    linger       = 0.03
+
+[display]
+    value  = I2
+    linger = 0.03
+>>>
+@0 expectdisplay D1 value 0.11 tol 1e-6
+@3 set I2 0.55
+@3 expectdisplay D1 value 0.55 tol 1e-6
+@4 expectdisplay D1 value 0.55 tol 1e-6
+@5 expectdisplay D1 value 0.55 tol 1e-6
+@6 expectdisplay D1 value 0.11 tol 1e-6
+@7 expectdisplay D1 value 0.11 tol 1e-6

@@ -1,0 +1,28 @@
+# Default parameters (mass=gravity=springforce=1, no friction). From rest at the
+# top (0,0) the mass accelerates downwards (position and velocity go positive),
+# heading for the equilibrium at position 1 (gravity/springforce) -- a damped/
+# undamped sine. Values pinned for the semi-implicit Euler integrator at
+# tickrate 10 (dt = 0.1), output = sim * 0.1.
+#
+# SPEC-GAP: the manual documents the mass-spring ODE but NOT the integration
+# scheme or step size, so these exact numbers are integrator-specific; hardware
+# position/velocity traces would be needed to validate them. Only the direction
+# of motion and the equilibrium point are truly specified.
+tickrate 10
+patch <<<
+[spring]
+    position = O1
+    velocity = O2
+>>>
+# t0: init at rest
+@0 expect O1 0 tol 1e-9
+@0 expect O2 0 tol 1e-9
+# t1: a=1 -> v=0.1, p=0.01
+@1 expect O1 0.001 tol 1e-6
+@1 expect O2 0.01 tol 1e-6
+# t2: a=1-0.01=0.99 -> v=0.199, p=0.0299
+@2 expect O1 0.00299 tol 1e-6
+@2 expect O2 0.0199 tol 1e-6
+# t3: a=1-0.0299=0.9701 -> v=0.29601, p=0.059501
+@3 expect O1 0.0059501 tol 1e-6
+@3 expect O2 0.029601 tol 1e-6

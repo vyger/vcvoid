@@ -1,0 +1,24 @@
+# midiin: program change + bank select (outputs lines 372-374). A MIDI program
+# change sets `program` to the new number (0..127) and fires the `programchange`
+# trigger -- even when the program number is unchanged (line 372). Bank select
+# uses CC#0 as the MSB and CC#32 as the LSB: bank = MSB*128 + LSB (line 374).
+# program/bank routed to N registers (which, unlike O, do not clamp to +-1) so
+# the integer values read back unscaled. tickrate 1000 -> 10 ms trigger = 10 ticks.
+tickrate 1000
+patch <<<
+[midiin]
+    program       = N1
+    programchange = O1
+    bank          = N2
+>>>
+@0 midisend trs program 1 5
+@0 expect N1 5
+@0 expect O1 1
+@10 expect O1 0
+@15 midisend trs cc 1 0 2
+@15 expect N2 256
+@25 midisend trs cc 1 32 5
+@25 expect N2 261
+@35 midisend trs program 1 5
+@35 expect O1 1
+@35 expect N1 5

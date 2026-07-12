@@ -1,0 +1,35 @@
+# vcotuner: signal loss. Manual: hz output -> 0 when no signal is found;
+# vcofound -> 0 (DB8E would show "no signal"). CHOSEN READING (manual silent):
+# pitch/referencepitch HOLD their last measured value (pitch-follower
+# continuity); deviation outputs (cents/tuning) and LEDs go to 0.
+master 18
+patch <<<
+# LABELS: master=18
+[vcotuner]
+    smooth = 0
+    hz = _HZ
+    pitch = O1
+    vcofound = O2
+    ledintune = O3
+    intune = O4
+    cents = _CENTS
+
+[copy]
+    input = _HZ * 0.001
+    output = O7
+
+[copy]
+    input = _CENTS * 0.001
+    output = O8
+>>>
+@0 probe 440
+@0 expect _HZ 440 tol 0.05
+@0 expect O1 0.175 tol 0.0005
+@0 expect O2 1
+@1 probe none
+@1 expect _HZ 0
+@1 expect O1 0.175 tol 0.0005
+@1 expect O2 0
+@1 expect O3 0
+@1 expect O4 0
+@1 expect _CENTS 0

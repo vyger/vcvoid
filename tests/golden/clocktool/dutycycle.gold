@@ -1,0 +1,26 @@
+# dutycycle sets the output high fraction of the output period. 0.2 (20%) with
+# period 10 (tickrate 100) -> 2-tick gates. First cycle is a learning transient
+# (period unknown -> 1-tick gate at t0); from t10 on the 20% gate applies:
+# high t10..t11, t20..t21, t30..t31.
+tickrate 100
+patch <<<
+[clocktool]
+    clock     = I1
+    dutycycle = 0.2
+    output    = O1
+>>>
+@0 set I1 1
+@1 set I1 0
+@10 set I1 1
+@10 expect O1 1
+@11 set I1 0
+@11 expect O1 1
+@12 expect O1 0
+@20 set I1 1
+@20 expect O1 1
+@21 set I1 0
+@21 expect O1 1
+@22 expect O1 0
+@30 set I1 1
+@30 expect O1 1
+@31 set I1 0

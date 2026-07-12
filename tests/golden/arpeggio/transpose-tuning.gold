@@ -1,0 +1,29 @@
+# arpeggio transpose + tuningmode (shared output stage, same as minifonion).
+# transpose is added to every emitted note live (works between clocks too).
+# While tuningmode (I2) is high the circuit outputs tuningpitch instead.
+# C Lydian defaults. transpose = 0.0166667 (2 semitones). tuningpitch = 0.05.
+patch <<<
+[arpeggio]
+    clock       = I1
+    tuningmode  = I2
+    transpose   = 0.0166667
+    tuningpitch = 0.05
+    output      = O1
+>>>
+# note 1 = semi 0; output = 0 + transpose
+@1 set I1 1
+@1 expect O1 0.0166667 tol 1e-5
+# between clocks the held note + transpose persists
+@2 set I1 0
+@2 expect O1 0.0166667 tol 1e-5
+# note 2 = semi 2; output = 0.0166667 + transpose
+@3 set I1 1
+@3 expect O1 0.0333333 tol 1e-5
+# tuningmode on -> output = tuningpitch, overriding note + transpose
+@4 set I1 0
+@4 set I2 1
+@4 expect O1 0.05 tol 1e-5
+@5 expect O1 0.05 tol 1e-5
+# tuningmode off -> back to the held note (semi 2) + transpose
+@6 set I2 0
+@6 expect O1 0.0333333 tol 1e-5

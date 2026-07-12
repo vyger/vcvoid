@@ -1,0 +1,26 @@
+# motorfader: the `button` output reports the touch plate below the fader, but
+# only while the circuit is selected. While deselected it is forced to 0 even if
+# a finger is on the plate.
+tickrate 100
+patch <<<
+[m4]
+
+[motorfader]
+    fader    = 1
+    output   = O1
+    button   = O2
+    select   = I1
+    selectat = 1
+>>>
+@0 set I1 1
+@0 expect O2 0 tol 1e-4
+@1 touch F1 1
+@1 expect O2 1 tol 1e-4
+# deselect: touch output goes to 0 even though the plate is still held
+@2 set I1 0
+@2 expect O2 0 tol 1e-4
+# reselect: touch output live again
+@3 set I1 1
+@3 expect O2 1 tol 1e-4
+@4 touch F1 0
+@4 expect O2 0 tol 1e-4

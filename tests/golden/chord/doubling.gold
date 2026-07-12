@@ -1,0 +1,30 @@
+# chord doubling rules in 4-voice mode (spread=0, so doubles are unisons):
+#  - two notes selected (select1/3 = C,E): "output1 and output3 play the first
+#    note and output2 and output4 the second" -> C,E,C,E -> O1..O4.
+#  - one note selected (select1 = C): "all four outputs play that same note" ->
+#    C,C,C,C -> O5..O8.
+patch <<<
+[chord]
+    output1 = O1
+    output2 = O2
+    output3 = O3
+    output4 = O4
+    select1 = 1
+    select3 = 1
+>>>
+patch <<<
+[chord]
+    output1 = O5
+    output2 = O6
+    output3 = O7
+    output4 = O8
+    select1 = 1
+>>>
+@0 expect O1 0 tol 1e-5
+@0 expect O2 0.0333333 tol 1e-5
+@0 expect O3 0 tol 1e-5
+@0 expect O4 0.0333333 tol 1e-5
+@0 expect O5 0 tol 1e-5
+@0 expect O6 0 tol 1e-5
+@0 expect O7 0 tol 1e-5
+@0 expect O8 0 tol 1e-5

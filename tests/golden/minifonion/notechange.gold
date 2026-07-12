@@ -1,0 +1,32 @@
+# notechange: a 10 ms trigger fires whenever the quantized note changes to a new
+# value. tickrate 1000 -> 10 ms = 10 ticks: the window is high for ticks T..T+9.
+# C lydian, direction up. No fire on the first note nor when the note is unchanged.
+tickrate 1000
+patch <<<
+[minifonion]
+    input      = I1
+    output     = O2
+    notechange = O3
+>>>
+# first note (C -> C): established, no trigger
+@0 set I1 0
+@0 expect O2 0 tol 1e-5
+@0 expect O3 0 tol 1e-5
+# unchanged next tick: still no trigger
+@1 expect O3 0 tol 1e-5
+# note changes C -> E (4 semi): trigger fires at tick 2, high through tick 11
+@2 set I1 0.0333333
+@2 expect O2 0.0333333 tol 1e-5
+@2 expect O3 1 tol 1e-5
+@6 expect O3 1 tol 1e-5
+@11 expect O3 1 tol 1e-5
+# window closes at tick 12
+@12 expect O3 0 tol 1e-5
+# input nudged but still snaps to E (pc4): no note change, no new trigger
+@13 set I1 0.035
+@13 expect O2 0.0333333 tol 1e-5
+@14 expect O3 0 tol 1e-5
+# note changes E -> C: trigger fires again at tick 15
+@15 set I1 0
+@15 expect O2 0 tol 1e-5
+@15 expect O3 1 tol 1e-5

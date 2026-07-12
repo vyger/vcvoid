@@ -1,0 +1,24 @@
+# In clocked mode a new random value is drawn on each clock rising edge and held
+# until the next. Before the first clock the output is 0 (nothing drawn yet).
+# steps 0, minimum 0, maximum 1 -> the held values are the seed-1 randUniform
+# stream: draw1=0.00006294, draw2=0.01574743, draw3=0.61640406.
+# SPEC-GAP: the pre-first-clock output (0) is a convention -- the manual doesn't
+# specify what is held before the first clock.
+patch <<<
+[random]
+    clock  = I1
+    output = O1
+>>>
+@0 expect O1 0
+@1 set I1 1
+@1 expect O1 0.00006294 tol 1e-6
+@2 set I1 0
+@2 expect O1 0.00006294 tol 1e-6
+@3 set I1 1
+@3 expect O1 0.01574743 tol 1e-6
+@4 set I1 0
+@4 expect O1 0.01574743 tol 1e-6
+@5 set I1 1
+@5 expect O1 0.61640406 tol 1e-6
+@6 set I1 0
+@6 expect O1 0.61640406 tol 1e-6

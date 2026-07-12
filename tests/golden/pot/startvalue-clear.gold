@@ -1,0 +1,22 @@
+# pot: a `clear` trigger resets the virtual pot to startvalue (and, because clear
+# is connected, the pot runs in virtual mode). startvalue=0.3. clear=I1.
+#   t0 phys .5 -> v = startvalue 0.3          -> O1 0.3
+#   t1 phys ->1: pickup 0.3->1.0 (v += .5*.7/.5) -> O1 1
+#   t3 clear -> v back to 0.3                  -> O1 0.3
+tickrate 100
+patch <<<
+[p2b8]
+
+[pot]
+    pot        = P1.1
+    startvalue = 0.3
+    clear      = I1
+    output     = O1
+>>>
+@0 set P1.1 0.5
+@0 expect O1 0.3 tol 1e-4
+@1 set P1.1 1.0
+@1 expect O1 1 tol 1e-4
+@3 set I1 1
+@3 expect O1 0.3 tol 1e-4
+@4 set I1 0

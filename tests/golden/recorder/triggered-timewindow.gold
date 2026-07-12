@@ -1,0 +1,41 @@
+# In triggered mode, `timewindow` (seconds) keeps adapting the just-created
+# sample to the live input for that time after the trigger, then freezes it.
+# This lets a sequencer's pitch CV settle before the sample is committed.
+# tickrate 1000 -> timewindow 0.002 s = 2 ticks.
+tickrate 1000
+patch <<<
+[recorder]
+    cvin       = I1
+    mode       = I2
+    sample     = I3
+    timewindow = I4
+    cvout      = O1
+>>>
+@0 set I2 2
+@0 set I4 0.002
+@0 set I1 0.30
+@0 set I3 1
+# edge at tick 0 -> sample 0 = 0.30; adapt window covers ticks 0..1
+@1 set I1 0.35
+@1 set I3 1
+# tick 1 < 2 -> sample 0 adapts to 0.35
+@2 set I1 0.40
+@2 set I3 0
+# tick 2 not in window -> sample 0 frozen at 0.35
+# second note
+@3 set I3 0
+@4 set I1 0.50
+@4 set I3 1
+# edge at tick 4 -> sample 1 = 0.50; window covers ticks 4..5
+@5 set I1 0.55
+@5 set I3 1
+# tick 5 < 6 -> sample 1 adapts to 0.55
+@6 set I1 0.60
+@6 set I3 0
+# frozen at 0.55
+# PLAY: tape = [0.35, 0.55]
+@7 set I2 1
+@7 set I1 0.0
+@7 expect O1 0.35 tol 1e-5
+@8 expect O1 0.55 tol 1e-5
+@9 expect O1 0.55 tol 1e-5

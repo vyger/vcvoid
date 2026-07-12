@@ -1,0 +1,9 @@
+# Regression: a MASTER (16) without X7 still has no MIDI hardware; midiin
+# stays a runtime no-op even though Master18 gating changed.
+x7 0
+patch <<<
+[midiin]
+    gate = O1
+>>>
+@0 midisend x7trs noteon 1 60 100
+@0 expect O1 0

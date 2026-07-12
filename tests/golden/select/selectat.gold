@@ -1,0 +1,26 @@
+# select: `selectat` mode. When selectat is patched, the circuit is selected only
+# when `select` EXACTLY equals selectat (integer compare), instead of "any
+# positive gate". Here selectat = 2.
+#
+#   t0: select 0 -> 0 != 2 -> not selected -> O1 stays 0
+#   t1: select 2, input 0.4 -> selected    -> O1 = 0.4
+#   t3: select 1, input 0.9 -> 1 != 2      -> deselected -> O1 holds 0.4
+#   t5: select 2, input 0.9 -> selected    -> O1 = 0.9
+tickrate 100
+patch <<<
+[select]
+    input    = I1
+    select   = I2
+    selectat = 2
+    output   = O1
+>>>
+@0 set I1 0.4
+@0 set I2 0
+@0 expect O1 0 tol 1e-4
+@1 set I2 2
+@1 expect O1 0.4 tol 1e-4
+@3 set I1 0.9
+@3 set I2 1
+@3 expect O1 0.4 tol 1e-4
+@5 set I2 2
+@5 expect O1 0.9 tol 1e-4

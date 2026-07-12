@@ -1,0 +1,26 @@
+# fadermatrix: notches are per column. Here column 1 (output12/output22) is a
+# binary switch (notches2 = 2) while column 0 stays continuous. rowcolumn 0 puts
+# row 0 on the faders: F1 drives cell (0,0) continuous, F2 drives cell (0,1)
+# binary.
+tickrate 100
+patch <<<
+[m4]
+
+[fadermatrix]
+    firstfader = 1
+    rowcolumn  = I1
+    notches2   = 2
+    output11   = O1
+    output12   = O2
+    output21   = O3
+    output22   = O4
+>>>
+@0 set I1 0
+@0 expect O1 0 tol 1e-4
+@0 expect O2 0 tol 1e-4
+@1 move F1 0.6
+@1 move F2 0.6
+@1 expect O1 0.6 tol 1e-4
+@1 expect O2 1 tol 1e-4
+@1 expect F1 0.6 tol 1e-4
+@1 expect F2 1 tol 1e-4

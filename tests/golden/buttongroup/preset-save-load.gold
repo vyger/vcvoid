@@ -1,0 +1,40 @@
+# buttongroup: triggered presets store the active-button set. Radio group;
+# preset = I6 (=0), savepreset = I7, loadpreset = I8. values 0.1/0.2/0.3.
+#   t0: active {1} (startbutton 1)
+#   t1 press2 -> {2}      -> output 0.2
+#   t3 savepreset -> preset 0 = {2}
+#   t5 press3 -> {3}      -> output 0.3
+#   t7 loadpreset -> {2}  -> output 0.2
+tickrate 100
+patch <<<
+[p2b8]
+
+[buttongroup]
+    button1 = B1.1
+    button2 = B1.2
+    button3 = B1.3
+    led1    = L1.1
+    led2    = L1.2
+    led3    = L1.3
+    value1  = 0.1
+    value2  = 0.2
+    value3  = 0.3
+    output  = O1
+    preset     = I6
+    savepreset = I7
+    loadpreset = I8
+>>>
+@0 expect O1 0.1 tol 1e-4
+@1 set B1.2 1
+@1 expect O1 0.2 tol 1e-4
+@2 set B1.2 0
+@3 set I7 1
+@4 set I7 0
+@5 set B1.3 1
+@5 expect O1 0.3 tol 1e-4
+@6 set B1.3 0
+@7 set I8 1
+@7 expect O1 0.2 tol 1e-4
+@7 expect L1.2 1 tol 1e-4
+@7 expect L1.3 0 tol 1e-4
+@8 set I8 0

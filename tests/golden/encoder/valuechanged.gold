@@ -1,0 +1,27 @@
+# encoder: valuechanged fires a 10 ms trigger when the virtual value changes, but
+# NOT while the value is pinned at a range limit and the knob keeps turning.
+# mode 1, smooth 0, tickrate 100 (10 ms = 1 tick).
+#   @1 +48 -> value 0 -> 0.5 (changed) -> pulse
+#   @2      -> pulse ends
+#   @3 +96 -> value 0.5 -> 1.0 clamp (changed) -> pulse
+#   @4      -> pulse ends
+#   @5 +48 -> value stays 1.0 (clamped, no change) -> NO pulse
+tickrate 100
+patch <<<
+[e4]
+
+[encoder]
+    encoder      = E1.1
+    output       = O1
+    valuechanged = O2
+    smooth       = 0
+>>>
+@1 turn E1.1 48
+@1 expect O2 1 tol 1e-4
+@2 expect O2 0 tol 1e-4
+@3 turn E1.1 96
+@3 expect O1 1.0 tol 1e-4
+@3 expect O2 1 tol 1e-4
+@4 expect O2 0 tol 1e-4
+@5 turn E1.1 48
+@5 expect O2 0 tol 1e-4

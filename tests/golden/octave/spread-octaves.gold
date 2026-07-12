@@ -1,0 +1,37 @@
+# Octave spread, fifths OFF. Documented endpoints (manual pg 355): spread=0
+# changes nothing; spread=1.0 puts VCO2 two octaves up and VCO3 four octaves up.
+# output2 sits at the midpoint of the output1->output3 spread.
+# 1 octave = 0.1 engine units (1 V/oct); input carried through on output1.
+#
+# SPEC-GAP: the manual does not pin the exact stepped mapping between the two
+# endpoints. Literal reading: output3 offset = round(spread*4) octaves (4
+# discrete octave steps), output2 = half of that. The intermediate asserts
+# below (spread 0.25 / 0.5) exercise that reading; the endpoints (0 and 1.0)
+# are the documented facts. Hardware reference data would pin the middle steps.
+patch <<<
+[octave]
+    input   = I1
+    spread  = I2
+    output1 = O1
+    output2 = O2
+    output3 = O3
+>>>
+# spread 0: nothing changes, all VCOs at the input pitch
+@0 set I1 0.05
+@0 set I2 0
+@0 expect O1 0.05 tol 1e-5
+@0 expect O2 0.05 tol 1e-5
+@0 expect O3 0.05 tol 1e-5
+# spread 1.0: VCO2 +2 oct (+0.20), VCO3 +4 oct (+0.40)  [documented endpoint]
+@1 set I2 1
+@1 expect O1 0.05 tol 1e-5
+@1 expect O2 0.25 tol 1e-5
+@1 expect O3 0.45 tol 1e-5
+# spread 0.5 -> round(0.5*4)=2 octave steps: VCO3 +2 oct, VCO2 +1 oct
+@2 set I2 0.5
+@2 expect O2 0.15 tol 1e-5
+@2 expect O3 0.25 tol 1e-5
+# spread 0.25 -> round(0.25*4)=1 octave step: VCO3 +1 oct, VCO2 +0.5 oct
+@3 set I2 0.25
+@3 expect O2 0.10 tol 1e-5
+@3 expect O3 0.15 tol 1e-5

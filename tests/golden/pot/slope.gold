@@ -1,0 +1,31 @@
+# pot: slope reshapes resolution as output = pot^slope. Two pots share P1.1
+# (non-virtual: both read the physical position directly). slope=2 zooms in near
+# 0.0 (convex); slope=0.5 zooms in near 1.0 (concave).
+#   pot=0.25: slope2 -> 0.0625 ; slope0.5 -> sqrt(.25) = 0.5
+#   pot=0.81: slope2 -> 0.6561 ; slope0.5 -> 0.9
+tickrate 100
+patch <<<
+[p2b8]
+
+[pot]
+    pot    = P1.1
+    slope  = 2
+    output = O1
+
+[pot]
+    pot    = P1.1
+    slope  = 0.5
+    output = O2
+>>>
+@0 set P1.1 0.25
+@0 expect O1 0.0625 tol 1e-4
+@0 expect O2 0.5 tol 1e-4
+@1 set P1.1 0.81
+@1 expect O1 0.6561 tol 1e-4
+@1 expect O2 0.9 tol 1e-4
+@2 set P1.1 0.0
+@2 expect O1 0 tol 1e-4
+@2 expect O2 0 tol 1e-4
+@3 set P1.1 1.0
+@3 expect O1 1 tol 1e-4
+@3 expect O2 1 tol 1e-4

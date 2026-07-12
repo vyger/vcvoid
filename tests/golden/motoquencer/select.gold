@@ -1,0 +1,28 @@
+# motoquencer: the select overlay. While DEselected the circuit does not touch the
+# faders (fader moves are ignored, the motors are left alone), but it still runs the
+# transport and drives its cv/gate outputs. Here `select` = I3: 0 => deselected.
+tickrate 100
+patch <<<
+[m4]
+[motoquencer]
+    clock  = I1
+    select = I3
+    cv     = O1
+    gate   = O2
+>>>
+# tick1: select on (recall takes ownership). tick2: edit step0 -> 0.1 V.
+@1 set I3 1
+@2 move F1 0.5
+@2 expect F1 0.5 tol 1e-4
+# tick3: deselect, then try to move the fader -> the edit is ignored (not read).
+@3 set I3 0
+@3 move F1 1.0
+# tick4: clock while deselected -> outputs still run; step0 keeps its 0.1 V.
+@4 set I1 1
+@4 expect O1 0.1 tol 1e-4
+@4 expect O2 1 tol 1e-4
+# tick6: reselect -> the motor snaps the fader back to the stored 0.1 V (0.5),
+# overriding the user's stray 1.0 move.
+@5 set I1 0
+@6 set I3 1
+@6 expect F1 0.5 tol 1e-4

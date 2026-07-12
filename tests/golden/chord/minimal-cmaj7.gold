@@ -1,0 +1,17 @@
+# chord minimal example: no selects, no root/degree -> C Lydian, smart default =
+# all seven scale notes. The four voices take the FIRST FOUR notes in INTERVAL
+# (select-input) order: select1/3/5/7 = root/3rd/5th/7th = C,E,G,B -> a C major 7.
+# pitch=0, spread=0, inversion=0 -> voiced within one octave, lowest note nearest
+# above pitch (C at 0 V). 1 semitone = 0.1/12 = 0.0083333 engine.
+#   O1=C(semi 0), O2=E(4), O3=G(7), O4=B(11)
+patch <<<
+[chord]
+    output1 = O1
+    output2 = O2
+    output3 = O3
+    output4 = O4
+>>>
+@0 expect O1 0 tol 1e-5
+@0 expect O2 0.0333333 tol 1e-5
+@0 expect O3 0.0583333 tol 1e-5
+@0 expect O4 0.0916667 tol 1e-5

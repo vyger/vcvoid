@@ -1,0 +1,60 @@
+# nextpattern / prevpattern offset the pattern seed by +/-1; reroll draws a
+# random offset from the engine RNG (offset = nextRand() & 0xFFFF -- SPEC-GAP
+# convention). Seed changes take effect immediately (bar table is recomputed
+# every tick). dejavu 1, activity 1.
+tickrate 100
+patch <<<
+[algoquencer]
+    clock       = I1
+    activity    = 1
+    nextpattern = I2
+    prevpattern = I3
+    reroll      = I4
+    pitch       = O1
+>>>
+@1 set I1 1
+@1 expect O1 0.144764 tol 1e-5   # pattern 0 step 0
+@2 set I1 0
+@3 set I1 1
+@3 expect O1 0.105669 tol 1e-5   # pattern 0 step 1
+@4 set I1 0
+@4 set I2 1
+@5 set I1 1
+@5 expect O1 0.0795 tol 1e-5   # pattern 1 step 2
+@6 set I1 0
+@6 set I2 0
+@7 set I1 1
+@7 expect O1 0.164653 tol 1e-5   # pattern 1 step 3
+@8 set I1 0
+@8 set I3 1
+@9 set I1 1
+@9 expect O1 0.220967 tol 1e-5   # pattern 0 again, step 4
+@10 set I1 0
+@10 set I3 0
+@11 set I1 1
+@11 expect O1 0.248631 tol 1e-5   # pattern 0 again, step 5
+@12 set I1 0
+@12 set I4 1
+@13 set I1 1
+@13 expect O1 0.096872 tol 1e-5   # rerolled seed 8225, step 6
+@14 set I1 0
+@14 set I4 0
+@15 set I1 1
+@15 expect O1 0.043145 tol 1e-5   # rerolled seed 8225, step 7
+@16 set I1 0
+@17 set I1 1
+@18 set I1 0
+@19 set I1 1
+@20 set I1 0
+@21 set I1 1
+@22 set I1 0
+@23 set I1 1
+@24 set I1 0
+@25 set I1 1
+@26 set I1 0
+@27 set I1 1
+@28 set I1 0
+@29 set I1 1
+@30 set I1 0
+@31 set I1 1
+@32 set I1 0

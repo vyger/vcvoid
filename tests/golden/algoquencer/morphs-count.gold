@@ -1,0 +1,97 @@
+# morphs: at each bar start an accumulator gains len*(10*morphs)^2/100 (manual's
+# exact table; SPEC-GAP: rate floored at 1/64 per step when morphs>0, resolving
+# the manual's 1-per-100-table vs 1-per-64-prose conflict); its integer part =
+# morphed steps this bar (gen counter bump -> new but again-frozen decisions).
+# morphs=0.5 -> 25 per 100 steps -> exactly 4 per 16-step bar. morphled fires at
+# morphing bar starts. activity=1 isolates pitch changes.
+tickrate 100
+patch <<<
+[algoquencer]
+    clock    = I1
+    activity = 1
+    morphs   = 0.5
+    pitch    = O1
+    morphled = O2
+>>>
+@1 set I1 1
+@1 expect O2 0 tol 1e-5   # bar0: no morphs yet
+@1 expect O1 0.144764 tol 1e-5   # bar0 step 0 (will morph)
+@2 set I1 0
+@3 set I1 1
+@4 set I1 0
+@5 set I1 1
+@5 expect O1 0.145666 tol 1e-5   # bar0 step 2 (will morph)
+@6 set I1 0
+@7 set I1 1
+@8 set I1 0
+@9 set I1 1
+@10 set I1 0
+@11 set I1 1
+@12 set I1 0
+@13 set I1 1
+@14 set I1 0
+@15 set I1 1
+@16 set I1 0
+@17 set I1 1
+@18 set I1 0
+@19 set I1 1
+@20 set I1 0
+@21 set I1 1
+@22 set I1 0
+@23 set I1 1
+@24 set I1 0
+@25 set I1 1
+@26 set I1 0
+@27 set I1 1
+@28 set I1 0
+@29 set I1 1
+@30 set I1 0
+@31 set I1 1
+@32 set I1 0
+@33 set I1 1
+@33 expect O1 0.211677 tol 1e-5   # bar1 step 0 morphed
+@33 expect O2 1 tol 1e-5   # morphled fires at bar1 start (4 morphs)
+@34 set I1 0
+@34 expect O2 0 tol 1e-5   # morphled is a 10ms trigger
+@35 set I1 1
+@35 expect O1 0.105669 tol 1e-5   # bar1 step 1 unmorphed (== bar0)
+@35 expect O2 0 tol 1e-5   # no morphs mid-bar
+@36 set I1 0
+@37 set I1 1
+@37 expect O1 0.227613 tol 1e-5   # bar1 step 2 morphed
+@38 set I1 0
+@39 set I1 1
+@39 expect O1 0.041336 tol 1e-5   # bar1 step 3 unmorphed (== bar0)
+@40 set I1 0
+@41 set I1 1
+@42 set I1 0
+@43 set I1 1
+@44 set I1 0
+@45 set I1 1
+@46 set I1 0
+@47 set I1 1
+@48 set I1 0
+@49 set I1 1
+@50 set I1 0
+@51 set I1 1
+@52 set I1 0
+@53 set I1 1
+@54 set I1 0
+@55 set I1 1
+@56 set I1 0
+@57 set I1 1
+@58 set I1 0
+@59 set I1 1
+@60 set I1 0
+@61 set I1 1
+@62 set I1 0
+@63 set I1 1
+@64 set I1 0
+@65 set I1 1
+@66 set I1 0
+@67 set I1 1
+@68 set I1 0
+@69 set I1 1
+@70 set I1 0
+@71 set I1 1
+@72 set I1 0

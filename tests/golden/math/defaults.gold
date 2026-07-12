@@ -1,0 +1,34 @@
+# math: fully unpatched instance (input1/input2 both unconnected -> the
+# framework's default of 0.0 for each, per the Inputs table). Every output
+# not already covered at its zero-input case elsewhere (neutral-defaults.gold
+# covers sum/product; unary.gold covers reciprocal(0); logarithm.gold covers
+# ln(0)/log2(0); power.gold covers 0^0; modulo.gold covers a zero divisor;
+# trig.gold covers sine(0)/cosine(0)) is exercised here with both inputs at
+# their default of 0. All results are 0.0, so O and N registers are used
+# interchangeably (11 outputs > master16's 8 O registers alone).
+patch <<<
+[math]
+    difference = O1
+    average    = O2
+    maximum    = O3
+    minimum    = O4
+    negation   = O5
+    amount     = O6
+    square     = O7
+    root       = O8
+    round      = N1
+    floor      = N2
+    ceil       = N3
+>>>
+
+@0 expect O1 0.0 tol 1e-6
+@0 expect O2 0.0 tol 1e-6
+@0 expect O3 0.0 tol 1e-6
+@0 expect O4 0.0 tol 1e-6
+@0 expect O5 0.0 tol 1e-6
+@0 expect O6 0.0 tol 1e-6
+@0 expect O7 0.0 tol 1e-6
+@0 expect O8 0.0 tol 1e-6
+@0 expect N1 0.0 tol 1e-6
+@0 expect N2 0.0 tol 1e-6
+@0 expect N3 0.0 tol 1e-6

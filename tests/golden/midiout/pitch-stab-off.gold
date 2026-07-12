@@ -1,0 +1,16 @@
+# midiout pitchstabilization = 0 (manual lines 282-291, 352). With stabilization
+# disabled the note-on is emitted immediately on the gate edge, with no settle
+# delay. pitch 0.3 -> note 60.
+tickrate 1000
+x7 1
+patch <<<
+[midiout]
+    pitch = I1
+    gate  = I2
+    pitchstabilization = 0
+    activesensing = 0
+>>>
+@0 set I1 0.3
+@1 set I2 1
+@1 expectmidi trs noteon 1 60 127
+@2 expectmidi trs none

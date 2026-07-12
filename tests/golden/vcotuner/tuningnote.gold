@@ -1,0 +1,33 @@
+# vcotuner: tuningnote = 0 locks the reference to the nearest C (manual:
+# "0 selects C ... in the nearest octave").
+# Hand math (f_C0 = 130.8128 Hz):
+#   probe 261.6256 (= 2*f_C0, the C one octave up) -> note = 12.0000; ref =
+#   0 + 12*round(12/12) = 12; cents 0 -> in tune; referencepitch = 0.1.
+#   probe 440 -> note = 21; ref = 0 + 12*round(21/12) = 24 (nearest C);
+#   cents = (21-24)*100 = -300 -> ledflat saturates at 1.0;
+#   referencepitch = 24 * 0.1/12 = 0.2.
+master 18
+patch <<<
+# LABELS: master=18
+[vcotuner]
+    smooth = 0
+    tuningnote = 0
+    intune = O1
+    ledflat = O2
+    referencepitch = O3
+    cents = _CENTS
+
+[copy]
+    input = _CENTS * 0.001
+    output = O8
+>>>
+@0 probe 261.6256
+@0 expect O1 1
+@0 expect O2 0
+@0 expect O3 0.1 tol 0.0005
+@0 expect _CENTS 0 tol 0.05
+@1 probe 440
+@1 expect O1 0
+@1 expect O2 1.0 tol 0.0001
+@1 expect O3 0.2 tol 0.0005
+@1 expect _CENTS -300 tol 0.1

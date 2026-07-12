@@ -1,0 +1,25 @@
+# "This CV [foldby] must be positive. If it is negative or zero, no folding will
+# be done." Even with bounds set, a foldby of 0 or negative passes the input
+# through unchanged.
+patch <<<
+[fold]
+    input   = I1
+    foldby  = 0
+    minimum = 0.12
+    maximum = 0.25
+    output  = O1
+>>>
+
+patch <<<
+[fold]
+    input   = I2
+    foldby  = -0.1
+    minimum = 0.12
+    maximum = 0.25
+    output  = O2
+>>>
+
+@0 set I1 0.05
+@0 set I2 0.9
+@0 expect O1 0.05 tol 1e-6
+@0 expect O2 0.9 tol 1e-6

@@ -1,0 +1,46 @@
+# Triggered mode: with `trigger` patched, the output is frozen until the next
+# trigger. Block A steps=0 -> pure sample & hold of the raw input. Block B steps
+# =10 -> samples and quantizes on each trigger. Before the first trigger the
+# output is 0 (nothing sampled yet).
+patch <<<
+[quantizer]
+    input   = I1
+    steps   = 0
+    trigger = I2
+    output  = O1
+>>>
+
+patch <<<
+[quantizer]
+    input   = I3
+    steps   = 10
+    trigger = I4
+    output  = O2
+>>>
+
+@0 set I1 0.3
+@0 set I2 0
+@0 set I3 0.027
+@0 set I4 0
+@0 expect O1 0
+@0 expect O2 0
+# trigger -> A samples 0.3, B samples & quantizes 0.027 -> 0.03
+@1 set I2 1
+@1 set I4 1
+@1 expect O1 0.3
+@1 expect O2 0.03 tol 1e-5
+# inputs change but no trigger -> both hold
+@2 set I2 0
+@2 set I4 0
+@2 set I1 0.5
+@2 set I3 0.061
+@2 expect O1 0.3
+@2 expect O2 0.03 tol 1e-5
+# next trigger -> A samples 0.5, B quantizes 0.061 -> 0.06
+@3 set I2 1
+@3 set I4 1
+@3 expect O1 0.5
+@3 expect O2 0.06 tol 1e-5
+@4 set I2 0
+@4 set I1 0.9
+@4 expect O1 0.5

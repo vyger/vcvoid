@@ -1,0 +1,8 @@
+expect_load_error "no register P1.1 on the b32"
+patch <<<
+[b32]
+
+[copy]
+    input = P1.1
+    output = O1
+>>>

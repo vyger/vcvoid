@@ -1,0 +1,49 @@
+# `clear`: "A trigger here removes and forgets a potential previous pending
+# trigger. The clockedvalue output is set to 0.0."
+# First release a value so clockedvalue is non-zero, then a new pending trigger,
+# then clear: it forgets the pending trigger (a later clock emits nothing) AND
+# zeroes clockedvalue.
+# SPEC-GAP: precedence of clear vs trigger/clock on a shared tick is
+# undocumented; the implementation applies trigger, then clear, then clock.
+patch <<<
+[clockedtrigger]
+    clock          = I1
+    trigger        = I2
+    clear          = I3
+    value          = I4
+    clockedtrigger = O1
+    clockedvalue   = O2
+    pendingtrigger = O3
+    pendingvalue   = O4
+>>>
+
+# trigger + clock deliver 0.6 to clockedvalue
+@1 set I2 1
+@1 set I4 0.6
+@2 set I2 0
+@3 set I1 1
+@3 expect O1 1
+@3 expect O2 0.6
+@4 set I1 0
+@4 expect O2 0.6
+
+# new pending trigger (value 0.4); clockedvalue still holds 0.6
+@5 set I2 1
+@5 set I4 0.4
+@5 expect O3 1
+@5 expect O4 0.4
+@6 set I2 0
+
+# clear: forget pending, zero clockedvalue and pendingvalue
+@7 set I3 1
+@7 expect O1 0
+@7 expect O2 0
+@7 expect O3 0
+@7 expect O4 0
+@8 set I3 0
+
+# a clock now emits nothing (pending was cleared)
+@9 set I1 1
+@9 expect O1 0
+@9 expect O2 0
+@10 set I1 0

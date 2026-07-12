@@ -1,0 +1,29 @@
+# button: states = 1 is a pure momentary button. The persisted state never
+# changes; led and output follow the button level directly (E = 1 while held,
+# else 0). output emits value2 (1) while held, value1 (0) released.
+#   t1 press   -> led 1, output 1
+#   t2 release -> led 0, output 0
+#   t3 press   -> led 1, output 1  (no latch: still momentary)
+tickrate 100
+patch <<<
+[p2b8]
+
+[button]
+    states = 1
+    button = B1.1
+    led    = L1.1
+    output = O1
+>>>
+@0 expect L1.1 0 tol 1e-4
+@0 expect O1 0 tol 1e-4
+@1 set B1.1 1
+@1 expect L1.1 1 tol 1e-4
+@1 expect O1 1 tol 1e-4
+@2 set B1.1 0
+@2 expect L1.1 0 tol 1e-4
+@2 expect O1 0 tol 1e-4
+@3 set B1.1 1
+@3 expect L1.1 1 tol 1e-4
+@3 expect O1 1 tol 1e-4
+@4 set B1.1 0
+@4 expect O1 0 tol 1e-4

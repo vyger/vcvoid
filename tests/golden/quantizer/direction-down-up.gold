@@ -1,0 +1,34 @@
+# `direction`: 0 = quantize down (floor), 2 = quantize up (ceil). steps=10 ->
+# step size 0.01. Block A direction 0, Block B direction 2, shared input I1.
+patch <<<
+[quantizer]
+    input     = I1
+    steps     = 10
+    direction = 0
+    output    = O1
+>>>
+
+patch <<<
+[quantizer]
+    input     = I1
+    steps     = 10
+    direction = 2
+    output    = O2
+>>>
+
+# 0.027 -> down 0.02 / up 0.03
+@0 set I1 0.027
+@0 expect O1 0.02 tol 1e-5
+@0 expect O2 0.03 tol 1e-5
+# 0.021 -> down 0.02 / up 0.03
+@1 set I1 0.021
+@1 expect O1 0.02 tol 1e-5
+@1 expect O2 0.03 tol 1e-5
+# exact 0.02 -> both 0.02
+@2 set I1 0.02
+@2 expect O1 0.02 tol 1e-5
+@2 expect O2 0.02 tol 1e-5
+# -0.027 -> down -0.03 (floor) / up -0.02 (ceil)
+@3 set I1 -0.027
+@3 expect O1 -0.03 tol 1e-5
+@3 expect O2 -0.02 tol 1e-5

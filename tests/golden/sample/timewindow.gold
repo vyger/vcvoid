@@ -1,0 +1,27 @@
+# `timewindow`: after a `sample` trigger the circuit keeps tracking the input
+# (bypass-like) for `timewindow` seconds, then freezes -- so a settling sequencer
+# pitch reaches its final value before being frozen. At tickrate 100,
+# timewindow=0.03 s = 3 ticks: sampled at t1, tracks through t3, freezes at t4.
+tickrate 100
+patch <<<
+[sample]
+    input      = I1
+    sample     = I2
+    timewindow = 0.03
+    output     = O1
+>>>
+@0 set I1 0.1
+@0 expect O1 0
+# trigger at t1: window = ticks 1,2,3 (track), freeze at t4
+@1 set I2 1
+@1 expect O1 0.1
+@2 set I2 0
+@2 set I1 0.5
+@2 expect O1 0.5
+@3 set I1 0.7
+@3 expect O1 0.7
+# t4: window over -> freeze at the last tracked value (0.7)
+@4 set I1 0.9
+@4 expect O1 0.7
+@5 set I1 0.2
+@5 expect O1 0.7

@@ -1,0 +1,19 @@
+# midiin: port selection (lines 217-322). Setting `usb = 1` selects the USB
+# port and -- because `trs` is omitted and `usb` is non-zero -- DEACTIVATES the
+# TRS port (line 270: "If you just specify one of trs and usb, the other one
+# will be deactivated"). So the first circuit ignores the TRS note and plays the
+# USB note. The second circuit specifies neither, so both ports auto-detect and
+# it plays the TRS note.
+patch <<<
+[midiin]
+    usb  = 1
+    gate = O1
+
+[midiin]
+    gate = O2
+>>>
+@0 midisend trs noteon 1 60 100
+@0 expect O1 0
+@0 expect O2 1
+@1 midisend usb noteon 1 64 100
+@1 expect O1 1

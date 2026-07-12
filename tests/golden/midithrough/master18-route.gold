@@ -1,0 +1,15 @@
+# midithrough on MASTER18 + X7: forward MIDI2 -> X7 TRS (totrs = 3), and
+# broadcast to all USB ports with tousb = 10.
+master 18
+patch <<<
+# LABELS: master=18
+[midithrough]
+    fromtrs = 2
+    totrs = 3
+    tousb = 10
+>>>
+@0 midisend m18trs2 noteon 1 60 100
+@1 expectmidi x7trs noteon 1 60 100
+@1 expectmidi m18usb noteon 1 60 100
+@1 expectmidi x7usb noteon 1 60 100
+@1 expectmidi m18trs1 none

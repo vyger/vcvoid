@@ -1,0 +1,33 @@
+# harmonicshift positive: all 12 columns selected, then harmonicshift=4 disables
+# fills + 11th + 13th + 9th, leaving {root, 3rd, 5th, 7th} = C lydian columns
+# {I=0, III=4, V=7, VII=11} -> allowed {0,4,7,11}. direction default up.
+patch <<<
+[minifonion]
+    input         = I1
+    output        = O2
+    select1       = 1
+    select3       = 1
+    select5       = 1
+    select7       = 1
+    select9       = 1
+    select11      = 1
+    select13      = 1
+    selectfill1   = 1
+    selectfill2   = 1
+    selectfill3   = 1
+    selectfill4   = 1
+    selectfill5   = 1
+    harmonicshift = 4
+>>>
+# C (pc0) allowed
+@0 set I1 0
+@0 expect O2 0 tol 1e-5
+# C# (1 semi): up past 2,3 -> E (4 semi)
+@1 set I1 0.0083333
+@1 expect O2 0.0333333 tol 1e-5
+# F (5 semi): up past 6 -> G (7 semi)
+@2 set I1 0.0416667
+@2 expect O2 0.0583333 tol 1e-5
+# G# (8 semi): up past 9,10 -> B (11 semi)
+@3 set I1 0.0666667
+@3 expect O2 0.0916667 tol 1e-5

@@ -1,0 +1,32 @@
+# vcotuner: flat / sharp detection against the nearest semitone (A1 = 440).
+# Hand math (f_C0 = 130.8128 Hz):
+#   probe 430 -> cents = 1200*log2(430/440) = -39.80; nearest semitone still 21.
+#   probe 450 -> cents = 1200*log2(450/440) = +38.91.
+# LED magnitude is a CHOSEN READING (manual pins only the 0.2..1.0 range and
+# the 50-cent max distance): mag = 0.2 + 0.8 * (|cents| - precision) /
+# (50 - precision), clamped to 1.
+#   430: 0.2 + 0.8*(39.80-3)/47 = 0.8264   450: 0.2 + 0.8*(38.91-3)/47 = 0.8113
+master 18
+patch <<<
+# LABELS: master=18
+[vcotuner]
+    smooth = 0
+    ledflat = O1
+    ledsharp = O2
+    intune = O3
+    cents = _CENTS
+
+[copy]
+    input = _CENTS * 0.001
+    output = O8
+>>>
+@0 probe 430
+@0 expect _CENTS -39.80 tol 0.05
+@0 expect O1 0.8264 tol 0.002
+@0 expect O2 0
+@0 expect O3 0
+@1 probe 450
+@1 expect _CENTS 38.91 tol 0.05
+@1 expect O1 0
+@1 expect O2 0.8113 tol 0.002
+@1 expect O3 0

@@ -1,0 +1,27 @@
+# A sub-threshold input (below the 0.1 = 1 V gate-high threshold) is not a
+# trigger edge, so no decision is made and no signal is routed: both outputs
+# stay at 0 V. This pins the gate threshold and the "no decision yet" behaviour.
+# SPEC-GAP (literal reading): the manual says the chosen output copies input
+# "from now on" -- i.e. only after the first decision. Before any rising edge we
+# emit 0 on BOTH outputs rather than leaking a sub-threshold input value to an
+# arbitrarily-preselected output. Hardware reference data on the pre-first-edge
+# state would confirm this convention.
+patch <<<
+[bernoulli]
+    input   = I1
+    output1 = O1
+    output2 = O2
+>>>
+
+# 0.05 and 0.09 are below the 0.1 gate threshold -> no edge, no routing
+@0 set I1 0.05
+@0 expect O1 0
+@0 expect O2 0
+
+@1 set I1 0.09
+@1 expect O1 0
+@1 expect O2 0
+
+@2 set I1 0
+@2 expect O1 0
+@2 expect O2 0

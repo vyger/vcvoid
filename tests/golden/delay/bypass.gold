@@ -1,0 +1,33 @@
+# delay: bypass = on copies the input signals directly to the outputs, regardless
+# of the delay. cv, gate and number all pass straight through with no delay.
+# numberout is observed through an internal cable (_NUM) because O registers clamp
+# to +/-1.0 (10 V) and numbers range 0..255; the copy circuit is the required
+# reader of that cable.
+tickrate 100
+patch <<<
+[delay]
+    cvin      = I1
+    gatein1   = I3
+    numberin  = I4
+    bypass    = I2
+    cvout     = O1
+    gateout1  = O3
+    numberout = _NUM
+    delay     = 0.5
+[copy]
+    input  = _NUM
+    output = O5
+>>>
+@0 set I2 1
+@0 set I1 0.4
+@0 set I3 1
+@0 set I4 42
+@0 expect O1 0.4 tol 1e-4
+@0 expect O3 1 tol 1e-4
+@0 expect _NUM 42 tol 1e-4
+@5 set I1 -0.5
+@5 set I3 0
+@5 set I4 7
+@5 expect O1 -0.5 tol 1e-4
+@5 expect O3 0 tol 1e-4
+@5 expect _NUM 7 tol 1e-4

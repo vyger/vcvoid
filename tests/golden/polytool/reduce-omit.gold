@@ -1,0 +1,33 @@
+# voiceallocation = 1 (omit): when all outputs are busy, a new note is simply
+# not played. Two input voices -> one output. A dropped/omitted note is NOT
+# restored when the output later frees (only a fresh rising edge allocates).
+patch <<<
+[polytool]
+    pitchinput1     = I1
+    gateinput1      = I2
+    pitchinput2     = I3
+    gateinput2      = I4
+    voiceallocation = 1
+    pitchoutput1    = O1
+    gateoutput1     = O2
+>>>
+# v1 on -> takes the single output
+@0 set I1 0.1
+@0 set I2 1
+@0 expect O1 0.1 tol 1e-5
+@0 expect O2 1
+# v2 on while output busy -> omitted; output keeps v1
+@1 set I3 0.5
+@1 set I4 1
+@1 expect O1 0.1 tol 1e-5
+@1 expect O2 1
+# v1 off -> output frees; v2 was omitted, not restored -> gate low, holds 0.1
+@2 set I2 0
+@2 expect O1 0.1 tol 1e-5
+@2 expect O2 0
+# v2 gate low then a fresh rising edge -> now allocates to the free output
+@3 set I4 0
+@3 expect O2 0
+@4 set I4 1
+@4 expect O1 0.5 tol 1e-5
+@4 expect O2 1

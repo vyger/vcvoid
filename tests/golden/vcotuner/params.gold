@@ -1,0 +1,28 @@
+# vcotuner: concertpitch / basepitch / precision inputs.
+# Circuit 1: concertpitch 466.164 (A#1) -> f_C0 = 466.164*2^(-21/12) =
+#   138.5913 Hz; probe 466.164 -> note = 21 exactly -> in tune; basepitch 0.05
+#   (0.5 V) shifts pitch: 0.05 + 21*0.1/12 = 0.225.
+# Circuit 2: default concertpitch, precision 45 cents: probe 430 is -39.80
+#   cents from A1 -> still "in tune" with the wide window.
+master 18
+patch <<<
+# LABELS: master=18
+[vcotuner]
+    smooth = 0
+    concertpitch = 466.164
+    basepitch = 0.05
+    pitch = O1
+    intune = O2
+
+[vcotuner]
+    smooth = 0
+    precision = 45
+    intune = O3
+    ledflat = O4
+>>>
+@0 probe 466.164
+@0 expect O1 0.225 tol 0.0005
+@0 expect O2 1
+@1 probe 430
+@1 expect O3 1
+@1 expect O4 0

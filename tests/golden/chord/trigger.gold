@@ -1,0 +1,35 @@
+# chord `trigger`: sample & hold. When trigger is patched, the whole chord is
+# recomputed only on a rising edge and frozen in between. Before the first edge
+# the outputs hold their initial 0 V (SPEC-GAP: pre-first-trigger state is not
+# documented; literal "reads a new pitch on trigger" -> nothing read yet).
+# C major 7, pitch = I1, trigger = I2.
+patch <<<
+[chord]
+    pitch   = I1
+    trigger = I2
+    output1 = O1
+    output2 = O2
+    output3 = O3
+    output4 = O4
+>>>
+# before the first trigger: all outputs held at 0
+@0 expect O1 0 tol 1e-5
+@0 expect O4 0 tol 1e-5
+# first trigger while pitch=0 -> C major 7 from C
+@1 set I2 1
+@1 expect O1 0 tol 1e-5
+@1 expect O2 0.0333333 tol 1e-5
+@1 expect O3 0.0583333 tol 1e-5
+@1 expect O4 0.0916667 tol 1e-5
+# raise pitch but no trigger -> frozen (outputs unchanged)
+@2 set I1 0.1
+@2 set I2 0
+@2 expect O1 0 tol 1e-5
+@2 expect O2 0.0333333 tol 1e-5
+@2 expect O4 0.0916667 tol 1e-5
+# next trigger samples the new pitch (semi 12) -> C major 7 an octave up
+@3 set I2 1
+@3 expect O1 0.1 tol 1e-5
+@3 expect O2 0.1333333 tol 1e-5
+@3 expect O3 0.1583333 tol 1e-5
+@3 expect O4 0.1916667 tol 1e-5

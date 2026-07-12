@@ -1,0 +1,28 @@
+# Manual example 1 (switch.md:37): four inputs I1..I4 to one output O1, stepped
+# by a trigger at `forward`. Start: I1->O1. Each forward advances to the next
+# input, wrapping I4->I1. `output` is the documented synonym for `output1`.
+patch <<<
+[switch]
+    input1 = I1
+    input2 = I2
+    input3 = I3
+    input4 = I4
+    output = O1
+    forward = I8
+>>>
+@0 set I1 0.1
+@0 set I2 0.2
+@0 set I3 0.3
+@0 set I4 0.4
+@0 expect O1 0.1
+@1 set I8 1
+@1 expect O1 0.2
+@2 set I8 0
+@3 set I8 1
+@3 expect O1 0.3
+@4 set I8 0
+@5 set I8 1
+@5 expect O1 0.4
+@6 set I8 0
+@7 set I8 1
+@7 expect O1 0.1

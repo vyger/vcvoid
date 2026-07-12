@@ -1,0 +1,30 @@
+# select: default gate mode (selectat unconnected). The circuit copies input to
+# output ONLY while `select` reads a positive gate (>= gate-high threshold); when
+# not selected it leaves the output register UNTOUCHED (does not force 0), so the
+# register keeps whatever value it last held. Because the engine never clears
+# output registers between ticks, a single select circuit demonstrates this: when
+# deselected, O1 must NOT follow a changed input.
+#
+#   t0: select 0, input 0.3 -> not selected -> O1 never written, stays 0
+#   t1: select 1, input 0.3 -> selected     -> O1 = 0.3
+#   t3: select 0, input 0.7 -> deselected   -> O1 HOLDS 0.3 (does not follow 0.7)
+#   t5: select 1, input 0.7 -> selected     -> O1 = 0.7
+tickrate 100
+patch <<<
+[select]
+    input  = I1
+    select = I2
+    output = O1
+>>>
+@0 set I1 0.3
+@0 set I2 0
+@0 expect O1 0 tol 1e-4
+@1 set I2 1
+@1 expect O1 0.3 tol 1e-4
+@2 expect O1 0.3 tol 1e-4
+@3 set I1 0.7
+@3 set I2 0
+@3 expect O1 0.3 tol 1e-4
+@4 expect O1 0.3 tol 1e-4
+@5 set I2 1
+@5 expect O1 0.7 tol 1e-4

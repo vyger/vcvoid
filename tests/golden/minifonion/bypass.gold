@@ -1,0 +1,32 @@
+# bypass copies the input straight to the output and emits NO notechange trigger,
+# even overriding a notechange window that a prior quantization change opened.
+# tickrate 1000 -> a 10 ms notechange window is 10 ticks. C lydian, direction up.
+tickrate 1000
+patch <<<
+[minifonion]
+    input      = I1
+    output     = O2
+    bypass     = I2
+    notechange = O3
+>>>
+# normal: C# (pc1) up -> D (2 semi). First note -> no notechange yet.
+@0 set I1 0.0083333
+@0 set I2 0
+@0 expect O2 0.0166667 tol 1e-5
+@0 expect O3 0 tol 1e-5
+# normal: input E (pc4) -> E (4 semi). Note changed D->E -> notechange fires high.
+@1 set I1 0.0333333
+@1 expect O2 0.0333333 tol 1e-5
+@1 expect O3 1 tol 1e-5
+# bypass on while the notechange window is still open: output = input verbatim,
+# notechange forced to 0 (no trigger in bypass, window suppressed).
+@2 set I2 1
+@2 expect O2 0.0333333 tol 1e-5
+@2 expect O3 0 tol 1e-5
+# still bypassed: raw copy of an arbitrary voltage, notechange stays 0
+@3 set I1 0.037
+@3 expect O2 0.037 tol 1e-5
+@3 expect O3 0 tol 1e-5
+# bypass off: quantize again (0.037 ~ 4.4 semi -> snap 4 -> E) -> back to 0.0333333
+@4 set I2 0
+@4 expect O2 0.0333333 tol 1e-5

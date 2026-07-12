@@ -1,0 +1,25 @@
+# Per-stage slew limits the pitch output. slew is off (0) for stage 1 and set for
+# stage 2 so the move to stage 2's pitch glides linearly. tickrate 1000; slew2 =
+# 0.002 s per 1 V (0.1 engine) -> max step 0.05 engine/tick, so 0.00 -> 0.20
+# takes 4 ticks.
+#
+# SPEC-GAP: the exact slew time mapping / curve is unverified vs hardware (same
+# as the slew circuit); linear reading used here.
+tickrate 1000
+patch <<<
+[sequencer]
+    clock       = I1
+    pitchoutput = O1
+    pitch1      = 0.00
+    pitch2      = 0.20
+    slew2       = 0.002
+>>>
+@0 set I1 1
+@0 expect O1 0.00 tol 1e-5
+@1 set I1 0
+@6 set I1 1
+@6 expect O1 0.05 tol 1e-5
+@7 expect O1 0.10 tol 1e-5
+@8 expect O1 0.15 tol 1e-5
+@9 expect O1 0.20 tol 1e-5
+@10 expect O1 0.20 tol 1e-5

@@ -1,0 +1,85 @@
+# calibrator manual nudging, both-buttons reset, select gating, presets.
+# SPEC-GAP pins:
+#  * a nudge adds nudgeamount (semitones; default 0.01 = 1 cent) to BOTH
+#    integer-volt points adjacent to the current input pitch, so the correction
+#    AT the played pitch changes by exactly nudgeamount; at an exact integer
+#    volt only that single point is nudged. clearhere zeroes the same adjacent
+#    point(s) (manual: "might affect a range of up to two octaves").
+#  * nudgeup+nudgedown in the same tick = reset of the current octave (manual:
+#    "pressing both buttons at the same time resets").
+#  * select gates nudgeup/nudgedown/clearhere and the ledup/leddown writes.
+#  * ledup = 1 while the current correction is > 0, leddown while < 0.
+#  * presets (4) snapshot the nudged correction points.
+tickrate 100
+patch <<<
+[p2b8]
+
+[calibrator]
+    input      = I1
+    nudgeup    = B1.1
+    nudgedown  = B1.2
+    select     = I3
+    ledup      = L1.1
+    leddown    = L1.2
+    preset     = I5
+    savepreset = I6
+    loadpreset = I7
+    clearall   = I8
+    output     = O1
+    correction = O2
+>>>
+@0 set I3 1
+@0 set I1 0.25
+# three nudges up at 2.5 V: +0.01 to points 2 and 3 each time -> correction 0.03
+@1 set B1.1 1
+@2 set B1.1 0
+@3 set B1.1 1
+@4 set B1.1 0
+@5 set B1.1 1
+@6 set B1.1 0
+@6 expect O2 0.03 tol 1e-6
+@6 expect L1.1 1 tol 1e-5
+@6 expect L1.2 0 tol 1e-5
+# both adjacent points were nudged, so at exactly 2 V the correction is also 0.03
+@7 set I1 0.2
+@7 expect O2 0.03 tol 1e-6
+# nudge down at exactly 2 V: only point 2 -> point2 0.02, point3 still 0.03
+@8 set B1.2 1
+@9 set B1.2 0
+@9 expect O2 0.02 tol 1e-6
+@10 set I1 0.25
+@10 expect O2 0.025 tol 1e-6
+# both buttons same tick: reset the current octave (points 2 and 3 -> 0)
+@11 set B1.1 1
+@11 set B1.2 1
+@12 set B1.1 0
+@12 set B1.2 0
+@12 expect O2 0 tol 1e-6
+@12 expect L1.1 0 tol 1e-5
+# rebuild 0.01, then deselect: nudges are ignored while deselected
+@13 set B1.1 1
+@14 set B1.1 0
+@14 expect O2 0.01 tol 1e-6
+@15 set I3 0
+@16 set B1.1 1
+@17 set B1.1 0
+@18 set I3 1
+@18 expect O2 0.01 tol 1e-6
+# presets: save 0.01 to preset 0; nudge to 0.02; load preset 0 -> back to 0.01
+@19 set I5 0
+@19 set I6 1
+@20 set I6 0
+@21 set B1.1 1
+@22 set B1.1 0
+@22 expect O2 0.02 tol 1e-6
+@23 set I7 1
+@24 set I7 0
+@24 expect O2 0.01 tol 1e-6
+# clearall wipes state and presets
+@25 set I8 1
+@26 set I8 0
+@26 expect O2 0 tol 1e-6
+@26 expect L1.1 0 tol 1e-5
+@27 set I7 1
+@28 set I7 0
+@28 expect O2 0 tol 1e-6

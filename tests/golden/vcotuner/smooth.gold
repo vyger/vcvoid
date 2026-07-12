@@ -1,0 +1,33 @@
+# vcotuner: `smooth` one-pole low-pass on the measured frequency. CHOSEN
+# READING (manual gives no time constant): tau = smooth^2 * 2 s, one-pole
+# alpha = 1 - exp(-1/(tau * tickrate)); smooth = 0 -> no smoothing; the first
+# valid measurement initializes the filter directly (no ramp from 0).
+# At tickrate 6000, smooth = 1: tau = 2 s, alpha = 1 - exp(-1/12000) =
+# 8.333e-5. Step 440 -> 880 moves hz by (880-440)*alpha = 0.0367 Hz in one
+# tick: 440.037.
+tickrate 6000
+master 18
+patch <<<
+# LABELS: master=18
+[vcotuner]
+    smooth = 1
+    hz = _HZ
+
+[copy]
+    input = _HZ * 0.001
+    output = O7
+
+[vcotuner]
+    smooth = 0
+    hz = _HZ2
+
+[copy]
+    input = _HZ2 * 0.001
+    output = O8
+>>>
+@0 probe 440
+@0 expect _HZ 440 tol 0.05
+@0 expect _HZ2 440 tol 0.05
+@1 probe 880
+@1 expect _HZ 440.037 tol 0.05
+@1 expect _HZ2 880 tol 0.05

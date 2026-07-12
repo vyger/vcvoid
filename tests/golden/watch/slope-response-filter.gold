@@ -1,0 +1,24 @@
+# watch mode 4: slope with a non-zero `response`. Per the manual, `response`
+# behaves "exactly like the exponential slew limiting done by slew" -- a one-pole
+# low-pass with time constant = response seconds (SPEC-GAP: the exponential shape
+# mirrors slew's exponential output, unverified vs hardware; a reference trace
+# would pin it). slope = d(slewed)/dt in engine units per second.
+#
+# response 0.1 s, tickrate 100 (dt = 0.01 s): filter coefficient
+#   a = 1 - exp(-dt/response) = 1 - exp(-0.1) = 0.09516258.
+# Input steps 0 -> 0.1 at t1 and is held. slewed_n = slewed_{n-1} + (0.1 - .)*a:
+#   t1: slewed = 0.00951626, slope = 0.00951626/0.01 = 0.951626
+#   t2: slewed = 0.01812709, slope = 0.00861083/0.01 = 0.861083
+#   t3: slewed = 0.02591835, slope = 0.00779126/0.01 = 0.779126
+tickrate 100
+patch <<<
+[watch]
+    input    = I1
+    response = 0.1
+    slope    = O1
+>>>
+@0 set I1 0
+@1 set I1 0.1
+@1 expect O1 0.951626 tol 2e-3
+@2 expect O1 0.861083 tol 2e-3
+@3 expect O1 0.779126 tol 2e-3

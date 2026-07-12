@@ -1,0 +1,26 @@
+# midiin: transport messages (manual lines 148-161; outputs lines 357-361).
+# START/CONTINUE set `running` high and fire the `start`/`continue` triggers;
+# STOP sets `running` low and fires `stop`. With initialrunning default 2 (auto,
+# line 330) and no note received yet, the circuit starts stopped. Transport
+# triggers use the engine standard 10 ms trigger (tickrate 1000 -> 10 ticks).
+tickrate 1000
+patch <<<
+[midiin]
+    start    = O1
+    stop     = O2
+    continue = O3
+    running  = O4
+>>>
+@0 expect O4 0
+@2 midisend trs start
+@2 expect O1 1
+@2 expect O4 1
+@12 expect O1 0
+@20 midisend trs stop
+@20 expect O2 1
+@20 expect O4 0
+@30 expect O2 0
+@40 midisend trs continue
+@40 expect O3 1
+@40 expect O4 1
+@50 expect O3 0

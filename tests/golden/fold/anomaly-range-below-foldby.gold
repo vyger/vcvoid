@@ -1,0 +1,20 @@
+# Anomaly 1: when maximum-minimum is less than one foldby, a folded value can
+# land above maximum and stay there (no way to fold into the range without
+# dropping back below minimum). foldby=1V, minimum=1.1V (0.11), maximum=1.3V (0.13).
+#   1.0V (0.10) -> folded up to 2.0V (0.20), above max but stays (manual example)
+#   1.5V (0.15) -> above max, but folding down (->0.5V) would break min, so stays
+#   1.2V (0.12) -> already in [0.11,0.13], unchanged
+patch <<<
+[fold]
+    input   = I1
+    foldby  = 1V
+    minimum = 1.1V
+    maximum = 1.3V
+    output  = O1
+>>>
+@0 set I1 0.1
+@0 expect O1 0.2 tol 1e-6
+@1 set I1 0.15
+@1 expect O1 0.15 tol 1e-6
+@2 set I1 0.12
+@2 expect O1 0.12 tol 1e-6

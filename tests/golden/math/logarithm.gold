@@ -1,0 +1,51 @@
+# math: logarithm (natural log) and log2 (binary log), each with the three
+# documented cases: positive input, input1=0 ("a negative very large number
+# is output" -- sign is documented; magnitude uses the same kLarge=1e9
+# sentinel as the other "very large number" outputs, SPEC-GAP on exact
+# magnitude), and negative input (-ln(-input1) / -log2(-input1)). Results
+# (1e9, 3.0) exceed [-1,1] so N registers are used uniformly.
+#
+# Note: the input1=0 cases OMIT the `input` line rather than binding it to
+# some other unset I register, to avoid a same-tick I<->N read/write hazard
+# (see product-quotient.gold's comment for the full explanation).
+#
+#   logarithm(e)  = ln(e)     = 1.0     (I1 = e = 2.718281828...)
+#   logarithm(0)  = -1e9                (input omitted, defaults to 0)
+#   logarithm(-2) = -ln(2)    = -0.6931471805599453
+#   log2(8)       = log2(8)  = 3.0      (I4 = 8.0)
+#   log2(0)       = -1e9                (input omitted, defaults to 0)
+#   log2(-4)      = -log2(4) = -2.0     (I5 = -4.0)
+patch <<<
+[math]
+    input     = I1
+    logarithm = N1
+
+[math]
+    logarithm = N2
+
+[math]
+    input     = I3
+    logarithm = N3
+
+[math]
+    input = I4
+    log2  = N4
+
+[math]
+    log2  = N5
+
+[math]
+    input = I5
+    log2  = N6
+>>>
+
+@0 set I1 2.718281828
+@0 set I3 -2.0
+@0 set I4 8.0
+@0 set I5 -4.0
+@0 expect N1 1.0 tol 1e-4
+@0 expect N2 -1e9 tol 1.0
+@0 expect N3 -0.6931471805599453 tol 1e-4
+@0 expect N4 3.0 tol 1e-4
+@0 expect N5 -1e9 tol 1.0
+@0 expect N6 -2.0 tol 1e-4

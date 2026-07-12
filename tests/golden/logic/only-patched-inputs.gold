@@ -1,0 +1,22 @@
+# Only PATCHED inputs participate in the logic (smart default). Here input1 and
+# input3 are patched but input2 is not, so AND/OR/count consider just those two;
+# the unpatched input2 is ignored (not treated as a low input).
+patch <<<
+[logic]
+    input1 = I1
+    input3 = I3
+    and    = O1
+    or     = O2
+    count  = O3
+>>>
+# both patched inputs high -> AND true (unpatched input2 does not block it)
+@0 set I1 1
+@0 set I3 1
+@0 expect O1 1
+@0 expect O2 1
+@0 expect O3 0.2 tol 1e-6
+# one high -> AND false, OR true, count = 1*0.1
+@1 set I3 0
+@1 expect O1 0
+@1 expect O2 1
+@1 expect O3 0.1 tol 1e-6

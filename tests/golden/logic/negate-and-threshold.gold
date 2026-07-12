@@ -1,0 +1,32 @@
+# `negated` = logical negate of input1. With only input1 patched, negated,
+# nand and nor all agree (manual note). Also a custom threshold (5V=0.5).
+# Block A: default threshold 0.1; negated/nand/nor should match.
+# Block B: threshold 5V=0.5 -> input must reach 0.5 to be "high".
+patch <<<
+[logic]
+    input   = I1
+    negated = O1
+    nand    = O3
+    nor     = O4
+>>>
+
+patch <<<
+[logic]
+    input     = I2
+    threshold = 5V
+    negated   = O2
+>>>
+
+# A: input1 low -> negated/nand/nor all high(1). B: 0.3 < 0.5 -> low -> negated high
+@0 set I2 0.3
+@0 expect O1 1
+@0 expect O3 1
+@0 expect O4 1
+@0 expect O2 1
+# A: input1 high -> all 0. B: 0.6 >= 0.5 -> high -> negated 0
+@1 set I1 0.5
+@1 set I2 0.6
+@1 expect O1 0
+@1 expect O3 0
+@1 expect O4 0
+@1 expect O2 0

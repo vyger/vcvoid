@@ -1,0 +1,9 @@
+# manual example: precision adder -- input = I1 + I2
+patch <<<
+[copy]
+    input = I1 + I2
+    output = O1
+>>>
+@0 set I1 0.1
+@0 set I2 0.25
+@0 expect O1 0.35 tol 1e-4

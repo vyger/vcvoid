@@ -1,0 +1,30 @@
+# midiout on a MASTER18 without X7 (manual midiout.md "MASTER18" table):
+# trs = 2 sends to MIDI2 only; trs = 10 broadcasts to MIDI1 + MIDI2. Same
+# pitch/gate construction as port-select.gold (pitchstabilization = 0 so
+# note-ons land on the gate edge; I1 = 0.3 -> note 60).
+tickrate 1000
+master 18
+x7 0
+patch <<<
+# LABELS: master=18
+[midiout]
+    trs   = 2
+    pitch = I1
+    gate  = I2
+    pitchstabilization = 0
+    activesensing = 0
+
+[midiout]
+    trs   = 10
+    pitch = I1
+    gate  = I2
+    pitchstabilization = 0
+    activesensing = 0
+>>>
+@0 set I1 0.3
+@1 set I2 1
+@1 expectmidi m18trs1 noteon 1 60 127
+@1 expectmidi m18trs1 none
+@1 expectmidi m18trs2 noteon 1 60 127
+@1 expectmidi m18trs2 noteon 1 60 127
+@1 expectmidi x7trs none

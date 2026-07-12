@@ -1,0 +1,26 @@
+# Defaults from the Inputs table: length=16, beats=5, offset=0. Step 0 is always
+# a beat (rotation-invariant: any Euclidean pattern starts on a beat), and with
+# 5 beats over 16 steps the minimum gap is 3, so steps 1 and 2 can never be
+# beats. This pins the length/beats defaults without depending on the exact
+# interior rotation. clock passthrough at 1.0.
+patch <<<
+[euklid]
+    clock    = I1
+    output   = O1
+    offbeats = O2
+>>>
+# step0 -> beat
+@1 set I1 1
+@1 expect O1 1
+@1 expect O2 0
+@2 set I1 0
+# step1 -> not a beat (min gap 3)
+@3 set I1 1
+@3 expect O1 0
+@3 expect O2 1
+@4 set I1 0
+# step2 -> not a beat either
+@5 set I1 1
+@5 expect O1 0
+@5 expect O2 1
+@6 set I1 0

@@ -1,0 +1,19 @@
+# faderbank: notches are common to all faders in the bank. notches = 2 makes
+# every fader a binary switch; each fader snaps independently.
+tickrate 100
+patch <<<
+[m4]
+
+[faderbank]
+    firstfader = 1
+    notches    = 2
+    output1    = O1
+    output2    = O2
+>>>
+@0 expect O1 0 tol 1e-4
+@1 move F1 0.7
+@1 move F2 0.3
+@1 expect O1 1 tol 1e-4
+@1 expect O2 0 tol 1e-4
+@1 expect F1 1 tol 1e-4
+@1 expect F2 0 tol 1e-4

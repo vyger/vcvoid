@@ -1,0 +1,39 @@
+# euklid core: each clock advances one step; on beat steps the clock is passed
+# through to `output` (exact voltage AND gate length), on non-beat steps to
+# `offbeats`. length=4, beats=2 -> the only even distribution is beats at steps
+# {0,2}. The clock high level here is 0.7 to show the exact voltage is copied.
+# I1=clock, O1=output, O2=offbeats. Each step = one clock pulse (high then low).
+#   step0 (beat)     -> output    step1 (off) -> offbeats
+#   step2 (beat)     -> output    step3 (off) -> offbeats   then wraps to step0
+patch <<<
+[euklid]
+    clock    = I1
+    length   = 4
+    beats    = 2
+    output   = O1
+    offbeats = O2
+>>>
+@0 expect O1 0
+@0 expect O2 0
+@1 set I1 0.7
+@1 expect O1 0.7
+@1 expect O2 0
+@2 set I1 0
+@2 expect O1 0
+@2 expect O2 0
+@3 set I1 0.7
+@3 expect O1 0
+@3 expect O2 0.7
+@4 set I1 0
+@5 set I1 0.7
+@5 expect O1 0.7
+@5 expect O2 0
+@6 set I1 0
+@7 set I1 0.7
+@7 expect O1 0
+@7 expect O2 0.7
+@8 set I1 0
+@9 set I1 0.7
+@9 expect O1 0.7
+@9 expect O2 0
+@10 set I1 0

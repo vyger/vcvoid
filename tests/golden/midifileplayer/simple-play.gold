@@ -1,0 +1,33 @@
+# midifileplayer: the manual's "simplest possible example" — play midi1.mid.
+# File A (div 96, format 0, one track): noteon 60 vel 100 @tick 0, noteoff
+# @tick 96, EOT @96. Default tempo 500000 us/quarter -> 192 file-ticks/sec;
+# at tickrate 6000 file tick T = engine tick T*31.25: off/EOT at 3000.
+# Circuit 1 (loop = 0): gate falls at 3000 and stays low; endoftrack fires
+# (10 ms trigger = 60 engine ticks). Circuit 2 (loop default 1): the track
+# wraps at 3000 — noteoff@96 and noteon@0 land on the same engine tick, so the
+# gate stays high. pitch 60 -> (60-24)/120 = 0.3; velocity 100/127 = 0.7874.
+midifile 1 4D546864000000060000000100604D54726B0000000C00903C6460803C0000FF2F00
+patch <<<
+[midifileplayer]
+    loop = 0
+    pitch = O1
+    gate = O2
+    velocity = O3
+    endoftrack = O4
+
+[midifileplayer]
+    pitch = O5
+    gate = O6
+>>>
+@0 expect O1 0.3 tol 0.0005
+@0 expect O2 1
+@0 expect O3 0.7874 tol 0.001
+@0 expect O4 0
+@0 expect O6 1
+@2990 expect O2 1
+@3010 expect O2 0
+@3010 expect O4 1
+@3010 expect O6 1
+@3080 expect O4 0
+@6100 expect O2 0
+@6100 expect O6 1

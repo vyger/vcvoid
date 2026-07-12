@@ -1,0 +1,30 @@
+# lfo: a rising edge on `sync` restarts the waveform. `syncphase` chooses the
+# phase it restarts at (default 0.0). Observed on the sawtooth output.
+# hz=4, tickrate 6000. I1 is the sync trigger (single-tick pulse at tick 376).
+tickrate 6000
+patch <<<
+[lfo]
+    hz        = 4
+    sawtooth  = O1
+    sync      = I1
+
+[lfo]
+    hz        = 4
+    sawtooth  = O2
+    sync      = I1
+    syncphase = 0.5
+>>>
+
+# free-running up to the sync: at tick 375 both are at phase 0.25
+@375 expect O1 0.25 tol 1e-3
+@375 expect O2 0.25 tol 1e-3
+
+# rising edge on I1 at tick 376 resets phase
+@376 set I1 1
+@376 expect O1 0.0 tol 1e-3    # syncphase default 0.0
+@376 expect O2 0.5 tol 1e-3    # syncphase 0.5 restarts at the middle
+
+# after reset the waveforms resume from the restart phase (I1 stays high, no
+# further edge). 375 ticks later: O1 at 0.25, O2 at 0.75.
+@751 expect O1 0.25 tol 1e-3
+@751 expect O2 0.75 tol 1e-3

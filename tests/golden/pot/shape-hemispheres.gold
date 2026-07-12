@@ -1,0 +1,61 @@
+# pot: bipolar + the six hemisphere outputs, non-virtual (physical pot maps
+# directly). outputscale=1, no notch/slope. output=O1, bipolar=O2, absbipolar=O3,
+# lefthalf=O4, righthalf=O5, lefthalfinv=O6, righthalfinv=O7, onchange=O8.
+#   V=0.5 : out .5  bip 0   abs 0   L 0   R 0   Li 1   Ri 1   (center)
+#   V=0.0 : out 0   bip -1  abs 1   L 1   R 0   Li 0   Ri 1   (full left)
+#   V=1.0 : out 1   bip 1   abs 1   L 0   R 1   Li 1   Ri 0   (full right)
+#   V=.25 : out .25 bip -.5 abs .5  L .5  R 0   Li .5  Ri 1
+# onchange pulses on a change (trig = round(0.01*100) = 1 tick), 0 when steady.
+tickrate 100
+patch <<<
+[p2b8]
+
+[pot]
+    pot          = P1.1
+    output       = O1
+    bipolar      = O2
+    absbipolar   = O3
+    lefthalf     = O4
+    righthalf    = O5
+    lefthalfinv  = O6
+    righthalfinv = O7
+    onchange     = O8
+>>>
+@0 set P1.1 0.5
+@0 expect O1 0.5 tol 1e-4
+@0 expect O2 0 tol 1e-4
+@0 expect O3 0 tol 1e-4
+@0 expect O4 0 tol 1e-4
+@0 expect O5 0 tol 1e-4
+@0 expect O6 1 tol 1e-4
+@0 expect O7 1 tol 1e-4
+@0 expect O8 0 tol 1e-4
+@1 set P1.1 0.0
+@1 expect O1 0 tol 1e-4
+@1 expect O2 -1 tol 1e-4
+@1 expect O3 1 tol 1e-4
+@1 expect O4 1 tol 1e-4
+@1 expect O5 0 tol 1e-4
+@1 expect O6 0 tol 1e-4
+@1 expect O7 1 tol 1e-4
+@1 expect O8 1 tol 1e-4
+@2 expect O8 0 tol 1e-4
+@2 expect O1 0 tol 1e-4
+@3 set P1.1 1.0
+@3 expect O1 1 tol 1e-4
+@3 expect O2 1 tol 1e-4
+@3 expect O3 1 tol 1e-4
+@3 expect O4 0 tol 1e-4
+@3 expect O5 1 tol 1e-4
+@3 expect O6 1 tol 1e-4
+@3 expect O7 0 tol 1e-4
+@3 expect O8 1 tol 1e-4
+@4 set P1.1 0.25
+@4 expect O1 0.25 tol 1e-4
+@4 expect O2 -0.5 tol 1e-4
+@4 expect O3 0.5 tol 1e-4
+@4 expect O4 0.5 tol 1e-4
+@4 expect O5 0 tol 1e-4
+@4 expect O6 0.5 tol 1e-4
+@4 expect O7 1 tol 1e-4
+@4 expect O8 1 tol 1e-4

@@ -1,0 +1,58 @@
+# The `distribution` parameter shifts the probability toward output1. The two
+# extremes are deterministic (independent of the RNG draw), which pins the
+# comparison direction (u < distribution -> output1):
+#   distribution = 1  -> u < 1 always true  -> every gate to output1
+#   distribution = 0  -> u < 0 never true   -> every gate to output2
+# Block A (dist=1) routes to O1/O2; block B (dist=0) routes to O3/O4. Both read
+# the SAME input register I1. Also exercises the exact-copy of a held non-1.0
+# value on both the output1 and output2 paths.
+patch <<<
+[bernoulli]
+    input        = I1
+    distribution = 1
+    output1      = O1
+    output2      = O2
+>>>
+
+patch <<<
+[bernoulli]
+    input        = I1
+    distribution = 0
+    output1      = O3
+    output2      = O4
+>>>
+
+# before any edge: nothing decided, all outputs 0
+@0 set I1 0
+@0 expect O1 0
+@0 expect O2 0
+@0 expect O3 0
+@0 expect O4 0
+
+# edge 1: A -> output1 (O1), B -> output2 (O4)
+@1 set I1 1
+@1 expect O1 1
+@1 expect O2 0
+@1 expect O3 0
+@1 expect O4 1
+
+# held high at 0.6 (no new edge): the chosen output on each block copies 0.6
+@2 set I1 0.6
+@2 expect O1 0.6
+@2 expect O2 0
+@2 expect O3 0
+@2 expect O4 0.6
+
+# input low: chosen outputs copy 0
+@3 set I1 0
+@3 expect O1 0
+@3 expect O2 0
+@3 expect O3 0
+@3 expect O4 0
+
+# edge 2: same routing (deterministic extremes)
+@4 set I1 1
+@4 expect O1 1
+@4 expect O2 0
+@4 expect O3 0
+@4 expect O4 1

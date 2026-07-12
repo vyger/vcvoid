@@ -1,0 +1,15 @@
+# delay=0 fires immediately on tick 0. onlycoldstart=1 still fires here because
+# the engine models every load as a cold start.
+# SPEC-GAP: the engine has no warm-start (patch-reload) concept, so
+# onlycoldstart's warm-start suppression is unobservable headlessly -- once
+# always fires. Hardware/Rack reload state would be needed to exercise it.
+tickrate 100
+patch <<<
+[once]
+    delay         = 0
+    onlycoldstart = 1
+    trigger       = O1
+>>>
+@0 expect O1 1
+@1 expect O1 0
+@2 expect O1 0

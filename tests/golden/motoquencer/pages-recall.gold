@@ -1,0 +1,47 @@
+# motoquencer: 8 steps on 4 faders -> 2 pages. Switching `page` (I2) re-points the
+# four faders at the next group of steps and the motors recall the stored values
+# (observable as expect F<n>). Edits made on one page persist while another page is
+# shown. Scale C lydian: notch7 = 0.1 V, notch14 = 0.2 V.
+tickrate 100
+patch <<<
+[m4]
+[motoquencer]
+    clock    = I1
+    page     = I2
+    numsteps = 8
+    cv       = O1
+    gate     = O2
+>>>
+# tick0 warm-up (page 0). tick1: edit page-0 steps 0 and 1.
+@1 move F1 0.5
+@1 move F2 1.0
+@1 expect F1 0.5 tol 1e-4
+@1 expect F2 1.0 tol 1e-4
+# tick2: switch to page 1 -> faders now show steps 4..7 (still at default 0) and the
+# motors move there.
+@2 set I2 1
+@2 expect F1 0.0 tol 1e-4
+@2 expect F2 0.0 tol 1e-4
+# tick3: edit step 4 on page 1.
+@3 move F1 1.0
+@3 expect F1 1.0 tol 1e-4
+# tick4: back to page 0 -> steps 0/1 recalled unchanged.
+@4 set I2 0
+@4 expect F1 0.5 tol 1e-4
+@4 expect F2 1.0 tol 1e-4
+# clock the whole 8-step sequence and confirm the page-1 edit landed: step 0 plays
+# 0.1 V, step 1 plays 0.2 V, step 4 plays 0.2 V (edited on page 1), others 0.
+@5 set I1 1
+@5 expect O1 0.1 tol 1e-4
+@6 set I1 0
+@7 set I1 1
+@7 expect O1 0.2 tol 1e-4
+@8 set I1 0
+@9 set I1 1
+@9 expect O1 0.0 tol 1e-4
+@10 set I1 0
+@11 set I1 1
+@11 expect O1 0.0 tol 1e-4
+@12 set I1 0
+@13 set I1 1
+@13 expect O1 0.2 tol 1e-4

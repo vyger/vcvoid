@@ -1,0 +1,31 @@
+# pot: discrete=4 picks one of the exact integers 0,1,2,3 as floor(V*4) clamped.
+# outputscale=0.25 scales it into the readable [-1,1] output-register range
+# (0, .25, .5, .75). notch/slope ignored; all hemisphere outputs are dead (0).
+#   x=0.00 -> idx0 -> 0     x=0.25 -> idx1 -> .25
+#   x=0.50 -> idx2 -> .5    x=0.99 -> idx3 -> .75    x=1.0 -> idx3 -> .75
+tickrate 100
+patch <<<
+[p2b8]
+
+[pot]
+    pot         = P1.1
+    discrete    = 4
+    outputscale = 0.25
+    output      = O1
+    bipolar     = O2
+    lefthalf    = O3
+>>>
+@0 set P1.1 0.0
+@0 expect O1 0 tol 1e-4
+@0 expect O2 0 tol 1e-4
+@0 expect O3 0 tol 1e-4
+@1 set P1.1 0.25
+@1 expect O1 0.25 tol 1e-4
+@1 expect O2 0 tol 1e-4
+@2 set P1.1 0.5
+@2 expect O1 0.5 tol 1e-4
+@3 set P1.1 0.99
+@3 expect O1 0.75 tol 1e-4
+@4 set P1.1 1.0
+@4 expect O1 0.75 tol 1e-4
+@4 expect O3 0 tol 1e-4

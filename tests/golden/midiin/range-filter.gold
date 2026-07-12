@@ -1,0 +1,27 @@
+# midiin: lowestnote/highestnote (lines 343-344) bound which notes reach the
+# voice (pitch/gate) outputs. With lowestnote = 48 and highestnote = 72, note 36
+# (below) and note 80 (above) are ignored; note 60 plays. Crucially the note
+# GATES are NOT affected by these bounds (line 343: "Note gates are not being
+# affected by this bound"): note1 = 24 is below lowestnote yet its notegate1
+# still fires while the voice path ignores it.
+patch <<<
+[midiin]
+    lowestnote  = 48
+    highestnote = 72
+    pitch       = O1
+    gate        = O2
+    note1       = 24
+    notegate1   = O3
+>>>
+@0 midisend trs noteon 1 36 100
+@0 expect O2 0
+@1 midisend trs noteon 1 60 100
+@1 expect O2 1
+@1 expect O1 0.3
+@2 midisend trs noteoff 1 60 0
+@2 expect O2 0
+@3 midisend trs noteon 1 80 100
+@3 expect O2 0
+@4 midisend trs noteon 1 24 100
+@4 expect O3 1
+@4 expect O2 0

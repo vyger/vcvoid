@@ -1,0 +1,28 @@
+# explin worked example: convert an exponential decay (startvalue 8V=0.8 down
+# toward endvalue 0.5V=0.05) into a linear curve. mix defaults to 1.0 (full wet).
+# wet = startvalue * ln(input/endvalue) / ln(startvalue/endvalue).
+#   input=0.8 (=start) -> 0.8   (input and output equal at startvalue)
+#   input=0.4          -> 0.6   (ln8/ln16 = 3/4)
+#   input=0.2          -> 0.4   (ln4/ln16 = 2/4)
+#   input=0.1          -> 0.2   (ln2/ln16 = 1/4)
+#   input=0.05 (=end)  -> 0.0   (output is zero at endvalue)
+#   input=0.02 (<end)  -> 0.0   (below endvalue stays 0)
+patch <<<
+[explin]
+    input      = I1
+    startvalue = 8V
+    endvalue   = 0.5V
+    output     = O1
+>>>
+@0 set I1 0.8
+@0 expect O1 0.8 tol 1e-5
+@1 set I1 0.4
+@1 expect O1 0.6 tol 1e-5
+@2 set I1 0.2
+@2 expect O1 0.4 tol 1e-5
+@3 set I1 0.1
+@3 expect O1 0.2 tol 1e-5
+@4 set I1 0.05
+@4 expect O1 0 tol 1e-5
+@5 set I1 0.02
+@5 expect O1 0 tol 1e-5

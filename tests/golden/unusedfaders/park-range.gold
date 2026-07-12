@@ -1,0 +1,39 @@
+# unusedfaders: park faders 6,7,8 (across two M4s) while _MENU (I1) is active.
+# The circuit has no output jacks; the only observable effect is the fader
+# position, read back with `expect F<n>`.
+#   deselected -> faders keep whatever position they were left at
+#   selected   -> the three faders drop to the bottom and are held there, even
+#                 against user movement; faders outside the range are untouched
+tickrate 100
+patch <<<
+[m4]
+[m4]
+
+[unusedfaders]
+    select     = I1
+    firstfader = 6
+    numfaders  = 3
+>>>
+@0 set I1 0
+# not selected: user leaves the faders at various positions
+@1 move F6 0.8
+@1 move F7 0.5
+@1 move F8 0.9
+@1 expect F6 0.8 tol 1e-4
+@1 expect F7 0.5 tol 1e-4
+@1 expect F8 0.9 tol 1e-4
+# activate: the declared range drops to the bottom
+@2 set I1 1
+@2 expect F6 0 tol 1e-4
+@2 expect F7 0 tol 1e-4
+@2 expect F8 0 tol 1e-4
+# held at the bottom even if the user pulls one up
+@3 move F6 0.7
+@3 expect F6 0 tol 1e-4
+# a fader outside the range (F5) is left alone
+@4 move F5 0.4
+@4 expect F5 0.4 tol 1e-4
+# deactivate: the faders are usable again
+@5 set I1 0
+@5 move F6 0.6
+@5 expect F6 0.6 tol 1e-4

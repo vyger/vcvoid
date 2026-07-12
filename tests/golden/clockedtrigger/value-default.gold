@@ -1,0 +1,23 @@
+# `value` defaults to 0.0 (Inputs table). With value unconnected, a trigger
+# freezes 0 and the clock releases 0 to clockedvalue. Also the simplest form
+# (clock + trigger only) from the manual.
+patch <<<
+[clockedtrigger]
+    clock          = I1
+    trigger        = I2
+    clockedtrigger = O1
+    clockedvalue   = O2
+    pendingtrigger = O3
+    pendingvalue   = O4
+>>>
+
+@1 set I2 1
+@1 expect O3 1
+@1 expect O4 0
+@2 set I2 0
+@3 set I1 1
+@3 expect O1 1
+@3 expect O2 0
+@3 expect O3 0
+@4 set I1 0
+@4 expect O1 0

@@ -1,0 +1,31 @@
+# display: linger holds the screen against a second circuit, then yields on expiry.
+# Spec: display.md "linger ... forces your text to linger on this time, even if
+# other circuits would want to change the display's contents."
+# Two circuits target D1.  Circuit A (linger = 0.05 s = 5 ticks at tickrate 100)
+# writes first and owns the screen.  Circuit B keeps trying every tick (its value
+# differs from B's own last-DISPLAYED baseline, which never advances while it is
+# blocked), but a non-owner write is accepted only once tick >= lingerUntilTick.
+#   t0: A writes 0.2  -> owner A, lingerUntil = 0 + 5 = 5
+#   t2: B wants 0.7   -> 2 < 5  -> blocked, screen stays 0.2
+#   t3,t4:            -> 3,4 < 5 -> still blocked
+#   t5: linger expired-> 5 >= 5 -> B accepted, screen 0.7, owner B
+#   t6: B owns, holds 0.7
+tickrate 100
+patch <<<
+[db8e]
+
+[display]
+    value  = I1
+    linger = 0.05
+
+[display]
+    value = I2
+>>>
+@0 set I1 0.2
+@0 expectdisplay D1 value 0.2 tol 1e-6
+@2 set I2 0.7
+@2 expectdisplay D1 value 0.2 tol 1e-6
+@3 expectdisplay D1 value 0.2 tol 1e-6
+@4 expectdisplay D1 value 0.2 tol 1e-6
+@5 expectdisplay D1 value 0.7 tol 1e-6
+@6 expectdisplay D1 value 0.7 tol 1e-6

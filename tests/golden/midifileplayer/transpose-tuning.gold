@@ -1,0 +1,38 @@
+# midifileplayer: transpose, tuningmode, channel filter, note range.
+# File A: note 60 on ch 1 (status 0x90).
+# Circuit 1: transpose = 0.1 (1 V = 1 octave) -> pitch 0.3 + 0.1 = 0.4.
+# Circuit 2: tuningmode via I1 -> pitch goes to tuningpitch (default 0.2)
+#   and the gate plays a 120 BPM square (period 3000 engine ticks: high the
+#   first 1500).
+# Circuit 3: channel = 2 filters out the ch-1 events -> silent.
+# Circuit 4: lowestnote = 62 ignores note 60 -> silent.
+midifile 1 4D546864000000060000000100604D54726B0000000C00903C6460803C0000FF2F00
+patch <<<
+[midifileplayer]
+    loop = 0
+    transpose = 0.1
+    pitch = O1
+
+[midifileplayer]
+    loop = 0
+    tuningmode = I1
+    pitch = O2
+    gate = O3
+
+[midifileplayer]
+    loop = 0
+    channel = 2
+    gate = O4
+
+[midifileplayer]
+    loop = 0
+    lowestnote = 62
+    gate = O5
+>>>
+@0 set I1 1
+@0 expect O1 0.4 tol 0.0005
+@0 expect O2 0.2 tol 0.0005
+@0 expect O3 1
+@0 expect O4 0
+@0 expect O5 0
+@1600 expect O3 0

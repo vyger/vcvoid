@@ -1,0 +1,98 @@
+{
+  "slug": "vcvoid",
+  "name": "vcvoid",
+  "version": "2.0.0",
+  "license": "GPL-3.0-or-later",
+  "brand": "vcvoid",
+  "author": "vyger",
+  "authorEmail": "chris.f.jones@gmail.com",
+  "pluginUrl": "https://github.com/vyger/vcvoid",
+  "sourceUrl": "https://github.com/vyger/vcvoid",
+  "description": "Unofficial emulation of the DROID CV processing system — runs droid.ini patches. Not affiliated with or supported by Der Mann mit der Maschine.",
+  "modules": [
+    {
+      "slug": "master",
+      "name": "vcvoid master",
+      "description": "Runs DROID patches (droid.ini) — unofficial emulation of the DROID master; not affiliated with or supported by Der Mann mit der Maschine",
+      "tags": ["Utility", "Logic", "Sequencer"]
+    },
+    {
+      "slug": "master18",
+      "name": "vcvoid master18",
+      "description": "Runs DROID patches — MASTER18 emulation (8 CV outs, 2 gate ins, 4 gate outs, USB + 2×TRS MIDI, VCO tuner)",
+      "tags": ["Utility", "Logic", "Sequencer"]
+    },
+    {
+      "slug": "p2b8",
+      "name": "vcvoid p2b8",
+      "description": "P2B8 controller — 2 pots, 8 buttons with LEDs (chain right of the master)",
+      "tags": ["Expander", "Controller"]
+    },
+    {
+      "slug": "p4b2",
+      "name": "vcvoid p4b2",
+      "description": "P4B2 controller — 4 pots, 2 buttons with LEDs",
+      "tags": ["Expander"]
+    },
+    {
+      "slug": "p10",
+      "name": "vcvoid p10",
+      "description": "P10 controller — 10 pots",
+      "tags": ["Expander"]
+    },
+    {
+      "slug": "s10",
+      "name": "vcvoid s10",
+      "description": "S10 controller — 2 rotary + 8 toggle switches",
+      "tags": ["Expander"]
+    },
+    {
+      "slug": "p8s8",
+      "name": "vcvoid p8s8",
+      "description": "P8S8 controller — 8 sliders with LEDs, 8 toggle switches",
+      "tags": ["Expander"]
+    },
+    {
+      "slug": "b32",
+      "name": "vcvoid b32",
+      "description": "B32 controller — 32 buttons with LEDs",
+      "tags": ["Expander"]
+    },
+    {
+      "slug": "e4",
+      "name": "vcvoid e4",
+      "description": "E4 controller — 4 endless encoders with push + value rings",
+      "tags": ["Expander"]
+    },
+    {
+      "slug": "m4",
+      "name": "vcvoid m4",
+      "description": "M4 controller — 4 motor faders with touch + RGB LEDs",
+      "tags": ["Expander"]
+    },
+    {
+      "slug": "g8",
+      "name": "vcvoid g8",
+      "description": "G8 gate expander — 8 gate ins, 8 gate outs (5 V)",
+      "tags": ["Expander"]
+    },
+    {
+      "slug": "db8e",
+      "name": "vcvoid db8e",
+      "description": "DB8E controller — 8 buttons, encoder, 128x64 display",
+      "tags": ["Expander"]
+    },
+    {
+      "slug": "x7",
+      "name": "vcvoid x7",
+      "description": "X7 expander — USB + TRS MIDI, 4 gate outputs (first in chain, right of the master)",
+      "tags": ["Expander"]
+    },
+    {
+      "slug": "bling",
+      "name": "vcvoid bling",
+      "description": "1 HP blind panel — chain pass-through",
+      "tags": ["Blank", "Expander"]
+    }
+  ]
+}

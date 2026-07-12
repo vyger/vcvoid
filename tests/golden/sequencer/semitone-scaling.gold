@@ -1,0 +1,21 @@
+# outputscaling multiplies the pitch output. With outputscaling = 1/120 the pitch
+# values are read as semitones (12 semitones = 1 V = 0.1 engine units).
+# outputscaling driven from a register for exact fractional precision.
+patch <<<
+[sequencer]
+    clock         = I1
+    outputscaling = I2
+    pitchoutput   = O1
+    pitch1        = 0
+    pitch2        = 12
+    pitch3        = 7
+>>>
+@0 set I2 0.00833333333
+@0 set I1 1
+@0 expect O1 0 tol 1e-5
+@1 set I1 0
+@2 set I1 1
+@2 expect O1 0.1 tol 1e-5
+@3 set I1 0
+@4 set I1 1
+@4 expect O1 0.0583333 tol 1e-5

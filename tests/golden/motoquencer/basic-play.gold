@@ -1,0 +1,46 @@
+# motoquencer: the minimal manual example. One [m4] -> 4 faders -> a 4-step
+# sequence. Default state: all gates on (defaultgate=1), all steps at the bottom
+# pitch notch (C, 0 V) of the C-lydian scale (quantize=2, root/degree 0). A steady
+# period-2 clock on I1 (high on odd ticks) advances one step per rising edge.
+# cv (O1) stays 0 V (no fader edits); gate (O2) fires per step. startofsequence
+# (O4, a 0/1 trigger) fires on the first step and each wrap.
+#
+# Timing: the first clock edge starts the sequence (period not yet known, so the
+# gate follows the clock level); from the 2nd edge the period is 2 and the gate is
+# a window of gatelength(0.5)*period = 1 tick at each step's start. Step index is
+# proven separately in fader-pitch.gold via distinct per-step CVs.
+tickrate 100
+patch <<<
+[m4]
+[motoquencer]
+    clock           = I1
+    cv              = O1
+    gate            = O2
+    startofsequence = O4
+>>>
+@0 expect O1 0 tol 1e-4
+@0 expect O2 0 tol 1e-4
+# tick1: first clock edge -> sequence starts on step 0. Period unknown, gate = I1.
+@1 set I1 1
+@1 expect O1 0 tol 1e-4
+@1 expect O2 1 tol 1e-4
+@1 expect O4 1 tol 1e-4
+# tick2: clock low, still period-unknown -> gate follows I1 (0); SoS one-shot done.
+@2 set I1 0
+@2 expect O2 0 tol 1e-4
+@2 expect O4 0 tol 1e-4
+# tick3: 2nd edge -> period=2 learned; advance to step 1; gate window = tick 3 only.
+@3 set I1 1
+@3 expect O2 1 tol 1e-4
+@4 set I1 0
+@4 expect O2 0 tol 1e-4
+# steps 2 and 3
+@5 set I1 1
+@5 expect O2 1 tol 1e-4
+@6 set I1 0
+@7 set I1 1
+@7 expect O2 1 tol 1e-4
+# tick9: wrap back to step 0 -> start-of-sequence fires again.
+@8 set I1 0
+@9 set I1 1
+@9 expect O4 1 tol 1e-4

@@ -1,0 +1,19 @@
+# midiin: `channel` (line 332) restricts to one MIDI channel (1..16). The first
+# circuit has channel = 5: a note on channel 6 is ignored, channel 5 plays. The
+# second circuit omits `channel`, so it processes all channels (the smart
+# default) and plays the channel-6 note.
+patch <<<
+[midiin]
+    channel = 5
+    pitch   = O1
+    gate    = O2
+
+[midiin]
+    gate = O3
+>>>
+@0 midisend trs noteon 6 60 100
+@0 expect O2 0
+@0 expect O3 1
+@1 midisend trs noteon 5 62 100
+@1 expect O2 1
+@1 expect O1 0.316667 tol 0.0001

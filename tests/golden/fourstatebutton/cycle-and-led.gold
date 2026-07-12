@@ -1,0 +1,39 @@
+# fourstatebutton: each press advances 0->1->2->3->0. output copies value1..4;
+# led = state/3 (0, 1/3, 2/3, 1). Values kept within +-1.0 so they can be read
+# directly off O1.
+#   t0 state0 -> output value1 0.1, led 0
+#   t1 state1 -> output value2 0.2, led 0.3333
+#   t3 state2 -> output value3 0.3, led 0.6667
+#   t5 state3 -> output value4 0.4, led 1
+#   t7 state0 -> output 0.1, led 0 (wrap)
+tickrate 100
+patch <<<
+[p2b8]
+
+[fourstatebutton]
+    button = B1.1
+    led    = L1.1
+    value1 = 0.1
+    value2 = 0.2
+    value3 = 0.3
+    value4 = 0.4
+    output = O1
+>>>
+@0 expect O1 0.1 tol 1e-4
+@0 expect L1.1 0 tol 1e-4
+@1 set B1.1 1
+@1 expect O1 0.2 tol 1e-4
+@1 expect L1.1 0.33333 tol 1e-3
+@2 set B1.1 0
+@3 set B1.1 1
+@3 expect O1 0.3 tol 1e-4
+@3 expect L1.1 0.66667 tol 1e-3
+@4 set B1.1 0
+@5 set B1.1 1
+@5 expect O1 0.4 tol 1e-4
+@5 expect L1.1 1 tol 1e-4
+@6 set B1.1 0
+@7 set B1.1 1
+@7 expect O1 0.1 tol 1e-4
+@7 expect L1.1 0 tol 1e-4
+@8 set B1.1 0

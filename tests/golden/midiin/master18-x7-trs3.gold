@@ -1,0 +1,13 @@
+# MASTER18 + X7: trs = 3 selects the X7's TRS port (manual midiin.md
+# "MASTER18 + X7" table).
+master 18
+patch <<<
+# LABELS: master=18
+[midiin]
+    trs  = 3
+    gate = O1
+>>>
+@0 midisend m18trs1 noteon 1 60 100
+@0 expect O1 0
+@1 midisend x7trs noteon 1 60 100
+@1 expect O1 1

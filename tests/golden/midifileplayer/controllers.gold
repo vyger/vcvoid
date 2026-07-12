@@ -1,0 +1,45 @@
+# midifileplayer: controller outputs. File C (div 96): @0 noteon 36 vel 127,
+# CC1 (modwheel) = 64, CC7 (volume) = 127; @24 CC17 = 80, program change 5;
+# @48 pitchbend max (16383), noteoff 36; EOT @96.
+# Engine ticks (x31.25): 0 / 750 / 1500.
+# note1 = 36 -> notegate1 high 0..1500, notegatevelocity1 = 1.0.
+# modwheel 64/127 = 0.50394; volume 1.0; cc1 (ccnumber1 = 17) = 80/127 =
+# 0.62992 with a 10 ms cctrigger1 (high 750..810); program -> 5 + trigger.
+# Pitchbend 16383 -> +pitchbendrange (default 1/6 V = 0.0166667 engine units);
+# bendpitch default 1 applies it to the held pitch: 36 -> 0.1, bent 0.1166667
+# (pitch holds after the noteoff on the same tick).
+midifile 1 4D546864000000060000000100604D54726B0000001F0090247F00B0014000B0077F18B0115000C00518E07F7F0080240030FF2F00
+patch <<<
+[midifileplayer]
+    loop = 0
+    ccnumber1 = 17
+    note1 = 36
+    pitch1 = O1
+    notegate1 = O2
+    notegatevelocity1 = O3
+    modwheel = O4
+    volume = O5
+    cc1 = O6
+    cctrigger1 = O7
+    program = _PGM
+    programchange = O8
+
+[copy]
+    input = _PGM * 0.01
+    output = G1
+>>>
+@0 expect O2 1
+@0 expect O3 1.0 tol 0.0001
+@0 expect O4 0.50394 tol 0.001
+@0 expect O5 1.0 tol 0.0001
+@0 expect O6 0
+@740 expect O7 0
+@760 expect O6 0.62992 tol 0.001
+@760 expect O7 1
+@760 expect _PGM 5
+@760 expect O8 1
+@830 expect O7 0
+@830 expect O8 0
+@1510 expect O1 0.1166667 tol 0.0005
+@1510 expect O2 0
+@1510 expect O3 0

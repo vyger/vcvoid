@@ -1,0 +1,17 @@
+# arpeggio range cap: "The maximum allowed range is 0.8 (8 octaves). Higher
+# values will be capped to that." Here range is set to 1.0 (10V), which must be
+# capped to 0.8 -> 96 semitones. With direction=1 the arpeggio starts at the
+# highest allowed note; in C Lydian the highest pc at or below semi 96 is
+# semi 96 (C, since 96/12 = 8 octaves) = 0.8 V exactly.
+# Were the range NOT capped, the top note would be semi 120 (1.0), so this
+# pins the cap.
+patch <<<
+[arpeggio]
+    clock     = I1
+    output    = O1
+    pitch     = 0
+    range     = 1.0
+    direction = 1
+>>>
+@1 set I1 1
+@1 expect O1 0.8 tol 1e-5

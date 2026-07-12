@@ -1,0 +1,34 @@
+# reset (and the initial load) puts the system at startposition / startvelocity.
+# The start inputs live in the SAME CV domain as the outputs (1 V = 1 sim unit),
+# so an engine value E maps to E/0.1 sim units on reset, and the position/
+# velocity outputs (sim * 0.1) read that CV straight back. The ±10 sim clamp
+# coincides with the ±10 V CV clamp. On a reset/init tick the state is set and
+# reported without integrating, so the exact start is observable.
+#
+# SPEC-GAP: the sim-unit <-> CV scaling (1 V = 1 sim unit, factor 0.1) and the
+# "no integration on the reset tick" convention are literal readings; hardware
+# traces would pin them.
+tickrate 10
+patch <<<
+[spring]
+    reset         = I1
+    startposition = I2
+    startvelocity = I3
+    position      = O1
+    velocity      = O2
+>>>
+# initial load inits from startposition/startvelocity: I2=0.3 engine -> p=3 sim,
+# I3=0.2 engine -> v=2 sim. Outputs read the CV straight back (sim * 0.1).
+@0 set I2 0.3
+@0 set I3 0.2
+@0 expect O1 0.3 tol 1e-6
+@0 expect O2 0.2 tol 1e-6
+# a tick later it has integrated away from the start (dt = 0.1, defaults all 1):
+# a = 1 - 1*3 = -2 ; v = 2 + (-2)*0.1 = 1.8 ; p = 3 + 1.8*0.1 = 3.18 ; O1 = 0.318
+@1 expect O1 0.318 tol 1e-6
+# reset with a new startposition -> jumps exactly there: I2=0.5 -> p=5 sim,
+# O1=0.5 (startvelocity unchanged: I3=0.2 -> v=2 sim, O2=0.2)
+@2 set I1 1
+@2 set I2 0.5
+@2 expect O1 0.5 tol 1e-6
+@2 expect O2 0.2 tol 1e-6

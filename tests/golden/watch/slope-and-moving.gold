@@ -1,0 +1,40 @@
+# watch mode 4: slope analysis with response=0 (slew filter disabled, reacts
+# instantly). `slope` = change in the (slewed) input per SECOND. At tickrate 100,
+# dt = 0.01 s, so a per-tick delta of 0.005 is a slope of 0.005/0.01 = 0.5.
+# `moving`/`movingup`/`movingdown` are LEVEL gates: high while the slope is
+# outside [-threshold, +threshold]. threshold 0.2.
+#
+#   t1..t4: input ramps 0.005,0.010,0.015,0.020 (delta 0.005/tick) -> slope +0.5,
+#           sustained -> moving + movingup high the whole ramp.
+#   t5..t6: input held at 0.020 -> slope 0 -> moving low.
+#   t7..t8: input ramps down 0.015,0.010 (delta -0.005) -> slope -0.5 -> moving +
+#           movingdown high.
+tickrate 100
+patch <<<
+[watch]
+    input      = I1
+    response   = 0
+    threshold  = 0.2
+    slope      = O1
+    moving     = O2
+    movingup   = O3
+    movingdown = O4
+>>>
+@0 set I1 0
+@1 set I1 0.005
+@2 set I1 0.010
+@3 set I1 0.015
+@4 set I1 0.020
+@2 expect O1 0.5 tol 2e-3
+@2 expect O2 1 tol 1e-4
+@2 expect O3 1 tol 1e-4
+@2 expect O4 0 tol 1e-4
+@4 expect O1 0.5 tol 2e-3
+@6 expect O1 0 tol 2e-3
+@6 expect O2 0 tol 1e-4
+@7 set I1 0.015
+@8 set I1 0.010
+@8 expect O1 -0.5 tol 2e-3
+@8 expect O2 1 tol 1e-4
+@8 expect O4 1 tol 1e-4
+@8 expect O3 0 tol 1e-4

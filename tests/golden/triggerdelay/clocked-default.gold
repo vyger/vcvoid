@@ -1,0 +1,28 @@
+# triggerdelay: manual worked example 3 -- clocked mode. Patching `clock` makes
+# `delay` relative to one clock cycle; the default delay 1.0 means "one clock
+# cycle". The clock period is learned from consecutive rising edges (like delay),
+# so it is only known after the second edge.
+#
+# clock (I2): rising edges t0, t20, t40 -> period learned = 20 ticks (known @t20)
+# input (I1): rising edge t25 (after the period is known), gate length 1 tick.
+#   delay = 1 cycle = 20 ticks -> output rises t45.
+# In clocked mode the *gate length* is still the input's own length (1 tick,
+# real time) unless gatelength is patched.
+tickrate 100
+patch <<<
+[triggerdelay]
+    input  = I1
+    output = O1
+    clock  = I2
+>>>
+@0 set I2 1
+@1 set I2 0
+@20 set I2 1
+@21 set I2 0
+@25 set I1 1
+@26 set I1 0
+@40 set I2 1
+@41 set I2 0
+@44 expect O1 0 tol 1e-4
+@45 expect O1 1 tol 1e-4
+@46 expect O1 0 tol 1e-4

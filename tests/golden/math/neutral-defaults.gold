@@ -1,0 +1,41 @@
+# math: "Unused inputs" section. Omitting one of input1/input2 makes that
+# operation's missing operand "neutral": 0.0 for sum, 1.0 for product (so
+# disconnecting input2 makes product == input1, not 0 -- manual's own example).
+# I1=0.3, I2=0.5. All results are within [-1,1] so plain O registers (no
+# clamp distortion) are used as probes; exactly 8 needed for master16's O1-O8.
+#   both connected:  sum = 0.3+0.5 = 0.8      product = 0.3*0.5 = 0.15
+#   input2 omitted:  sum = 0.3+0   = 0.3      product = 0.3*1   = 0.3  (== input1)
+#   input1 omitted:  sum = 0  +0.5 = 0.5      product = 1  *0.5 = 0.5  (== input2)
+#   both omitted:    sum = 0  +0   = 0        product = 1  *1   = 1
+patch <<<
+[math]
+    input1  = I1
+    input2  = I2
+    sum     = O1
+    product = O2
+
+[math]
+    input1  = I1
+    sum     = O3
+    product = O4
+
+[math]
+    input2  = I2
+    sum     = O5
+    product = O6
+
+[math]
+    sum     = O7
+    product = O8
+>>>
+
+@0 set I1 0.3
+@0 set I2 0.5
+@0 expect O1 0.8 tol 1e-6
+@0 expect O2 0.15 tol 1e-6
+@0 expect O3 0.3 tol 1e-6
+@0 expect O4 0.3 tol 1e-6
+@0 expect O5 0.5 tol 1e-6
+@0 expect O6 0.5 tol 1e-6
+@0 expect O7 0.0 tol 1e-6
+@0 expect O8 1.0 tol 1e-6

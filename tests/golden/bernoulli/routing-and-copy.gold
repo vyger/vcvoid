@@ -1,0 +1,78 @@
+# bernoulli: on each positive trigger edge at `input`, a random decision routes
+# the signal to output1 (prob = distribution, default 0.5) or output2. The
+# chosen output then emits an EXACT copy of input (even a non-trigger value like
+# an envelope); the other output emits 0 V. The choice latches until the next
+# rising edge.
+#
+# Seeded determinism (seed=1, the golden default). Exactly one randUniform draw
+# is consumed per rising edge, so edge k uses raw draw k. Raw stream (seed 1):
+#   draw1 u=0.0000629 <0.5 -> out1
+#   draw2 u=0.0157    <0.5 -> out1
+#   draw3 u=0.6164   >=0.5 -> out2
+#   draw4 u=0.0716    <0.5 -> out1
+#   draw5 u=0.5585   >=0.5 -> out2
+# -> the 5 rising edges below route: out1, out1, out2, out1, out2.
+# `distribution` is left unpatched here, exercising its documented default 0.5.
+patch <<<
+[bernoulli]
+    input   = I1
+    output1 = O1
+    output2 = O2
+>>>
+
+# before any edge, no decision has been made: both outputs 0 V
+@0 set I1 0
+@0 expect O1 0
+@0 expect O2 0
+
+# edge 1 -> out1; chosen output copies input (1)
+@1 set I1 1
+@1 expect O1 1
+@1 expect O2 0
+
+# still high (0.7 >= gate threshold 0.1), no new edge: out1 copies 0.7 exactly
+@2 set I1 0.7
+@2 expect O1 0.7
+@2 expect O2 0
+
+# input low: out1 copies 0, out2 stays 0
+@3 set I1 0
+@3 expect O1 0
+@3 expect O2 0
+
+# edge 2 -> out1
+@4 set I1 1
+@4 expect O1 1
+@4 expect O2 0
+
+@5 set I1 0
+@5 expect O1 0
+@5 expect O2 0
+
+# edge 3 -> out2; routing switches
+@6 set I1 1
+@6 expect O1 0
+@6 expect O2 1
+
+# held high at 0.5: out2 copies 0.5 exactly, out1 = 0
+@7 set I1 0.5
+@7 expect O1 0
+@7 expect O2 0.5
+
+@8 set I1 0
+@8 expect O1 0
+@8 expect O2 0
+
+# edge 4 -> out1
+@9 set I1 1
+@9 expect O1 1
+@9 expect O2 0
+
+@10 set I1 0
+@10 expect O1 0
+@10 expect O2 0
+
+# edge 5 -> out2
+@11 set I1 1
+@11 expect O1 0
+@11 expect O2 1

@@ -1,0 +1,50 @@
+# Button interface (mode unpatched): recordbutton starts/stops recording,
+# playbutton (re)starts playback from the beginning, stopbutton stops. The three
+# LED outputs reflect the state. With buttons (no external mode), playback
+# auto-stops at the end, returning to idle (input passthrough).
+patch <<<
+[recorder]
+    recordbutton = I1
+    playbutton   = I2
+    stopbutton   = I3
+    cvin         = I4
+    cvout        = O1
+    recordled    = O2
+    playled      = O3
+    stopled      = O4
+>>>
+# initial idle: stopled lit, input passthrough
+@0 set I4 0.50
+@0 expect O1 0.50 tol 1e-5
+@0 expect O2 0
+@0 expect O3 0
+@0 expect O4 1
+# record button -> RECORD; recordled lit; samples captured while passthrough
+@1 set I1 1
+@1 set I4 0.51
+@1 expect O1 0.51 tol 1e-5
+@1 expect O2 1
+@1 expect O4 0
+@2 set I1 0
+@2 set I4 0.52
+@3 set I4 0.53
+# stop button -> idle (recording stopped at 3 samples: 0.51,0.52,0.53)
+@4 set I3 1
+@4 set I4 0.53
+@4 expect O1 0.53 tol 1e-5
+@4 expect O4 1
+@4 expect O2 0
+# play button -> playback from start; playled lit
+@5 set I3 0
+@5 set I2 1
+@5 expect O1 0.51 tol 1e-5
+@5 expect O3 1
+@6 set I2 0
+@6 expect O1 0.52 tol 1e-5
+@7 expect O1 0.53 tol 1e-5
+@7 expect O3 1
+# end reached -> auto-stop back to idle; passthrough resumes
+@8 set I4 0.77
+@8 expect O1 0.77 tol 1e-5
+@8 expect O3 0
+@8 expect O4 1

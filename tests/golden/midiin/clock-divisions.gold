@@ -1,0 +1,56 @@
+# midiin: MIDI clock divisions (manual "Start, Stop and Clock", lines 128-146;
+# outputs lines 351-356). MIDI clock is 24 PPQ, so the clock outputs divide the
+# raw 0xF8 pulse stream: midiclock = every pulse (1), clock/clock16 = 16th note
+# (every 6), clock8t = 8th triplet (every 8), clock8 = 8th note (every 12),
+# clock4 = quarter note (every 24). A START resets the pulse phase; the downbeat
+# pulse (index 0) fires every division. Clock outputs use the engine standard
+# 10 ms trigger; tickrate 1000 -> 10 ticks, pulses spaced 20 ticks. Every 0xF8
+# is delivered so the phase advances; assertions probe pulses 0/1/6/8/12.
+tickrate 1000
+patch <<<
+[midiin]
+    midiclock = O1
+    clock     = O2
+    clock16   = O3
+    clock8t   = O4
+    clock8    = O5
+    clock4    = O6
+>>>
+@0 midisend trs start
+@2 midisend trs clock
+@2 expect O1 1
+@2 expect O2 1
+@2 expect O3 1
+@2 expect O4 1
+@2 expect O5 1
+@2 expect O6 1
+@12 expect O1 0
+@22 midisend trs clock
+@22 expect O1 1
+@22 expect O3 0
+@22 expect O4 0
+@22 expect O5 0
+@22 expect O6 0
+@42 midisend trs clock
+@62 midisend trs clock
+@82 midisend trs clock
+@102 midisend trs clock
+@122 midisend trs clock
+@122 expect O1 1
+@122 expect O3 1
+@122 expect O4 0
+@122 expect O5 0
+@122 expect O6 0
+@142 midisend trs clock
+@162 midisend trs clock
+@162 expect O4 1
+@162 expect O3 0
+@182 midisend trs clock
+@202 midisend trs clock
+@222 midisend trs clock
+@242 midisend trs clock
+@242 expect O1 1
+@242 expect O5 1
+@242 expect O3 1
+@242 expect O4 0
+@242 expect O6 0

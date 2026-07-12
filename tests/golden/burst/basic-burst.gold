@@ -1,0 +1,48 @@
+# burst worked example (manual/circuits/burst.md): a trigger starts `count`
+# pulses at frequency `hz`, 50% duty (gate width = half the period). Here at
+# tickrate 8 with hz=1 the period is P = tickRate/hz = 8 ticks, so each pulse is
+# 4 ticks high + 4 ticks low; count=3 gives three pulses back to back.
+#
+# Phase convention (SPEC-GAP, analogous to lfo): the first pulse is emitted on
+# the trigger tick itself (phase 0 at the trigger tick), then phase advances by
+# 1/P per tick. High iff floor(phase) in [skip, skip+count-1] and frac<0.5.
+# Trigger rises at t1, so burst-relative tick k = t-1; phase = k/8.
+#   k 0..3   -> phase<0.5 in cycle 0 -> HIGH   (t1..t4)   pulse 1
+#   k 4..7   -> phase>=0.5           -> LOW    (t5..t8)
+#   k 8..11  -> cycle 1, frac<0.5    -> HIGH   (t9..t12)  pulse 2
+#   k 12..15 ->                       -> LOW    (t13..t16)
+#   k 16..19 -> cycle 2, frac<0.5    -> HIGH   (t17..t20) pulse 3
+#   k >=20   -> floor>=3 out of range-> LOW    (t21..)    burst done
+tickrate 8
+patch <<<
+[burst]
+    trigger = I1
+    hz      = 1
+    count   = 3
+    output  = O1
+>>>
+@0 expect O1 0
+@1 set I1 1
+@1 expect O1 1
+@2 set I1 0
+@2 expect O1 1
+@3 expect O1 1
+@4 expect O1 1
+@5 expect O1 0
+@6 expect O1 0
+@7 expect O1 0
+@8 expect O1 0
+@9 expect O1 1
+@10 expect O1 1
+@11 expect O1 1
+@12 expect O1 1
+@13 expect O1 0
+@14 expect O1 0
+@15 expect O1 0
+@16 expect O1 0
+@17 expect O1 1
+@18 expect O1 1
+@19 expect O1 1
+@20 expect O1 1
+@21 expect O1 0
+@22 expect O1 0

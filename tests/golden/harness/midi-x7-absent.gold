@@ -1,0 +1,12 @@
+# Same plumbing smoke test but with the X7 expander absent (x7 0). The engine
+# still accepts inbound events on both ports and emits nothing (no MIDI
+# circuits), so both out-queues remain empty.
+x7 0
+patch <<<
+[copy]
+  input = I1
+  output = O1
+>>>
+@0 midisend trs noteon 1 60 100
+@0 expectmidi trs none
+@0 expectmidi usb none

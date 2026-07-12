@@ -1,0 +1,33 @@
+# encoder: presets (triggered save/load) + clear. 16 slots hold the raw virtual
+# position. mode 1, smooth 0.
+#   @1 +48 -> pos 0.5
+#   @2 savepreset (preset 0) -> slot0 = 0.5
+#   @4 +48 -> pos 1.0
+#   @5 loadpreset (preset 0) -> pos back to 0.5
+#   @7 clear -> reload startvalue 0 -> pos 0
+tickrate 100
+patch <<<
+[e4]
+
+[encoder]
+    encoder    = E1.1
+    output     = O1
+    preset     = I2
+    savepreset = I3
+    loadpreset = I4
+    clear      = I5
+    smooth     = 0
+>>>
+@1 turn E1.1 48
+@1 expect O1 0.5 tol 1e-4
+@2 set I2 0
+@2 set I3 1
+@2 expect O1 0.5 tol 1e-4
+@3 set I3 0
+@4 turn E1.1 48
+@4 expect O1 1.0 tol 1e-4
+@5 set I4 1
+@5 expect O1 0.5 tol 1e-4
+@6 set I4 0
+@7 set I5 1
+@7 expect O1 0.0 tol 1e-4

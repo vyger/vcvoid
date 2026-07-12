@@ -1,0 +1,37 @@
+# display: value mode + threshold change-detection.  Spec: manual/circuits/display.md
+# "the display will become active whenever the input value changes ... the change
+# needs to exceed [threshold]".  The threshold is compared against the last
+# DISPLAYED value (a noise floor around what's on screen), NOT the previous tick.
+# The sequence below is chosen to DISCRIMINATE those two models, not just to show
+# a sub-threshold step gets suppressed:
+#   baseline starts 0 (nothing displayed): I1=0 -> no change -> display OFF
+#   I1 0.5   : |0.5-0|     = 0.5   > 0.01 -> update, DISPLAYED baseline := 0.5
+#   I1 0.508 : |0.508-0.5| = 0.008 < 0.01 -> suppressed either way (baseline
+#              model: vs displayed 0.5; previous-tick model: vs previous 0.5 --
+#              both models agree here, so this step alone proves nothing)
+#   I1 0.516 : vs DISPLAYED baseline 0.5    -> |0.516-0.5|  = 0.016 > 0.01 -> UPDATE
+#              vs previous-tick raw input 0.508 -> |0.516-0.508| = 0.008 < 0.01
+#              -> a previous-tick model would SUPPRESS this step; the displayed-
+#              baseline model (what the circuit implements: sentValue_ only
+#              advances on an accepted write, see display.cpp) UPDATES it. This
+#              is the discriminating step: the two models disagree, and the
+#              assertion below locks the baseline (cumulative-drift) behavior.
+# header "BPM" is a constant: it never activates the display on its own (see @0
+# OFF although the header is assigned) and only rides along once the value shows.
+tickrate 6000
+patch <<<
+[db8e]
+[display]
+    header    = "BPM"
+    value     = I1
+    threshold = 0.01
+>>>
+@0 expectdisplay D1 off
+@1 set I1 0.5
+@1 expectdisplay D1 header "BPM"
+@1 expectdisplay D1 value 0.5 tol 1e-6
+@2 expectdisplay D1 value 0.5 tol 1e-6
+@3 set I1 0.508
+@3 expectdisplay D1 value 0.5 tol 1e-6
+@4 set I1 0.516
+@4 expectdisplay D1 value 0.516 tol 1e-6

@@ -1,0 +1,26 @@
+# midiout note-basic (manual lines 36-46, 341-348). A gate rise reads the
+# current 1V/oct pitch and emits a MIDI note-on; a gate fall emits a note-off.
+# Default channel 1 (line 343). Default velocity 1.0 -> 127 (line 348). Pitch is
+# 1V/oct with MIDI note 24 = 0 V (line 346): note = round(pitch*120)+24, so
+# 0.3 engine units -> note 60. Note-on is emitted 2 ms after the edge because
+# pitchstabilization is on by default (see pitch-stabilization.gold). Active
+# sensing is disabled to keep the stream clean (0xFE is not expressible here).
+tickrate 1000
+x7 1
+patch <<<
+[midiout]
+    pitch = I1
+    gate  = I2
+    activesensing = 0
+>>>
+@0 set I1 0.3
+@0 set I2 0
+@0 expectmidi trs none
+@1 set I2 1
+@1 expectmidi trs none
+@2 expectmidi trs none
+@3 expectmidi trs noteon 1 60 127
+@4 expectmidi trs none
+@10 set I2 0
+@10 expectmidi trs noteoff 1 60 127
+@11 expectmidi trs none

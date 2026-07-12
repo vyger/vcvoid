@@ -1,0 +1,19 @@
+# display: select gating.  Spec: display.md "Using select" — while not selected the
+# circuit is inactive even if its value changes; when it GETS selected it
+# immediately sends its current value to catch up with any change it missed.
+#   t0: select (I2) = 0 -> inactive, value 0.5 ignored          -> OFF
+#   t1: value changes to 0.8 while still deselected             -> OFF (ignored)
+#   t2: select rises to 1 -> catch-up sends the current 0.8     -> value 0.8
+tickrate 100
+patch <<<
+[db8e]
+[display]
+    value  = I1
+    select = I2
+>>>
+@0 set I1 0.5
+@0 expectdisplay D1 off
+@1 set I1 0.8
+@1 expectdisplay D1 off
+@2 set I2 1
+@2 expectdisplay D1 value 0.8 tol 1e-6

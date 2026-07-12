@@ -1,0 +1,31 @@
+# The selection test is literally "non-zero" (manual wording), taken at face
+# value: ANY non-zero case value selects, including negatives and small
+# fractions below the usual 0.1 gate threshold.
+# SPEC-GAP: the manual says "non-zero" but doesn't state whether the hardware
+# instead applies the 0.1 (1 V) gate-high threshold used elsewhere. We take the
+# literal reading (x != 0). Hardware reference data would close this gap.
+# value1=0.11, value2=0.22, else=0.99.
+patch <<<
+[case]
+    case1  = I1
+    value1 = I2
+    case2  = I3
+    value2 = I4
+    else   = I5
+    output = O1
+>>>
+
+# nothing selected -> else
+@0 set I2 0.11
+@0 set I4 0.22
+@0 set I5 0.99
+@0 expect O1 0.99
+
+# case1 = -0.5 (negative but non-zero) -> selects value1
+@1 set I1 -0.5
+@1 expect O1 0.11
+
+# case1 cleared; case2 = 0.05 (below 0.1 but non-zero) -> selects value2
+@2 set I1 0
+@2 set I3 0.05
+@2 expect O1 0.22

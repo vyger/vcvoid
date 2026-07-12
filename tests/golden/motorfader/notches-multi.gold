@@ -1,0 +1,25 @@
+# motorfader: notches = 8 -> eight dents, output is the integer dent index
+# 0..7. Dents sit at i/7 (dent 0 at the bottom, dent 7 at the top). Here
+# outputscale 0.1 scales the index back into the O register's -1..1 range, so
+# O1 = index * 0.1; `expect F1` observes the snapped dent position.
+tickrate 100
+patch <<<
+[m4]
+
+[motorfader]
+    fader       = 1
+    notches     = 8
+    outputscale = 0.1
+    output      = O1
+>>>
+@0 expect O1 0 tol 1e-4
+@0 expect F1 0 tol 1e-4
+@1 move F1 0.5
+@1 expect O1 0.4 tol 1e-4
+@1 expect F1 0.571428 tol 1e-3
+@2 move F1 1.0
+@2 expect O1 0.7 tol 1e-4
+@2 expect F1 1.0 tol 1e-4
+@3 move F1 0.2
+@3 expect O1 0.1 tol 1e-4
+@3 expect F1 0.142857 tol 1e-3

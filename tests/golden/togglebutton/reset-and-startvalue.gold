@@ -1,0 +1,28 @@
+# togglebutton: startvalue = 1 (gate) boots the button on; a `reset` trigger
+# forces it back off regardless of state. reset = I1.
+#   t0: boots on (startvalue 1) -> led 1
+#   t1 press -> off -> led 0
+#   t3 press -> on  -> led 1
+#   t5 reset -> off -> led 0
+tickrate 100
+patch <<<
+[p2b8]
+
+[togglebutton]
+    button     = B1.1
+    led        = L1.1
+    output     = O1
+    startvalue = 1
+    reset      = I1
+>>>
+@0 expect L1.1 1 tol 1e-4
+@0 expect O1 1 tol 1e-4
+@1 set B1.1 1
+@1 expect L1.1 0 tol 1e-4
+@2 set B1.1 0
+@3 set B1.1 1
+@3 expect L1.1 1 tol 1e-4
+@4 set B1.1 0
+@5 set I1 1
+@5 expect L1.1 0 tol 1e-4
+@6 set I1 0

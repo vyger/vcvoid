@@ -1,0 +1,33 @@
+# lfo: the three frequency-control paths (rate, hz, and hz default).
+# tickrate 6000.
+#
+# Circuit A (O1): rate = 2V. rate is 1V/oct; 2V (0.2) doubles twice -> 4 Hz.
+#   freq = hz(default 1) * 2^(rate*10) = 1 * 2^2 = 4 Hz. inc=1/1500.
+#   bipolar triangle: (2u-1). tick 0 -> -1, tick 750 -> +1.
+# Circuit B (O2): hz = 1.5 -> one cycle = 4000 ticks. square pw=0.5 high
+#   for first 2000 ticks. Sampled at 500 (high) and 3000 (low).
+# Circuit C (O3): no hz, no rate -> hz default 1.0 -> one cycle = 6000 ticks.
+#   triangle. tick 1500 -> phase 0.25 -> 0.5 ; tick 3000 -> phase 0.5 -> 1.0.
+tickrate 6000
+patch <<<
+[lfo]
+    rate     = 2V
+    bipolar  = on
+    triangle = O1
+
+[lfo]
+    hz     = 1.5
+    square = O2
+
+[lfo]
+    triangle = O3
+>>>
+
+@0    expect O1 -1.0 tol 1e-3   # rate=2V -> 4 Hz, bipolar triangle at phase 0
+@750  expect O1  1.0 tol 1e-3   # phase 0.5 (peak)
+
+@500  expect O2 1.0 tol 1e-3    # hz=1.5, square high (phase 0.125)
+@3000 expect O2 0.0 tol 1e-3    # phase 0.75 -> low
+
+@1500 expect O3 0.5 tol 1e-3    # hz default 1 -> phase 0.25 at tick 1500
+@3000 expect O3 1.0 tol 1e-3    # phase 0.5 (triangle peak)

@@ -1,0 +1,44 @@
+# math: round (nearest integer), floor, ceil. Values chosen to exercise
+# positive/negative and exact-half rounding (round is "nearest integer";
+# std::round semantics -- half rounds away from zero -- are used since the
+# manual does not spell out a tie-breaking rule for exact .5 values).
+# Results (2, 3, -2, -3, ...) exceed [-1,1], so N registers are used; one
+# circuit instance is reused across ticks (varying I1) rather than needing
+# a separate register per value.
+#   round(2.3)=2  round(2.7)=3  round(-2.3)=-2  round(-2.7)=-3
+#   round(2.5)=3  round(-2.5)=-3
+#   floor(2.7)=2  floor(-2.3)=-3
+#   ceil(2.3)=3   ceil(-2.7)=-2
+patch <<<
+[math]
+    input = I1
+    round = N1
+    floor = N2
+    ceil  = N3
+>>>
+
+@0 set I1 2.3
+@0 expect N1 2.0 tol 1e-6
+@0 expect N2 2.0 tol 1e-6
+@0 expect N3 3.0 tol 1e-6
+
+@1 set I1 2.7
+@1 expect N1 3.0 tol 1e-6
+@1 expect N2 2.0 tol 1e-6
+@1 expect N3 3.0 tol 1e-6
+
+@2 set I1 -2.3
+@2 expect N1 -2.0 tol 1e-6
+@2 expect N2 -3.0 tol 1e-6
+@2 expect N3 -2.0 tol 1e-6
+
+@3 set I1 -2.7
+@3 expect N1 -3.0 tol 1e-6
+@3 expect N2 -3.0 tol 1e-6
+@3 expect N3 -2.0 tol 1e-6
+
+@4 set I1 2.5
+@4 expect N1 3.0 tol 1e-6
+
+@5 set I1 -2.5
+@5 expect N1 -3.0 tol 1e-6

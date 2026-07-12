@@ -1,0 +1,54 @@
+# nudge: triggered presets store the value; clear reseeds startvalue; clearall
+# also wipes the presets. startvalue=0.05, amount=0.1, unbounded. clear=I1,
+# clearall=I2, preset=I6 (=0), savepreset=I7, loadpreset=I8.
+#   t0 value = startvalue 0.05        -> O1 0.05
+#   t1 up -> 0.15
+#   t3 savepreset -> slot0 = 0.15
+#   t5 up -> 0.25
+#   t7 loadpreset -> 0.15
+#   t9 clear -> back to 0.05 (presets kept)
+#   t11 loadpreset -> 0.15 (slot0 survived clear)
+#   t13 clearall -> 0.05 AND slot0 wiped to 0.05
+#   t15 loadpreset -> 0.05
+# `changed` is scoped to button actions -- no pulse on load/clear (t7 check).
+tickrate 100
+patch <<<
+[p2b8]
+
+[nudge]
+    startvalue = 0.05
+    amount     = 0.1
+    buttonup   = B1.1
+    output     = O1
+    changed    = O2
+    clear      = I1
+    clearall   = I2
+    preset     = I6
+    savepreset = I7
+    loadpreset = I8
+>>>
+@0 expect O1 0.05 tol 1e-4
+@1 set B1.1 1
+@1 expect O1 0.15 tol 1e-4
+@2 set B1.1 0
+@3 set I7 1
+@4 set I7 0
+@5 set B1.1 1
+@5 expect O1 0.25 tol 1e-4
+@6 set B1.1 0
+@7 set I8 1
+@7 expect O1 0.15 tol 1e-4
+@7 expect O2 0 tol 1e-4
+@8 set I8 0
+@9 set I1 1
+@9 expect O1 0.05 tol 1e-4
+@10 set I1 0
+@11 set I8 1
+@11 expect O1 0.15 tol 1e-4
+@12 set I8 0
+@13 set I2 1
+@13 expect O1 0.05 tol 1e-4
+@14 set I2 0
+@15 set I8 1
+@15 expect O1 0.05 tol 1e-4
+@16 set I8 0

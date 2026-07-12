@@ -1,0 +1,16 @@
+# midiout with no X7 in the chain (manual lines 20-23). The circuit needs the X7
+# to work, so with no X7 present it is a runtime no-op: the patch still loads and
+# the inputs are driven, but no MIDI leaves the circuit.
+x7 0
+tickrate 1000
+patch <<<
+[midiout]
+    pitch = I1
+    gate  = I2
+    pitchstabilization = 0
+>>>
+@0 set I1 0.3
+@1 set I2 1
+@1 expectmidi trs none
+@2 set I2 0
+@2 expectmidi trs none

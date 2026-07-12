@@ -1,0 +1,32 @@
+# One input voice -> one output voice. A patched gateinput's rising edge starts
+# a note (assigned to a free output); the output tracks that voice's live pitch
+# while held; the gate falling ends the note (output gate low, pitch holds the
+# last value); a later rising edge re-triggers.
+patch <<<
+[polytool]
+    pitchinput1  = I1
+    gateinput1   = I2
+    pitchoutput1 = O1
+    gateoutput1  = O2
+>>>
+# note on at pitch 0.1
+@0 set I1 0.1
+@0 set I2 1
+@0 expect O1 0.1 tol 1e-5
+@0 expect O2 1
+# pitch glides while held -> output tracks live
+@1 set I1 0.2
+@1 expect O1 0.2 tol 1e-5
+@1 expect O2 1
+# gate off -> output gate low, pitch holds last value (0.2)
+@2 set I2 0
+@2 expect O1 0.2 tol 1e-5
+@2 expect O2 0
+# pitch input moves while gate is low -> held output does NOT track it
+@3 set I1 0.3
+@3 expect O1 0.2 tol 1e-5
+@3 expect O2 0
+# re-trigger at the new pitch 0.3
+@4 set I2 1
+@4 expect O1 0.3 tol 1e-5
+@4 expect O2 1

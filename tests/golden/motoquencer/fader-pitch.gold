@@ -1,0 +1,44 @@
+# motoquencer: editing the four step pitches on the faders, then clocking to
+# prove per-step CV playback and the motorized position readback (expect F<n>).
+#
+# Scale = C lydian, two octaves (quantize=2, cvbase=0, cvrange=0.2). The pitch
+# fader has one notch per scale note: 15 notes across 0..0.2 V, so notch k rests
+# at position k/14 and plays the k-th allowed semitone. Allowed semitones (from C):
+#   idx0=0(C,0V) idx3=6(F#,0.05) idx7=12(C+1oct,0.1) idx14=24(C+2oct,0.2).
+# The first tick is a warm-up so the circuit takes ownership of the faders (motor
+# recall); user moves are read from the next tick on.
+tickrate 100
+patch <<<
+[m4]
+[motoquencer]
+    clock = I1
+    cv    = O1
+    gate  = O2
+>>>
+@0 expect O1 0 tol 1e-4
+# tick1: edit the four steps to distinct notches. The motor snaps each fader to the
+# notch rest position, read back with expect F<n>.
+@1 move F1 0.0
+@1 move F2 0.5
+@1 move F3 1.0
+@1 move F4 0.2142857
+@1 expect F1 0.0 tol 1e-4
+@1 expect F2 0.5 tol 1e-4
+@1 expect F3 1.0 tol 1e-4
+@1 expect F4 0.2142857 tol 1e-4
+# clock through the four steps: cv follows each step's pitch.
+@2 set I1 1
+@2 expect O1 0.0 tol 1e-4
+@3 set I1 0
+@4 set I1 1
+@4 expect O1 0.1 tol 1e-4
+@5 set I1 0
+@6 set I1 1
+@6 expect O1 0.2 tol 1e-4
+@7 set I1 0
+@8 set I1 1
+@8 expect O1 0.05 tol 1e-4
+@9 set I1 0
+# wrap back to step 0
+@10 set I1 1
+@10 expect O1 0.0 tol 1e-4

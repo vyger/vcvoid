@@ -1,0 +1,24 @@
+# divide=3, multiply=2 -> "two over three": 2 output pulses per 3 input clocks.
+# period 10 (tickrate 100) -> output edges at t0, t15, t30, t45, t60 (every 15
+# ticks after the learning transient). 1-tick gates.
+tickrate 100
+patch <<<
+[clocktool]
+    clock    = I1
+    divide   = 3
+    multiply = 2
+    output   = O1
+>>>
+@0 set I1 1
+@0 expect O1 1
+@1 set I1 0
+@10 set I1 1
+@11 set I1 0
+@15 expect O1 1
+@16 expect O1 0
+@20 set I1 1
+@21 set I1 0
+@30 set I1 1
+@30 expect O1 1
+@31 set I1 0
+@45 expect O1 1

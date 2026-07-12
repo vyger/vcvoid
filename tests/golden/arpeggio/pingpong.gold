@@ -1,0 +1,48 @@
+# arpeggio manual pingpong example: pingpong=1, pitch=0, range=7/120 (a fifth).
+# C Lydian defaults -> pool semis {0,2,4,6,7} (C,D,E,F#,G), indices 0..4.
+# pattern 0 with pingpong makes a triangle: up to the top, then reverse back
+# down (endpoints not repeated), then up again.
+#   idx: 0,1,2,3,4,3,2,1,0,1,2
+#   semis: 0,2,4,6,7,6,4,2,0,2,4
+patch <<<
+[arpeggio]
+    clock    = I1
+    output   = O1
+    pingpong = 1
+    pitch    = 0
+    range    = 0.0583333
+>>>
+@1 set I1 1
+@1 expect O1 0 tol 1e-5
+@2 set I1 0
+@3 set I1 1
+@3 expect O1 0.0166667 tol 1e-5
+@4 set I1 0
+@5 set I1 1
+@5 expect O1 0.0333333 tol 1e-5
+@6 set I1 0
+@7 set I1 1
+@7 expect O1 0.05 tol 1e-5
+@8 set I1 0
+@9 set I1 1
+@9 expect O1 0.0583333 tol 1e-5
+@10 set I1 0
+# reached the top (G) -> reverse
+@11 set I1 1
+@11 expect O1 0.05 tol 1e-5
+@12 set I1 0
+@13 set I1 1
+@13 expect O1 0.0333333 tol 1e-5
+@14 set I1 0
+@15 set I1 1
+@15 expect O1 0.0166667 tol 1e-5
+@16 set I1 0
+# reached the bottom (C) -> reverse again
+@17 set I1 1
+@17 expect O1 0 tol 1e-5
+@18 set I1 0
+@19 set I1 1
+@19 expect O1 0.0166667 tol 1e-5
+@20 set I1 0
+@21 set I1 1
+@21 expect O1 0.0333333 tol 1e-5

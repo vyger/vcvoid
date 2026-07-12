@@ -1,0 +1,15 @@
+# motoquencer: quantize=0 -> continuous CV, no scale notches. cv = cvbase + pos *
+# cvrange. With cvbase=0, cvrange=0.2 a fader at 0.3 outputs 0.06 V and the fader is
+# NOT snapped to a notch (it stays exactly where the user left it).
+tickrate 100
+patch <<<
+[m4]
+[motoquencer]
+    clock    = I1
+    quantize = 0
+    cv       = O1
+>>>
+@1 move F1 0.3
+@1 expect F1 0.3 tol 1e-4
+@2 set I1 1
+@2 expect O1 0.06 tol 1e-4

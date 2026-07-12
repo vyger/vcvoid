@@ -1,0 +1,25 @@
+# midifileplayer: error output values (manual "Error handling" + outputs
+# table): -1 white = file missing; 1 magenta = corrupted; 0.75 orange = no
+# non-empty track. (0.25 "track too long" needs a >6000-byte fixture and is
+# unit-tested in tests/unit/test_engine.cpp instead.)
+# File 2 is garbage; file 3 has a single meta-only track; file 9 is absent.
+midifile 2 DEADBEEF
+midifile 3 4D546864000000060000000100604D54726B0000000B00FF030341424300FF2F00
+patch <<<
+[midifileplayer]
+    file = 9
+    error = O1
+    gate = O2
+
+[midifileplayer]
+    file = 2
+    error = O3
+
+[midifileplayer]
+    file = 3
+    error = O4
+>>>
+@0 expect O1 -1
+@0 expect O2 0
+@0 expect O3 1
+@0 expect O4 0.75

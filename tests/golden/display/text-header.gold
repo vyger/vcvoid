@@ -1,0 +1,16 @@
+# display: text mode with a header.  Spec: manual/circuits/display.md "Showing texts".
+# A patched `text` puts the circuit in text mode (isText=true); the body is the
+# interned text NUMBER of "Fast", the header the number of "TEMPO".  A non-empty
+# constant text activates the display on its first tick (the text number changes
+# from 0 = empty to a real slot), then lingers unchanged.
+tickrate 100
+patch <<<
+[db8e]
+[display]
+    header = "TEMPO"
+    text   = "Fast"
+>>>
+@0 expectdisplay D1 text "Fast"
+@0 expectdisplay D1 header "TEMPO"
+@5 expectdisplay D1 text "Fast"
+@5 expectdisplay D1 header "TEMPO"

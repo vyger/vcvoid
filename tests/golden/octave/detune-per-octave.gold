@@ -1,0 +1,44 @@
+# Linear (constant-Hz) detune. Manual pg 356 rule (detune=1.0): at input 0 V the
+# detune is 4 semitones; it halves per octave of INPUT -> 2 st at 1 V, 1 st at
+# 2 V, 0.5 st at 3 V. VCO2 detunes up, VCO3 down; VCO1 (output1) never detunes.
+# detuneSemis = 4 * detune * 2^(-input_in_octaves); 1 semitone = 0.1/12 units.
+# spread is 0 here so output2/output3 straddle the input pitch symmetrically.
+#
+# SPEC-GAP: the halving is defined against `input` per the manual, not against
+# each VCO's spread-shifted pitch (literal reading; symmetric +/- detune).
+patch <<<
+[octave]
+    input   = I1
+    detune  = I2
+    output1 = O1
+    output2 = O2
+    output3 = O3
+>>>
+# input 0 V, detune 1.0 -> 4 semitones = 0.0333333
+@0 set I1 0
+@0 set I2 1
+@0 expect O1 0 tol 1e-5
+@0 expect O2 0.0333333 tol 1e-5
+@0 expect O3 -0.0333333 tol 1e-5
+# input 1 V (0.1), detune 1.0 -> 2 semitones = 0.0166667
+@1 set I1 0.1
+@1 expect O1 0.1 tol 1e-5
+@1 expect O2 0.1166667 tol 1e-5
+@1 expect O3 0.0833333 tol 1e-5
+# input 2 V (0.2) -> 1 semitone = 0.0083333
+@2 set I1 0.2
+@2 expect O2 0.2083333 tol 1e-5
+@2 expect O3 0.1916667 tol 1e-5
+# input 3 V (0.3) -> 0.5 semitone = 0.0041667
+@3 set I1 0.3
+@3 expect O2 0.3041667 tol 1e-5
+@3 expect O3 0.2958333 tol 1e-5
+# detune 0.5 at input 0 V -> 2 semitones (linear in detune)
+@4 set I1 0
+@4 set I2 0.5
+@4 expect O2 0.0166667 tol 1e-5
+@4 expect O3 -0.0166667 tol 1e-5
+# detune 0 -> no detune, both at input
+@5 set I2 0
+@5 expect O2 0 tol 1e-5
+@5 expect O3 0 tol 1e-5

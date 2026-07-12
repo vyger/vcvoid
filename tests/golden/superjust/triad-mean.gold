@@ -1,0 +1,49 @@
+# superjust invented core (property-faithful SPEC-GAP): generic small-limit
+# just intonation, NOT the patent-pending DMMDM algorithm (undocumented).
+# SPEC-GAP pins: anchor = lowest voice; intervals vs
+# anchor snap (octave-reduced) to the nearest of 1/1 16/15 9/8 6/5 5/4 4/3 7/5
+# 3/2 8/5 5/3 9/5 15/8 (+octave wrap); then all voices shift by
+# mean(inputs)-mean(candidates) so the average pitch is exactly unchanged
+# (manual-pinned invariant). Values from the sjref.py replica.
+#
+# ET C major triad 0 / 4 / 7 semitones (0, 0.0333333, 0.0583333 engine units):
+#   E snaps to 5/4 (-13.69 cents), G to 3/2 (+1.96 cents), then the mean shift
+#   +3.91 cents spreads back over all three.
+tickrate 100
+patch <<<
+[superjust]
+    input1  = 0
+    input2  = 0.0333333
+    input3  = 0.0583333
+    output1 = O1
+    output2 = O2
+    output3 = O3
+>>>
+@0 expect O1 0.0003258 tol 1e-6
+@0 expect O2 0.0325187 tol 1e-6
+@0 expect O3 0.0588221 tol 1e-6
+# mistuned inputs (E +20 cents, G -15 cents) snap to the SAME just chord, only
+# the mean shift differs
+patch <<<
+[superjust]
+    input1  = 0
+    input2  = 0.035
+    input3  = 0.0570833
+    output1 = O4
+    output2 = O5
+    output3 = O6
+>>>
+@0 expect O4 0.0004647 tol 1e-6
+@0 expect O5 0.0326576 tol 1e-6
+@0 expect O6 0.0589610 tol 1e-6
+# octaves/unisons are exact (1/1): two voices 12 semitones apart pass through;
+# a single voice always passes through (mean preservation corollary)
+patch <<<
+[superjust]
+    input1  = 0.1
+    input2  = 0.2
+    output1 = O7
+    output2 = O8
+>>>
+@0 expect O7 0.1 tol 1e-6
+@0 expect O8 0.2 tol 1e-6

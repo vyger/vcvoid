@@ -1,0 +1,25 @@
+# faderbank: a bank of three faders starting at firstfader = 3, spanning two M4s
+# (faders 3,4 on the first M4 and 5 on the second). The bank size is the highest
+# output<N> used. Each fader is independent and continuous.
+tickrate 100
+patch <<<
+[m4]
+[m4]
+
+[faderbank]
+    firstfader = 3
+    output1    = O1
+    output2    = O2
+    output3    = O3
+>>>
+@0 expect O1 0 tol 1e-4
+@0 expect O2 0 tol 1e-4
+@0 expect O3 0 tol 1e-4
+@1 move F3 0.2
+@1 move F4 0.5
+@1 move F5 0.9
+@1 expect O1 0.2 tol 1e-4
+@1 expect O2 0.5 tol 1e-4
+@1 expect O3 0.9 tol 1e-4
+@1 expect F3 0.2 tol 1e-4
+@1 expect F5 0.9 tol 1e-4

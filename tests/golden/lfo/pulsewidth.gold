@@ -1,0 +1,34 @@
+# lfo: `pulsewidth` affects only the `square` output. square is high while
+# phase < pulsewidth. Extremes 0.0 / 1.0 stick the output low / high.
+# hz=4, tickrate 6000, one cycle = 1500 ticks.
+#   A (O1) pw=0.25 -> high for phase<0.25 i.e. ticks 0..374.
+#   B (O2) pw=0.0  -> never high  (stuck low).
+#   C (O3) pw=1.0  -> always high (stuck high).
+tickrate 6000
+patch <<<
+[lfo]
+    hz         = 4
+    pulsewidth = 0.25
+    square     = O1
+
+[lfo]
+    hz         = 4
+    pulsewidth = 0.0
+    square     = O2
+
+[lfo]
+    hz         = 4
+    pulsewidth = 1.0
+    square     = O3
+>>>
+
+@200 expect O1 1.0 tol 1e-3   # phase 0.1333 < 0.25 -> high
+@600 expect O1 0.0 tol 1e-3   # phase 0.4 > 0.25 -> low
+
+@0   expect O2 0.0 tol 1e-3   # pw=0 stuck low
+@200 expect O2 0.0 tol 1e-3
+@750 expect O2 0.0 tol 1e-3
+
+@0   expect O3 1.0 tol 1e-3   # pw=1 stuck high
+@750 expect O3 1.0 tol 1e-3
+@1400 expect O3 1.0 tol 1e-3

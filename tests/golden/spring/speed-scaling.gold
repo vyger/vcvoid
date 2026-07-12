@@ -1,0 +1,19 @@
+# speed works on a 1 V/oct base: +0.1 (1 V) doubles the speed. speed=0.1 doubles
+# the internal time step (dt=0.2 at tickrate 10), so the mass moves faster: at
+# the first integrated tick the velocity is double (0.02 vs the default 0.01) and
+# the position quadruples (0.004, since p advances ~ dt^2).
+#
+# SPEC-GAP: exact values are integrator/step-size specific (see initial-fall);
+# only the "1 V doubles the speed" relationship is specified.
+tickrate 10
+patch <<<
+[spring]
+    speed    = 0.1
+    position = O1
+    velocity = O2
+>>>
+@0 expect O1 0 tol 1e-9
+@0 expect O2 0 tol 1e-9
+# t1: dt=0.2, a=1 -> v=0.2, p=0.04 -> outputs *0.1
+@1 expect O2 0.02 tol 1e-6
+@1 expect O1 0.004 tol 1e-6

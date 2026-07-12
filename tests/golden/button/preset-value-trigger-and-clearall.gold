@@ -1,0 +1,36 @@
+# button: value-carrying preset triggers (preset unpatched -> the trigger's own
+# value picks the slot) and clearall wiping all presets. savepreset = I7,
+# loadpreset = I8, clearall = I3, startvalue = 0.
+#   t1 press -> state 1
+#   t3 savepreset value 2.4 -> save state 1 into preset round(2.4) = 2
+#   t5 clearall -> state = startvalue 0 AND every preset = 0 (incl. preset 2)
+#   t7 press -> state 1 (so we can tell load worked, not a leftover)
+#   t9 loadpreset value 2.4 -> load preset 2, which clearall wiped -> state 0
+tickrate 100
+patch <<<
+[p2b8]
+
+[button]
+    button     = B1.1
+    led        = L1.1
+    output     = O1
+    savepreset = I7
+    loadpreset = I8
+    clearall   = I3
+    startvalue = 0
+>>>
+@0 expect O1 0 tol 1e-4
+@1 set B1.1 1
+@1 expect O1 1 tol 1e-4
+@2 set B1.1 0
+@3 set I7 2.4
+@4 set I7 0
+@5 set I3 1
+@5 expect O1 0 tol 1e-4
+@6 set I3 0
+@7 set B1.1 1
+@7 expect O1 1 tol 1e-4
+@8 set B1.1 0
+@9 set I8 2.4
+@9 expect O1 0 tol 1e-4
+@10 set I8 0

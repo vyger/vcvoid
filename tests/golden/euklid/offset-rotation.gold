@@ -1,0 +1,29 @@
+# `offset` shifts the beats forward. With length=4, beats=2 the base pattern is
+# {0,2}; offset=1 rotates it to {1,3} -- this matches the manual's worked example
+# "length: 4, beats: 2, offset: 1 -> ·●·●". So step0/step2 are now off-beats and
+# step1/step3 are beats.
+patch <<<
+[euklid]
+    clock    = I1
+    length   = 4
+    beats    = 2
+    offset   = 1
+    output   = O1
+    offbeats = O2
+>>>
+@1 set I1 0.7
+@1 expect O1 0
+@1 expect O2 0.7
+@2 set I1 0
+@3 set I1 0.7
+@3 expect O1 0.7
+@3 expect O2 0
+@4 set I1 0
+@5 set I1 0.7
+@5 expect O1 0
+@5 expect O2 0.7
+@6 set I1 0
+@7 set I1 0.7
+@7 expect O1 0.7
+@7 expect O2 0
+@8 set I1 0

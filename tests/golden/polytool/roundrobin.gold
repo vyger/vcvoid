@@ -1,0 +1,41 @@
+# roundrobin = 1: a monophonic melody is spread across two output voices in a
+# rotating fashion, so successive notes land on alternating outputs (with long
+# release envelopes this turns a melody into overlapping chords). The scan for a
+# free output starts after the last-assigned output.
+patch <<<
+[polytool]
+    pitchinput1  = I1
+    gateinput1   = I2
+    roundrobin   = 1
+    pitchoutput1 = O1
+    pitchoutput2 = O2
+    gateoutput1  = O3
+    gateoutput2  = O4
+>>>
+# first note -> out1 (rotation pointer starts at output1)
+@0 set I1 0.1
+@0 set I2 1
+@0 expect O1 0.1 tol 1e-5
+@0 expect O3 1
+@0 expect O2 0
+@0 expect O4 0
+# note off
+@1 set I2 0
+@1 expect O3 0
+# second note -> rotation continues to out2 (out1 is free but skipped)
+@2 set I1 0.2
+@2 set I2 1
+@2 expect O2 0.2 tol 1e-5
+@2 expect O4 1
+@2 expect O1 0.1 tol 1e-5
+@2 expect O3 0
+# note off
+@3 set I2 0
+@3 expect O4 0
+# third note -> rotation wraps back to out1
+@4 set I1 0.3
+@4 set I2 1
+@4 expect O1 0.3 tol 1e-5
+@4 expect O3 1
+@4 expect O2 0.2 tol 1e-5
+@4 expect O4 0

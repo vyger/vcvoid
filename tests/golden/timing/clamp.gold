@@ -1,0 +1,32 @@
+# Inputs table (timing.md:106): timing values are clipped into -0.9999 ..
+# 0.9999. timing1 = 2.0 clamps to 0.9999; with P=100 that delays each beat by
+# 99.99 ticks -> fires at 300,400,500 (== edge+100 rounded), NOT at edge+200
+# an unclamped 2.0 would give. Beat 1 (tick 100) is the startup transient.
+tickrate 100
+patch <<<
+[timing]
+    clock  = I1
+    output = O1
+    timing1 = 2
+>>>
+@0 set I1 1
+@0 expect O1 1
+@1 set I1 0
+@1 expect O1 0
+@100 set I1 1
+@100 expect O1 0
+@101 set I1 0
+@200 set I1 1
+@200 expect O1 1
+@201 set I1 0
+@201 expect O1 0
+@300 set I1 1
+@300 expect O1 1
+@301 set I1 0
+@301 expect O1 0
+@400 set I1 1
+@400 expect O1 1
+@401 set I1 0
+@401 expect O1 0
+@500 expect O1 1
+@501 expect O1 0

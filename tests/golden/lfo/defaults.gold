@@ -1,0 +1,11 @@
+# lfo: default parameters via the `output` jack. With no inputs patched,
+# waveform defaults to 0 (square), hz defaults to 1.0 Hz, level 1.0, unipolar.
+# tickrate 6000 -> one cycle = 6000 ticks; square high for phase < 0.5.
+tickrate 6000
+patch <<<
+[lfo]
+    output = O1
+>>>
+
+@1000 expect O1 1.0 tol 1e-3   # phase 0.1667 -> square high
+@4000 expect O1 0.0 tol 1e-3   # phase 0.6667 -> square low

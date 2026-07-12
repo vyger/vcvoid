@@ -1,0 +1,18 @@
+# output1 is always an exact copy of `input`, independent of spread, detune and
+# fifths (manual: VCO 1 "is never detuned nor pitched up"). Also covers a
+# negative input pitch.
+patch <<<
+[octave]
+    input   = I1
+    spread  = I2
+    detune  = I3
+    fifths  = I4
+    output1 = O1
+>>>
+@0 set I1 0.037
+@0 set I2 1
+@0 set I3 1
+@0 set I4 1
+@0 expect O1 0.037 tol 1e-5
+@1 set I1 -0.25
+@1 expect O1 -0.25 tol 1e-5

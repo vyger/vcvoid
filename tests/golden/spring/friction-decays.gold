@@ -1,0 +1,23 @@
+# flowresistance dampens the oscillation proportionally to velocity. Two identical
+# springs -- one with flowresistance=0.5, one frictionless -- diverge once the
+# mass is moving: at t2 the damped one has a lower velocity. Pins the qualitative
+# "friction slows it down" (values are integrator-specific, SPEC-GAP as in
+# initial-fall).
+tickrate 10
+patch <<<
+[spring]
+    flowresistance = 0.5
+    position       = O1
+    velocity       = O2
+
+[spring]
+    position       = O3
+    velocity       = O4
+>>>
+# t1: both still identical (velocity was 0, so the velocity-proportional damping
+# has no effect yet) -> v=0.1
+@1 expect O2 0.01 tol 1e-6
+@1 expect O4 0.01 tol 1e-6
+# t2: damped a = 1 - 0.01 - 0.5*0.1 = 0.94 -> v=0.194 ; frictionless v=0.199
+@2 expect O2 0.0194 tol 1e-6
+@2 expect O4 0.0199 tol 1e-6

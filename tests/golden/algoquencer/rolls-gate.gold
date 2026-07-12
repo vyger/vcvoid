@@ -1,0 +1,67 @@
+# rolls: a rolling beat gets rollcount*rollsteps pre-beats spread over the
+# rollsteps clock ticks before it; first pre-beat exactly rollsteps ticks
+# before. Velocity ramps rollstartvelo -> 1.0 (v_i = rsv + (1-rsv)*i/n; the
+# main beat is 1.0). Gate width: gatelength*period, /n for the pre-beats.
+# SPEC-GAP: no roll leads into the very first bar (no lookahead before it);
+# no gate until the clock period is known.
+# Clock gap 4 => period 4. 4 buttons, beat at step 0, rolls=1 (always roll).
+tickrate 100
+patch <<<
+[p2b8]
+
+[algoquencer]
+    clock        = I1
+    rolls        = 1
+    rollcount    = 2
+    gatelength   = 0.5
+    button1      = B1.1
+    button2      = B1.2
+    button3      = B1.3
+    button4      = B1.4
+    trigger      = O1
+    gate         = O2
+    rollvelocity = O3
+>>>
+@0 set B1.1 1
+@1 set B1.1 0
+@1 set I1 1
+@1 expect O1 1 tol 1e-5   # bar0 step0 beat (no roll lead-in into first bar)
+@1 expect O2 0 tol 1e-5   # no gate before period is known
+@1 expect O3 1 tol 1e-5   # rollvelocity 1.0 for normal beats
+@2 set I1 0
+@5 set I1 1
+@5 expect O1 0 tol 1e-5
+@6 set I1 0
+@9 set I1 1
+@10 set I1 0
+@13 set I1 1
+@13 expect O1 1 tol 1e-5   # roll pre-beat 1 (one clock tick before the beat)
+@13 expect O3 0.5 tol 1e-5   # rollstartvelo
+@13 expect O2 1 tol 1e-5   # pre-beat gate: 0.5*4/2 = 1 tick
+@14 set I1 0
+@14 expect O1 0 tol 1e-5
+@14 expect O2 0 tol 1e-5
+@15 expect O1 1 tol 1e-5   # roll pre-beat 2 (t=15)
+@15 expect O3 0.75 tol 1e-5   # velocity ramp midpoint
+@16 expect O1 0 tol 1e-5
+@17 set I1 1
+@17 expect O1 1 tol 1e-5   # bar1 step0 main beat
+@17 expect O3 1 tol 1e-5   # main beat velocity 1.0
+@17 expect O2 1 tol 1e-5   # main gate 0.5*4 = 2 ticks
+@18 set I1 0
+@18 expect O2 1 tol 1e-5
+@19 expect O2 0 tol 1e-5
+@21 set I1 1
+@22 set I1 0
+@25 set I1 1
+@26 set I1 0
+@29 set I1 1
+@30 set I1 0
+@33 set I1 1
+@34 set I1 0
+@37 set I1 1
+@38 set I1 0
+@41 set I1 1
+@42 set I1 0
+@45 set I1 1
+@46 set I1 0

@@ -1,0 +1,24 @@
+# A reset trigger returns the sequence to the first stage: the next clock after a
+# reset plays stage 1 again (SPEC-GAP: reset arms a restart consumed by the next
+# clock, matching the euklid convention; the manual doesn't pin same-tick order).
+patch <<<
+[sequencer]
+    clock       = I1
+    reset       = I2
+    pitchoutput = O1
+    pitch1      = 0.10
+    pitch2      = 0.20
+    pitch3      = 0.30
+>>>
+@0 set I1 1
+@0 expect O1 0.10 tol 1e-5
+@1 set I1 0
+@2 set I1 1
+@2 expect O1 0.20 tol 1e-5
+@3 set I1 0
+# reset (no clock this tick) arms a restart
+@4 set I2 1
+@5 set I2 0
+# next clock plays stage 1 again (not stage 3)
+@6 set I1 1
+@6 expect O1 0.10 tol 1e-5

@@ -1,0 +1,5 @@
+expect_load_error "Unknown circuit"
+patch <<<
+[flobbulator]
+    input = I1
+>>>

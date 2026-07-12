@@ -1,0 +1,37 @@
+# motorfader: triggered save/load presets + clear. 8 slots hold the raw settled
+# fader position. Loading a preset (or clearing) recalls the value and the motor
+# moves the fader to it.
+#   @1 move to 0.5
+#   @2 savepreset (preset 0) -> slot0 = 0.5
+#   @4 move to 0.9
+#   @5 loadpreset (preset 0) -> value & fader back to 0.5
+#   @7 clear -> reload startvalue 0 -> value & fader to 0
+tickrate 100
+patch <<<
+[m4]
+
+[motorfader]
+    fader      = 1
+    output     = O1
+    startvalue = 0
+    preset     = I2
+    savepreset = I3
+    loadpreset = I4
+    clear      = I5
+>>>
+@0 expect O1 0 tol 1e-4
+@1 move F1 0.5
+@1 expect O1 0.5 tol 1e-4
+@2 set I2 0
+@2 set I3 1
+@2 expect O1 0.5 tol 1e-4
+@3 set I3 0
+@4 move F1 0.9
+@4 expect O1 0.9 tol 1e-4
+@5 set I4 1
+@5 expect O1 0.5 tol 1e-4
+@5 expect F1 0.5 tol 1e-4
+@6 set I4 0
+@7 set I5 1
+@7 expect O1 0 tol 1e-4
+@7 expect F1 0 tol 1e-4

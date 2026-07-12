@@ -1,0 +1,30 @@
+# chaintonext = 1 chains the next sequencer circuit's step inputs onto this one,
+# forming a longer sequence. The first sequencer owns the clock and outputs; the
+# second only defines steps. The combined 4-step sequence is 0.10, 0.20 (first)
+# then 0.30, 0.40 (second), then wraps.
+patch <<<
+[sequencer]
+    clock       = I1
+    pitchoutput = O1
+    pitch1      = 0.10
+    pitch2      = 0.20
+    chaintonext = 1
+
+[sequencer]
+    pitch1      = 0.30
+    pitch2      = 0.40
+>>>
+@0 set I1 1
+@0 expect O1 0.10 tol 1e-5
+@1 set I1 0
+@2 set I1 1
+@2 expect O1 0.20 tol 1e-5
+@3 set I1 0
+@4 set I1 1
+@4 expect O1 0.30 tol 1e-5
+@5 set I1 0
+@6 set I1 1
+@6 expect O1 0.40 tol 1e-5
+@7 set I1 0
+@8 set I1 1
+@8 expect O1 0.10 tol 1e-5

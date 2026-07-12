@@ -1,0 +1,44 @@
+# Scrubbing suspends the transport: the manual says "While `scrub` is 1, the
+# current state (play, record, stop) of the recorder is ignored." Taken
+# literally, RECORD appends nothing to the tape while scrub is high -- so the
+# CVs seen during the scrub period are NOT recorded and the tape does not grow.
+#
+# Record 3 samples (0.10, 0.20, 0.30), then hold scrub high while cvin sweeps to
+# 0.90/0.91, then stop and play back: the tape is still exactly 3 samples long
+# and none of the scrub-period CVs appear.
+patch <<<
+[recorder]
+    cvin         = I1
+    recordbutton = I2
+    playbutton   = I3
+    scrub        = I5
+    cvout        = O1
+>>>
+# RECORD: capture 0.10, 0.20, 0.30
+@0 set I2 1
+@0 set I1 0.10
+@1 set I2 0
+@1 set I1 0.20
+@2 set I1 0.30
+# scrub high during RECORD: cvin sweeps, but nothing is appended. Output is the
+# scrub sample (scrubposition defaults to 0 -> tape start = 0.10).
+@3 set I5 1
+@3 set I1 0.90
+@3 expect O1 0.10 tol 1e-5
+@4 set I1 0.91
+@4 expect O1 0.10 tol 1e-5
+# release scrub and stop recording in the same tick (record toggle -> STOP), so
+# nothing more is appended.
+@5 set I5 0
+@5 set I2 1
+# playback from the start: exactly the 3 original samples, then auto-stop
+@6 set I2 0
+@6 set I3 1
+@6 expect O1 0.10 tol 1e-5
+@7 set I3 0
+@7 expect O1 0.20 tol 1e-5
+@8 expect O1 0.30 tol 1e-5
+# 4th playback tick: tape is only 3 samples, so playback has auto-stopped and
+# the output is live passthrough -- proving the scrub-period CVs were not taped.
+@9 set I1 0.77
+@9 expect O1 0.77 tol 1e-5

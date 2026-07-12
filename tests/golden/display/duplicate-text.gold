@@ -1,0 +1,29 @@
+# display: duplicate-text interning across two circuits (Task 3 text table).
+# Both display circuits reference the SAME literal "Ready".  The parser interns it
+# once, so both circuits emit the identical body text NUMBER; whichever is
+# non-empty for the current button state drives the screen and it always reads
+# back "Ready".  This exercises two independent circuits sharing one interned
+# string slot.  The button is a toggle, so each flip is a fresh rising edge
+# (press, release, press).
+tickrate 100
+patch <<<
+[db8e]
+[p2b8]
+
+[button]
+    button   = B2.1
+    output   = _RUNNING
+    inverted = _NOT_RUNNING
+
+[display]
+    text = "Ready" * _RUNNING
+
+[display]
+    text = "Ready" * _NOT_RUNNING
+>>>
+@0 expectdisplay D1 text "Ready"
+@2 set B2.1 1
+@2 expectdisplay D1 text "Ready"
+@3 set B2.1 0
+@4 set B2.1 1
+@4 expectdisplay D1 text "Ready"

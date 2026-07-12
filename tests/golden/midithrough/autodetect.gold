@@ -1,0 +1,19 @@
+# midithrough: auto-detect (value 10 on a from* jack) uses the first port that
+# actually sends events. Manual midithrough.md lines 55-58 ("If you specify
+# fromusb = 10 or fromtrs = 10, the first port that actually sends events is
+# used as input") and Inputs table lines 110-111 (fromtrs/fromusb = 10 enables
+# auto detection). In the MASTER+X7 config there is exactly one TRS and one USB
+# port, so auto-detect resolves to that single port of each type: a TRS-sourced
+# event and a USB-sourced event are both forwarded to the target.
+patch <<<
+[midithrough]
+    fromtrs = 10
+    fromusb = 10
+    totrs = 1
+>>>
+@0 midisend trs noteon 1 60 100
+@0 expectmidi trs noteon 1 60 100
+@0 expectmidi trs none
+@1 midisend usb noteon 2 64 80
+@1 expectmidi trs noteon 2 64 80
+@1 expectmidi trs none

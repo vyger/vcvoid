@@ -1,0 +1,27 @@
+# Key subtlety: unpatched inputs are excluded from minimum/maximum/average (they
+# are NOT treated as 0.0). Only input1 and input2 are patched here.
+# With two negative inputs, maximum is the larger negative (-0.1), NOT 0 -- which
+# it would be if the six unpatched inputs counted as zeros.
+patch <<<
+[mixer]
+    input1  = I1
+    input2  = I2
+    output  = O1
+    maximum = O2
+    minimum = O3
+    average = O4
+>>>
+# both positive: minimum is 0.3 (not 0)
+@0 set I1 0.3
+@0 set I2 0.5
+@0 expect O1 0.8 tol 1e-6
+@0 expect O2 0.5
+@0 expect O3 0.3
+@0 expect O4 0.4 tol 1e-6
+# both negative: maximum is -0.1 (not 0)
+@1 set I1 -0.3
+@1 set I2 -0.1
+@1 expect O1 -0.4 tol 1e-6
+@1 expect O2 -0.1
+@1 expect O3 -0.3
+@1 expect O4 -0.2 tol 1e-6

@@ -1,0 +1,42 @@
+# motoquencer: grabbing/moving a fader (a Rack mouse drag — `hold`) must NOT
+# press the step's touch plate. The plate below the fader is a separate sensor;
+# only a plate press (`touch`) toggles the step's gate in buttonmode 0.
+#
+# Regression for UAT F8: in the MFPS ratchet menu (fadermode 5, buttonmode 0) a
+# mouse drag of the RATC fader toggled the step's gate off — the drag-touch was
+# fed into the plate surface, so "max ratchets" appeared to silence the track.
+# Here: drag step 1's fader to 1.0 (ratchets = 8) while holding it. The gate
+# must still fire (default gate on), now subdivided into ratchets.
+tickrate 100
+patch <<<
+[m4]
+[motoquencer]
+    clock     = I1
+    fadermode = I2
+    numsteps  = 2
+    gate      = O2
+>>>
+@1 set I2 5
+# drag (hold + move), as the Rack widget does — NOT a plate touch.
+@2 hold F2 1
+@3 move F2 1.0
+@4 hold F2 0
+@5 set I2 0
+# period-4 clock; step0 on the 1st edge (period unknown), step1 on the 2nd.
+@8 set I1 1
+@9 set I1 0
+@12 set I1 1
+# step1 plays with 8 ratchets over its 4-tick cycle (interval 0.5 tick, each
+# subgate capped below the next boundary): the gate is HIGH at the step start.
+# If the drag had toggled the gate off (the F8 bug), O2 would be 0 here.
+@12 expect O2 1 tol 1e-4
+@13 set I1 0
+# a plate touch DOES toggle the gate off (buttonmode 0 still the default).
+@14 touch F2 1
+@15 touch F2 0
+# tick16 wraps to step 0 (still gated, default on) ...
+@16 set I1 1
+@17 set I1 0
+# ... and tick20 is step 1 again: now silenced by the plate toggle.
+@20 set I1 1
+@20 expect O2 0 tol 1e-4

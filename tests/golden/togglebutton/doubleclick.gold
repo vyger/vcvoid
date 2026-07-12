@@ -1,0 +1,33 @@
+# togglebutton: doubleclickmode. A lone press momentarily inverts the state
+# while held; a double press (two edges within the window) toggles the latched
+# state. SPEC-GAP window 0.5 s -> 50 ticks at tickrate 100.
+#   t1 press (1st click) -> invert off->on while held -> led 1
+#   t2 release -> latched still off -> led 0
+#   t3 press (2nd click within window) -> toggle latch to on; invert on->off
+#      while held -> led 0
+#   t4 release -> latched on -> led 1
+#   t10 lone press -> invert on->off -> led 0
+#   t11 release -> latched still on (no toggle) -> led 1
+tickrate 100
+patch <<<
+[p2b8]
+
+[togglebutton]
+    button          = B1.1
+    led             = L1.1
+    output          = O1
+    doubleclickmode = 1
+>>>
+@0 expect L1.1 0 tol 1e-4
+@1 set B1.1 1
+@1 expect L1.1 1 tol 1e-4
+@2 set B1.1 0
+@2 expect L1.1 0 tol 1e-4
+@3 set B1.1 1
+@3 expect L1.1 0 tol 1e-4
+@4 set B1.1 0
+@4 expect L1.1 1 tol 1e-4
+@10 set B1.1 1
+@10 expect L1.1 0 tol 1e-4
+@11 set B1.1 0
+@11 expect L1.1 1 tol 1e-4

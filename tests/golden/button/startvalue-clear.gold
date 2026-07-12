@@ -1,0 +1,26 @@
+# button: startvalue seeds the state at load, and a `clear` trigger reloads it.
+# startvalue = 1 -> boots in state 1. clear = I1.
+#   t0: boots state 1        -> led 1, output 1
+#   t1 press -> state 0      -> led 0, output 0
+#   t3 clear trigger -> state = startvalue = 1 -> led 1, output 1
+tickrate 100
+patch <<<
+[p2b8]
+
+[button]
+    button     = B1.1
+    led        = L1.1
+    output     = O1
+    startvalue = 1
+    clear      = I1
+>>>
+@0 expect L1.1 1 tol 1e-4
+@0 expect O1 1 tol 1e-4
+@1 set B1.1 1
+@1 expect L1.1 0 tol 1e-4
+@1 expect O1 0 tol 1e-4
+@2 set B1.1 0
+@3 set I1 1
+@3 expect L1.1 1 tol 1e-4
+@3 expect O1 1 tol 1e-4
+@4 set I1 0

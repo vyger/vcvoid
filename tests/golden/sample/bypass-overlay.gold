@@ -1,0 +1,28 @@
+# `bypass`: while high, the input is copied straight to the output WITHOUT
+# disturbing the stored sample -- so when bypass goes low again the output
+# returns to the previously held value.
+# SPEC-GAP: the manual doesn't state whether bypass updates the stored sample;
+# we treat it as a non-destructive overlay (gate is the tracking variant that
+# does update the stored value).
+patch <<<
+[sample]
+    input  = I1
+    sample = I2
+    bypass = I4
+    output = O1
+>>>
+# sample 0.3
+@1 set I1 0.3
+@1 set I2 1
+@1 expect O1 0.3
+# bypass high -> output follows input (0.6), stored sample untouched
+@2 set I2 0
+@2 set I4 1
+@2 set I1 0.6
+@2 expect O1 0.6
+@3 set I1 0.9
+@3 expect O1 0.9
+# bypass low -> output returns to the stored sample 0.3 (NOT 0.9)
+@4 set I4 0
+@4 set I1 0.2
+@4 expect O1 0.3

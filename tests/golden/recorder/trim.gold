@@ -1,0 +1,33 @@
+# trimstart/trimend (0..1) limit the portion of the recording used for playback.
+# trimstart=0.2, trimend=0.7 over a 10-sample tape -> region is samples [2, 7),
+# i.e. indices 2..6. The recording itself is not modified.
+patch <<<
+[recorder]
+    cvin      = I1
+    mode      = I2
+    trimstart = I3
+    trimend   = I4
+    cvout     = O1
+>>>
+# record 10 samples: index i -> 0.10 + 0.01*i
+@0 set I3 0.2
+@0 set I4 0.7
+@0 set I2 2
+@0 set I1 0.10
+@1 set I1 0.11
+@2 set I1 0.12
+@3 set I1 0.13
+@4 set I1 0.14
+@5 set I1 0.15
+@6 set I1 0.16
+@7 set I1 0.17
+@8 set I1 0.18
+@9 set I1 0.19
+# play: only indices 2..6 (0.12..0.16), then hold the last region sample
+@10 set I2 1
+@10 expect O1 0.12 tol 1e-5
+@11 expect O1 0.13 tol 1e-5
+@12 expect O1 0.14 tol 1e-5
+@13 expect O1 0.15 tol 1e-5
+@14 expect O1 0.16 tol 1e-5
+@15 expect O1 0.16 tol 1e-5

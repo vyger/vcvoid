@@ -1,0 +1,52 @@
+# superjust dynamic re-listen + modes.
+# SPEC-GAP hysteresis: retune recomputes when any input moves >= 5 cents from
+# its value at the last retune; smaller wiggles hold the outputs. bypass passes
+# inputs through unchanged (no transpose); tuningmode outputs tuningpitch on
+# all outputs and takes precedence over bypass (SPEC-GAP: precedence unpinned).
+# transpose is added to all outputs in normal mode only.
+tickrate 100
+patch <<<
+[superjust]
+    input1      = I1
+    input2      = I2
+    input3      = I3
+    bypass      = I4
+    tuningmode  = I5
+    tuningpitch = 0.3
+    transpose   = I6
+    output1     = O1
+    output2     = O2
+    output3     = O3
+>>>
+# ET C major triad -> just triad (same values as triad-mean.gold)
+@0 set I2 0.0333333
+@0 set I3 0.0583333
+@0 expect O1 0.0003258 tol 1e-6
+@0 expect O2 0.0325187 tol 1e-6
+@0 expect O3 0.0588221 tol 1e-6
+# +4 cent wiggle on E: below the 5-cent hysteresis -> outputs hold
+@1 set I2 0.0336667
+@1 expect O2 0.0325187 tol 1e-6
+@1 expect O1 0.0003258 tol 1e-6
+# E -> F (5 semitones): full retune; C-F-G snaps to 4/3 and 3/2 (mean shift 0)
+@2 set I2 0.0416667
+@2 expect O1 0 tol 1e-6
+@2 expect O2 0.0415038 tol 1e-6
+@2 expect O3 0.0584963 tol 1e-6
+# transpose: added on top of the retuned outputs
+@3 set I6 0.1
+@3 expect O1 0.1 tol 1e-6
+@3 expect O2 0.1415038 tol 1e-6
+# bypass: raw inputs, transpose NOT applied
+@4 set I4 1
+@4 expect O1 0 tol 1e-6
+@4 expect O2 0.0416667 tol 1e-6
+@4 expect O3 0.0583333 tol 1e-6
+# tuningmode wins over bypass: all outputs = tuningpitch
+@5 set I5 1
+@5 expect O1 0.3 tol 1e-6
+@5 expect O2 0.3 tol 1e-6
+@5 expect O3 0.3 tol 1e-6
+@6 set I5 0
+@6 set I4 0
+@6 expect O2 0.1415038 tol 1e-6

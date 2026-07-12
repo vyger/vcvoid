@@ -1,0 +1,8 @@
+expect_load_error "E1.1 cannot be used as an output"
+patch <<<
+[e4]
+
+[copy]
+    input = I1
+    output = E1.1
+>>>

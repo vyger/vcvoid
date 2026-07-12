@@ -1,0 +1,31 @@
+# math: "When you send a value to an output, it will be truncated into the
+# range -1...+1" -- this clamp is generic engine behavior on O registers
+# (unlike internal cables, which stay unbounded), exercised here via
+# quotient's divide-by-zero large output.
+#   I1=0.6, I2=0 (unpatched) -> quotient = +1e9 -> clamped to O1 = 1.0
+#   I3=-0.6, I2=0            -> quotient = -1e9 -> clamped to O2 = -1.0
+#   I4=0.4, I5=0.8            -> quotient = 0.5  -> O3 = 0.5 (no clamp needed)
+patch <<<
+[math]
+    input1   = I1
+    input2   = I2
+    quotient = O1
+
+[math]
+    input1   = I3
+    input2   = I2
+    quotient = O2
+
+[math]
+    input1   = I4
+    input2   = I5
+    quotient = O3
+>>>
+
+@0 set I1 0.6
+@0 set I3 -0.6
+@0 set I4 0.4
+@0 set I5 0.8
+@0 expect O1 1.0 tol 1e-6
+@0 expect O2 -1.0 tol 1e-6
+@0 expect O3 0.5 tol 1e-6

@@ -1,0 +1,34 @@
+# playbackspeed scales the tape read rate: 2 reads every other sample; a negative
+# speed runs the tape backwards (playback then starts at the tape end).
+#
+# SPEC-GAP: the dense per-tick tape (see delay/cvlooper) reads by flooring the
+# fractional play position rather than interpolating between the sparse 256
+# samples of the manual's model; integer speeds are exact.
+patch <<<
+[recorder]
+    cvin          = I1
+    mode          = I2
+    playbackspeed = I3
+    cvout         = O1
+>>>
+# record 4 samples 0.10..0.13
+@0 set I2 2
+@0 set I1 0.10
+@1 set I1 0.11
+@2 set I1 0.12
+@3 set I1 0.13
+# play at double speed: indices 0, 2, then hold last region sample (index 3)
+@4 set I2 1
+@4 set I3 2
+@4 expect O1 0.10 tol 1e-5
+@5 expect O1 0.12 tol 1e-5
+@6 expect O1 0.13 tol 1e-5
+# restart backwards (speed -1): tape from the end 0.13,0.12,0.11,0.10 then hold
+@7 set I2 0
+@8 set I2 1
+@8 set I3 -1
+@8 expect O1 0.13 tol 1e-5
+@9 expect O1 0.12 tol 1e-5
+@10 expect O1 0.11 tol 1e-5
+@11 expect O1 0.10 tol 1e-5
+@12 expect O1 0.10 tol 1e-5

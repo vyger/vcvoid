@@ -1,0 +1,46 @@
+# cvlooper: bypass passes the input through "while keeping the loop's content
+# untouched ... this is different from turning off the loop switch, because
+# then your tape's content would be overwritten" (manual cvlooper.md). So the
+# tape head must FREEZE during bypass. Ramp 0.10..0.19 recorded t10..t19
+# (clock period 5, length=2 -> 10-sample window); bypass high t20..t49 with
+# live input 0.5 (passthrough); at t50 bypass off + loop on must replay the
+# ORIGINAL pre-bypass recording, not the bypass-era input.
+tickrate 100
+patch <<<
+[cvlooper]
+    cvin       = I1
+    clock      = I2
+    loopswitch = I3
+    bypass     = I4
+    length     = 2
+    cvout      = O1
+>>>
+@0 set I2 1
+@0 set I1 0
+@1 set I2 0
+@1 set I1 0.01
+@5 set I2 1
+@5 set I1 0.05
+@6 set I2 0
+@6 set I1 0.06
+@10 set I2 1
+@10 set I1 0.1
+@11 set I2 0
+@11 set I1 0.11
+@15 set I2 1
+@15 set I1 0.15
+@16 set I2 0
+@16 set I1 0.16
+@19 set I1 0.19
+# bypass t20..t49: passthrough, tape frozen
+@20 set I4 1
+@20 set I1 0.5
+@20 expect O1 0.5 tol 1e-4
+@40 expect O1 0.5 tol 1e-4
+# t50: bypass off, loop on -> replay the original t10..t19 window
+@50 set I4 0
+@50 set I3 1
+@50 expect O1 0.1 tol 1e-4
+@55 expect O1 0.15 tol 1e-4
+@59 expect O1 0.19 tol 1e-4
+@60 expect O1 0.1 tol 1e-4

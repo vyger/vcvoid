@@ -1,0 +1,63 @@
+# lfo: the seven individual waveform outputs, hz=4 at tickrate 6000.
+# One cycle = 6000/4 = 1500 ticks; per-tick phase increment inc = 1/1500.
+# Phase convention (SPEC-GAP: manual does not pin the tick-0 phase): the
+# output at tick t is sampled from the phase accumulated BEFORE this tick's
+# increment, so tick 0 sees phase 0 and tick t sees phase = t/1500 (mod 1).
+# Sample ticks -> phase:  0->0.0  250->0.16667  375->0.25  750->0.5  1125->0.75
+# All outputs unipolar (0..1 == 0..10 V), level=1, offset=0.
+tickrate 6000
+patch <<<
+[lfo]
+    hz         = 4
+    triangle   = O1
+    sawtooth   = O2
+    ramp       = O3
+    square     = O4
+    sine       = O5
+    cosine     = O6
+    paraboloid = O7
+>>>
+
+# --- tick 0 (phase 0) ---
+@0 expect O1 0.0     tol 1e-3   # triangle: 2p
+@0 expect O2 0.0     tol 1e-3   # sawtooth: p (rising)
+@0 expect O3 1.0     tol 1e-3   # ramp: 1-p (falling, starts high)
+@0 expect O4 1.0     tol 1e-3   # square pw=0.5: high for p<0.5
+@0 expect O5 0.0     tol 1e-3   # sine: (1-cos 2pi p)/2, starts at min
+@0 expect O6 0.5     tol 1e-3   # cosine: (1+sin 2pi p)/2, leads sine by 1/4
+@0 expect O7 0.0     tol 1e-3   # paraboloid: 4p(1-p)
+
+# --- tick 250 (phase 0.16667) ---
+@250 expect O1 0.33333 tol 1e-3
+@250 expect O2 0.16667 tol 1e-3
+@250 expect O3 0.83333 tol 1e-3
+@250 expect O4 1.0     tol 1e-3
+@250 expect O5 0.25    tol 1e-3   # cos(60deg)=0.5 -> (1-0.5)/2
+@250 expect O6 0.93301 tol 1e-3   # sin(60deg)=0.86603
+@250 expect O7 0.55556 tol 1e-3
+
+# --- tick 375 (phase 0.25) ---
+@375 expect O1 0.5     tol 1e-3
+@375 expect O2 0.25    tol 1e-3
+@375 expect O3 0.75    tol 1e-3
+@375 expect O4 1.0     tol 1e-3
+@375 expect O5 0.5     tol 1e-3
+@375 expect O6 1.0     tol 1e-3   # cosine peaks a quarter before sine
+@375 expect O7 0.75    tol 1e-3
+
+# --- tick 750 (phase 0.5) ---   (square skipped: exactly on its switch edge)
+@750 expect O1 1.0     tol 1e-3   # triangle peak
+@750 expect O2 0.5     tol 1e-3
+@750 expect O3 0.5     tol 1e-3
+@750 expect O5 1.0     tol 1e-3   # sine peak
+@750 expect O6 0.5     tol 1e-3
+@750 expect O7 1.0     tol 1e-3   # paraboloid peak
+
+# --- tick 1125 (phase 0.75) ---
+@1125 expect O1 0.5    tol 1e-3
+@1125 expect O2 0.75   tol 1e-3
+@1125 expect O3 0.25   tol 1e-3
+@1125 expect O4 0.0    tol 1e-3   # square now low (p>0.5)
+@1125 expect O5 0.5    tol 1e-3
+@1125 expect O6 0.0    tol 1e-3   # cosine trough
+@1125 expect O7 0.75   tol 1e-3

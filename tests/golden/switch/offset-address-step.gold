@@ -1,0 +1,27 @@
+# Manual example (switch.md:112): four inputs, one output, CV-addressed by
+# `offset = I6 * 10` (1 V per switch step). 0 V->input1, 1 V->input2, ...,
+# 4 V wraps back to input1. The offset integer counts switch steps: I6 in
+# volts * 10 makes 1 V (0.1 engine units) == offset step 1.
+patch <<<
+[switch]
+    input1 = I1
+    input2 = I2
+    input3 = I3
+    input4 = I4
+    output1 = O1
+    offset  = I6 * 10
+>>>
+@0 set I1 0.1
+@0 set I2 0.2
+@0 set I3 0.3
+@0 set I4 0.4
+@0 set I6 0
+@0 expect O1 0.1
+@1 set I6 0.1
+@1 expect O1 0.2
+@2 set I6 0.2
+@2 expect O1 0.3
+@3 set I6 0.3
+@3 expect O1 0.4
+@4 set I6 0.4
+@4 expect O1 0.1

@@ -1,0 +1,44 @@
+# nudge: select gates button + LED processing; output/changed keep running while
+# deselected. A press made while deselected causes no phantom edge on reselect.
+# select=I7, min=-0.2 max=0.2 amount=0.1, ledup=L1.1.
+#   t0 selected, value 0            -> O1 0, both-center leds 1
+#   t1 up -> 0.1                    -> O1 0.1, ledup 0.5
+#   t3 deselect -> O1 still 0.1; led left untouched (0.5)
+#   t4/5 press+release up while DESELECTED -> ignored (value unchanged)
+#   t6 reselect -> no phantom edge  -> O1 0.1, ledup 0.5
+#   t7 up (selected) -> 0.2         -> O1 0.2, ledup 1
+tickrate 100
+patch <<<
+[p2b8]
+
+[nudge]
+    select     = I7
+    minimum    = -0.2
+    maximum    = 0.2
+    amount     = 0.1
+    buttonup   = B1.1
+    buttondown = B1.3
+    ledup      = L1.1
+    leddown    = L1.3
+    output     = O1
+>>>
+@0 set I7 1
+@0 expect O1 0 tol 1e-4
+@0 expect L1.1 1 tol 1e-4
+@1 set B1.1 1
+@1 expect O1 0.1 tol 1e-4
+@1 expect L1.1 0.5 tol 1e-4
+@2 set B1.1 0
+@3 set I7 0
+@3 expect O1 0.1 tol 1e-4
+@3 expect L1.1 0.5 tol 1e-4
+@4 set B1.1 1
+@5 set B1.1 0
+@5 expect O1 0.1 tol 1e-4
+@6 set I7 1
+@6 expect O1 0.1 tol 1e-4
+@6 expect L1.1 0.5 tol 1e-4
+@7 set B1.1 1
+@7 expect O1 0.2 tol 1e-4
+@7 expect L1.1 1 tol 1e-4
+@8 set B1.1 0

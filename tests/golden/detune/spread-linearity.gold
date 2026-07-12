@@ -1,0 +1,55 @@
+# detune invented core (property-faithful SPEC-GAP, unverified vs hardware):
+#   output_k = input_k + detune * c_k / 120
+# SPEC-GAP: the manual only says the algorithm is 'identical with the Sinfonion'
+# (no formula). Invented per-voice coefficients, in semitones at detune = 1.0:
+#   c = [+1.00, -0.90, +0.78, -0.64, +0.52, -0.38, +0.26, -0.14]
+# All magnitudes distinct (each voice detunes differently -> pairwise intervals
+# distort), alternating signs, +-1 semitone max spread. Linear in detune;
+# negative detune mirrors the spread. Unverified vs hardware.
+# Inputs are constants 0.05*k; detune swept via I1.
+tickrate 100
+patch <<<
+[detune]
+    detune  = I1
+    input1  = 0.05
+    input2  = 0.1
+    input3  = 0.15
+    input4  = 0.2
+    input5  = 0.25
+    input6  = 0.3
+    input7  = 0.35
+    input8  = 0.4
+    output1 = O1
+    output2 = O2
+    output3 = O3
+    output4 = O4
+    output5 = O5
+    output6 = O6
+    output7 = O7
+    output8 = O8
+>>>
+# detune = 0 (default I1): exact passthrough
+@0 expect O1 0.05 tol 1e-6
+@0 expect O2 0.1 tol 1e-6
+@0 expect O5 0.25 tol 1e-6
+@0 expect O8 0.4 tol 1e-6
+# detune = 1.0: in_k + c_k/120
+@1 set I1 1
+@1 expect O1 0.0583333 tol 1e-6
+@1 expect O2 0.0925 tol 1e-6
+@1 expect O3 0.1565 tol 1e-6
+@1 expect O4 0.1946667 tol 1e-6
+@1 expect O5 0.2543333 tol 1e-6
+@1 expect O6 0.2968333 tol 1e-6
+@1 expect O7 0.3521667 tol 1e-6
+@1 expect O8 0.3988333 tol 1e-6
+# detune = 0.5: exactly half the offsets (linearity)
+@2 set I1 0.5
+@2 expect O1 0.0541667 tol 1e-6
+@2 expect O4 0.1973333 tol 1e-6
+@2 expect O8 0.3994167 tol 1e-6
+# detune = -1.0: mirrored spread
+@3 set I1 -1
+@3 expect O1 0.0416667 tol 1e-6
+@3 expect O2 0.1075 tol 1e-6
+@3 expect O8 0.4011667 tol 1e-6

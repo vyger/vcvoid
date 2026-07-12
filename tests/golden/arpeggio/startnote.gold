@@ -1,0 +1,35 @@
+# arpeggio startnote: force the pattern to begin at a specific scale degree,
+# which effectively reduces the range. C Lydian, pitch=0, range=1V ->
+# pool semis {0,2,4,6,7,9,11,12}, indices 0..7.
+# startnote=3 -> the 3rd scale note (III = E = pc4 = semi4 = pool index 2).
+# pattern 0 from index 2: 2,3,4,5,6,7,then wrap RESTARTS to the start note (idx2)
+#   semis: 4,6,7,9,11,12,4
+patch <<<
+[arpeggio]
+    clock     = I1
+    output    = O1
+    pitch     = 0
+    range     = 1V
+    startnote = 3
+>>>
+@1 set I1 1
+@1 expect O1 0.0333333 tol 1e-5
+@2 set I1 0
+@3 set I1 1
+@3 expect O1 0.05 tol 1e-5
+@4 set I1 0
+@5 set I1 1
+@5 expect O1 0.0583333 tol 1e-5
+@6 set I1 0
+@7 set I1 1
+@7 expect O1 0.075 tol 1e-5
+@8 set I1 0
+@9 set I1 1
+@9 expect O1 0.0916667 tol 1e-5
+@10 set I1 0
+@11 set I1 1
+@11 expect O1 0.1 tol 1e-5
+@12 set I1 0
+# wrap restarts at the start note (E, semi 4), not the bottom of the range
+@13 set I1 1
+@13 expect O1 0.0333333 tol 1e-5

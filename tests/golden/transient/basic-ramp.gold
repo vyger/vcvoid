@@ -1,0 +1,27 @@
+# transient: a linear ramp from start to end over `duration` seconds. At tickrate
+# 10, duration=1 s = 10 ticks; start=0, end=0.5 -> output rises 0.05/tick. phase
+# runs 0->1; endoftransient goes high (and stays) when the end is reached.
+# Output = start at t0 (no advance on the starting tick).
+tickrate 10
+patch <<<
+[transient]
+    start          = 0
+    end            = 0.5
+    duration       = 1
+    output         = O1
+    phase          = O2
+    endoftransient = O3
+>>>
+@0 expect O1 0 tol 1e-4
+@0 expect O2 0 tol 1e-4
+@0 expect O3 0
+@1 expect O1 0.05 tol 1e-4
+@1 expect O2 0.1 tol 1e-4
+@5 expect O1 0.25 tol 1e-4
+@5 expect O2 0.5 tol 1e-4
+@9 expect O1 0.45 tol 1e-4
+@10 expect O1 0.5 tol 1e-4
+@10 expect O2 1.0 tol 1e-4
+@10 expect O3 1
+@11 expect O1 0.5 tol 1e-4
+@11 expect O3 1

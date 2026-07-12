@@ -1,0 +1,22 @@
+# slew=0.0 disables slew limiting entirely: all three outputs follow the input
+# immediately, with no delay. (Negative slew is treated as 0.)
+patch <<<
+[slew]
+    input       = I1
+    slew        = 0
+    exponential = O1
+    linear      = O2
+    scurve      = O3
+>>>
+@0 set I1 0.3
+@0 expect O1 0.3
+@0 expect O2 0.3
+@0 expect O3 0.3
+@1 set I1 0.7
+@1 expect O1 0.7
+@1 expect O2 0.7
+@1 expect O3 0.7
+@2 set I1 -0.4
+@2 expect O1 -0.4
+@2 expect O2 -0.4
+@2 expect O3 -0.4

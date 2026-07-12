@@ -1,0 +1,51 @@
+# calibrator explicit tuning: tune0..tune8 set per-octave correction points in
+# SEMITONES (value 1 = 100 cents); output = input + correction/120.
+# SPEC-GAP pins (same policy as detune/superjust; the
+# manual doesn't document the curve between points):
+#  * LINEAR interpolation between adjacent integer-volt points (the DB8E
+#    display draws the correction as a curve across octaves).
+#  * tails: below 0 V correction = tune0 + tunelowtail * (0 - v_oct); above
+#    8 V correction = tune8 + tunehightail * (v_oct - 8) (both "per octave"
+#    per the Inputs table).
+#  * effective correction clamps to +-12 semitones (manual: max +-1 octave).
+# correction output is in semitones directly (0.2 = 20 cents); it can exceed
+# the +-1.0 O-register clamp, so it is observed via an internal cable.
+tickrate 100
+patch <<<
+[calibrator]
+    input        = I1
+    tune2        = 2
+    tune3        = -1
+    tunelowtail  = 1
+    tunehightail = -0.5
+    output       = O1
+    correction   = _CORR
+>>>
+patch <<<
+[copy]
+    input  = _CORR
+    output = O3
+>>>
+# 0 V: tune0 = 0 -> passthrough
+@0 expect O1 0 tol 1e-5
+@0 expect _CORR 0 tol 1e-5
+# exactly 2 V: correction = tune2 = 2 semitones
+@1 set I1 0.2
+@1 expect O1 0.2166667 tol 1e-5
+@1 expect _CORR 2 tol 1e-5
+# 2.5 V: linear midpoint of tune2=2 and tune3=-1 -> 0.5 semitones
+@2 set I1 0.25
+@2 expect O1 0.2541667 tol 1e-5
+@2 expect _CORR 0.5 tol 1e-5
+# exactly 3 V: tune3 = -1
+@3 set I1 0.3
+@3 expect O1 0.2916667 tol 1e-5
+@3 expect _CORR -1 tol 1e-5
+# -2 V: low tail, 1 semitone per octave below 0 -> +2 semitones
+@4 set I1 -0.2
+@4 expect O1 -0.1833333 tol 1e-5
+@4 expect _CORR 2 tol 1e-5
+# 9 V: high tail, -0.5 semitones per octave above 8
+@5 set I1 0.9
+@5 expect O1 0.8958333 tol 1e-5
+@5 expect _CORR -0.5 tol 1e-5

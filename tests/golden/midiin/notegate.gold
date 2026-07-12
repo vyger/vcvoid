@@ -1,0 +1,22 @@
+# midiin: per-note gates (manual "Sequencing drums and triggers", lines 82-124;
+# outputs lines 369-370). note1 = 60, note2 = 62 select specific MIDI notes;
+# notegate1/2 go high while that note is held, and notegatevelocity1 carries its
+# velocity (0..1). A note off resets the note gate and its velocity output to 0.
+patch <<<
+[midiin]
+    note1              = 60
+    note2              = 62
+    notegate1          = O1
+    notegate2          = O2
+    notegatevelocity1  = O3
+>>>
+@0 midisend trs noteon 1 60 100
+@0 expect O1 1
+@0 expect O3 0.787402 tol 0.0001
+@0 expect O2 0
+@1 midisend trs noteoff 1 60 0
+@1 expect O1 0
+@1 expect O3 0
+@2 midisend trs noteon 1 62 80
+@2 expect O2 1
+@2 expect O1 0

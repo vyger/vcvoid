@@ -1,0 +1,14 @@
+# writer later in the file: reader sees the value one tick LATE
+# (manual hardware.md section 11.2 -- the bernoulli/contour example, via copy)
+patch <<<
+[copy]
+    input = _X
+    output = O1
+
+[copy]
+    input = I1
+    output = _X
+>>>
+@0 set I1 0.5
+@0 expect O1 0.0
+@1 expect O1 0.5

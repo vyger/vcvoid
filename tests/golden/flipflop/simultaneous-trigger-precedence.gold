@@ -1,0 +1,35 @@
+# SPEC-GAP: the manual documents each trigger's individual effect but never
+# states which one wins if several fire on the same tick. Convention adopted
+# here (see engine/circuits/flipflop.cpp): apply effects in the order the
+# Inputs table lists them -- toggle, set, reset, clear, load -- so a
+# later-listed trigger overrides an earlier one on a tie. What hardware
+# reference data would close this gap: an oscilloscope/logic-analyzer trace
+# of a real DROID master fed two simultaneous trigger pulses on two of these
+# inputs in the same tick, showing which one the physical firmware honors.
+
+# reset (0) vs load loadvalue=1 (1) in the same tick -- load is listed after
+# reset, so load should win. Second patch below (set vs clear) shares the
+# same I1/I2 trigger registers -- goldfile events are globally tick-ordered,
+# sets-before-expects, across merged patch blocks, so both sets are declared
+# once and both expects follow.
+patch <<<
+[flipflop]
+    reset = I1
+    load  = I2
+    loadvalue = 1
+    output = O1
+>>>
+
+# set (1) vs clear->startvalue=0 (0) in the same tick -- clear is listed
+# after set, so clear should win.
+patch <<<
+[flipflop]
+    set   = I1
+    clear = I2
+    startvalue = 0
+    output = O2
+>>>
+@1 set I1 1
+@1 set I2 1
+@1 expect O1 1
+@1 expect O2 0

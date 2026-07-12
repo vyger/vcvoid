@@ -1,0 +1,45 @@
+# motorfader: two functions overlaid on ONE physical fader (F1) via select.
+# Only the selected circuit owns the fader; the deselected one freezes its own
+# value but keeps emitting. When a function BECOMES selected the motor moves the
+# fader to that function's stored value -- pickup-free motorized takeover (no pot
+# pickup needed, the motor is the display).
+#   A: selectat 1 -> selected when I1 == 1 -> O1
+#   B: selectat 0 -> selected when I1 == 0 -> O2
+tickrate 100
+patch <<<
+[m4]
+
+[motorfader]
+    fader    = 1
+    output   = O1
+    select   = I1
+    selectat = 1
+
+[motorfader]
+    fader    = 1
+    output   = O2
+    select   = I1
+    selectat = 0
+>>>
+@0 set I1 0
+@0 expect O1 0 tol 1e-4
+@0 expect O2 0 tol 1e-4
+# B selected: move fader to 0.6 -> B tracks it, A frozen at 0
+@1 move F1 0.6
+@1 expect O2 0.6 tol 1e-4
+@1 expect O1 0 tol 1e-4
+@1 expect F1 0.6 tol 1e-4
+# switch to A: motor jumps the fader to A's stored value (0), B frozen at 0.6
+@2 set I1 1
+@2 expect O1 0 tol 1e-4
+@2 expect O2 0.6 tol 1e-4
+@2 expect F1 0 tol 1e-4
+# A selected: move fader up to 0.9
+@3 move F1 0.9
+@3 expect O1 0.9 tol 1e-4
+@3 expect F1 0.9 tol 1e-4
+# back to B: motor jumps the fader back to B's stored 0.6, A frozen at 0.9
+@4 set I1 0
+@4 expect O2 0.6 tol 1e-4
+@4 expect O1 0.9 tol 1e-4
+@4 expect F1 0.6 tol 1e-4

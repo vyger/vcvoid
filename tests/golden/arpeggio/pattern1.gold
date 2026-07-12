@@ -1,0 +1,51 @@
+# arpeggio pattern 1: "two steps forward, one step backward" (->-><-).
+# C Lydian defaults, pitch=0, range=7 semitones (0.0583333) -> pool {C,D,E,F#,G}
+# = semis {0,2,4,6,7}, indices 0..4.
+# Delta cycle [+1,+1,-1] walked over the index; restart to index 0 when the
+# next index would leave [0,4] (no pingpong).
+#   idx: 0,1,2,1,2,3,2,3,4,3,4,then +1 would hit 5 -> restart to 0
+#   semis: 0,2,4,2,4,6,4,6,7,6,7,0
+patch <<<
+[arpeggio]
+    clock   = I1
+    output  = O1
+    pitch   = 0
+    range   = 0.0583333
+    pattern = 1
+>>>
+@1 set I1 1
+@1 expect O1 0 tol 1e-5
+@2 set I1 0
+@3 set I1 1
+@3 expect O1 0.0166667 tol 1e-5
+@4 set I1 0
+@5 set I1 1
+@5 expect O1 0.0333333 tol 1e-5
+@6 set I1 0
+@7 set I1 1
+@7 expect O1 0.0166667 tol 1e-5
+@8 set I1 0
+@9 set I1 1
+@9 expect O1 0.0333333 tol 1e-5
+@10 set I1 0
+@11 set I1 1
+@11 expect O1 0.05 tol 1e-5
+@12 set I1 0
+@13 set I1 1
+@13 expect O1 0.0333333 tol 1e-5
+@14 set I1 0
+@15 set I1 1
+@15 expect O1 0.05 tol 1e-5
+@16 set I1 0
+@17 set I1 1
+@17 expect O1 0.0583333 tol 1e-5
+@18 set I1 0
+@19 set I1 1
+@19 expect O1 0.05 tol 1e-5
+@20 set I1 0
+@21 set I1 1
+@21 expect O1 0.0583333 tol 1e-5
+@22 set I1 0
+# next +1 would reach index 5 (out of range) -> restart at index 0 (semi 0)
+@23 set I1 1
+@23 expect O1 0 tol 1e-5

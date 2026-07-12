@@ -1,0 +1,36 @@
+# encoder: overlay two functions on ONE physical encoder (E1.1) via select. Both
+# circuits read the same per-tick detents, but only the SELECTED one consumes the
+# movement; the deselected one freezes its own value. select = I1, distinguished
+# by selectat.
+#   encA selectat 1 -> selected when I1 == 1 -> O1
+#   encB selectat 0 -> selected when I1 == 0 -> O2
+# @1 (I1=0, B selected): +48 -> B 0.5, A frozen 0
+# @2 (I1=1, A selected): +48 -> A 0.5, B stays 0.5
+tickrate 100
+patch <<<
+[e4]
+
+[encoder]
+    encoder  = E1.1
+    output   = O1
+    select   = I1
+    selectat = 1
+    smooth   = 0
+
+[encoder]
+    encoder  = E1.1
+    output   = O2
+    select   = I1
+    selectat = 0
+    smooth   = 0
+>>>
+@0 set I1 0
+@0 expect O1 0 tol 1e-4
+@0 expect O2 0 tol 1e-4
+@1 turn E1.1 48
+@1 expect O2 0.5 tol 1e-4
+@1 expect O1 0 tol 1e-4
+@2 set I1 1
+@2 turn E1.1 48
+@2 expect O1 0.5 tol 1e-4
+@2 expect O2 0.5 tol 1e-4

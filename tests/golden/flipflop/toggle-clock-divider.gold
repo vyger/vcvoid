@@ -1,0 +1,21 @@
+# manual example: toggle inverts the state each trigger, which implements a
+# clock divider by two when I1 is itself a clock. Manual: "A trigger here
+# inverts the state of the flip flop. It changes 0 to 1 and 1 to 0."
+# I1 rises at ticks 1, 3, 5 (period-2 clock); O1 should flip at each of those
+# rising edges only, giving O1 a period of 4 -- half I1's frequency.
+patch <<<
+[flipflop]
+    toggle = I1
+    output = O1
+>>>
+@0 expect O1 0
+@1 set I1 1
+@1 expect O1 1
+@2 set I1 0
+@2 expect O1 1
+@3 set I1 1
+@3 expect O1 0
+@4 set I1 0
+@4 expect O1 0
+@5 set I1 1
+@5 expect O1 1

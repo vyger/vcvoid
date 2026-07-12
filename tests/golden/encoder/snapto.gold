@@ -1,0 +1,25 @@
+# encoder: snapto pitch-bend return. The value drifts back to the snapto position
+# when not held. SPEC-GAP curve (encodercore.hpp): one-pole pull with rate
+# snapforce*kSnapRate (kSnapRate = 8 /s). snapforce = 1, dt = 0.01 s ->
+# a = 1 - exp(-0.08) = 0.0768837 per tick. startvalue 0.5 == snapto so it starts
+# at rest.
+#   @0 pos 0.5 (at snapto) -> 0.5
+#   @1 +48 -> pos 1.0, then snap pull: 1.0 + (0.5-1.0)*0.0768837 = 0.9615582
+#   @100 no further turns -> converged back to snapto 0.5
+tickrate 100
+patch <<<
+[e4]
+
+[encoder]
+    encoder    = E1.1
+    output     = O1
+    snapto     = I1
+    snapforce  = 1
+    startvalue = 0.5
+    smooth     = 0
+>>>
+@0 set I1 0.5
+@0 expect O1 0.5 tol 1e-4
+@1 turn E1.1 48
+@1 expect O1 0.9615582 tol 1e-4
+@100 expect O1 0.5 tol 0.01

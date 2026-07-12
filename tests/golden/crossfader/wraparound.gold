@@ -1,0 +1,25 @@
+# crossfader worked example 3: fade values beyond 1.0 morph from the last input
+# back to the first. With N=2 the wrap range is fade 1.0..2.0 and the positions
+# are exact: p = fade*(N-1) = fade, taken modulo N=2.
+#   fade 1.0  -> p=1.0 -> input2                    = 0.8  (last)
+#   fade 1.25 -> p=1.25 -> 0.75*i2 + 0.25*i1        = 0.65
+#   fade 1.5  -> p=1.5  -> 0.5*i2 + 0.5*i1          = 0.5
+#   fade 2.0  -> p=2.0 mod 2 = 0 -> input1          = 0.2  (fully back to first)
+# input1=0.2, input2=0.8.
+patch <<<
+[crossfader]
+    input1 = I1
+    input2 = I2
+    fade   = I3
+    output = O1
+>>>
+@0 set I1 0.2
+@0 set I2 0.8
+@0 set I3 1.0
+@0 expect O1 0.8
+@1 set I3 1.25
+@1 expect O1 0.65
+@2 set I3 1.5
+@2 expect O1 0.5
+@3 set I3 2.0
+@3 expect O1 0.2

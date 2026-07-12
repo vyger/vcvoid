@@ -1,0 +1,14 @@
+# matrixmixer: auxin is summed directly into its output (used for cascading
+# several mixers). Diagonal start (input1->output1) plus auxin1:
+#   output1 = input1 + auxin1 = 0.3 + 0.4 = 0.7
+tickrate 100
+patch <<<
+[matrixmixer]
+    startvalue = 1
+    input1  = I1
+    auxin1  = I2
+    output1 = O1
+>>>
+@0 set I1 0.3
+@0 set I2 0.4
+@0 expect O1 0.7 tol 1e-4

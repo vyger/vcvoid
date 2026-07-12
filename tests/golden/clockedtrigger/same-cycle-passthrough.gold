@@ -1,0 +1,31 @@
+# Manual Note: "When the trigger and the clock happen at exactly the same time
+# (the same internal loop cycle), the trigger is immediately output and the
+# optional value input copied to its output." We process trigger before clock
+# within a tick, so a same-tick trigger+clock passes straight through.
+patch <<<
+[clockedtrigger]
+    clock          = I1
+    trigger        = I2
+    value          = I4
+    clockedtrigger = O1
+    clockedvalue   = O2
+    pendingtrigger = O3
+>>>
+
+@0 expect O1 0
+@0 expect O2 0
+@0 expect O3 0
+
+# trigger and clock on the SAME tick, value 0.3 -> immediate output, no pending
+@1 set I1 1
+@1 set I2 1
+@1 set I4 0.3
+@1 expect O1 1
+@1 expect O2 0.3
+@1 expect O3 0
+
+@2 set I1 0
+@2 set I2 0
+@2 expect O1 0
+@2 expect O2 0.3
+@2 expect O3 0

@@ -1,0 +1,23 @@
+# dac worked example 2: 3 bits mapped to minimum=0.1 .. maximum=0.5.
+# output = 0.1 + value/7 * 0.4. All-zeros -> minimum (0.1), all-ones -> maximum (0.5).
+patch <<<
+[dac]
+    bit1    = I1
+    bit2    = I2
+    bit3    = I3
+    minimum = 0.1
+    maximum = 0.5
+    output  = O1
+>>>
+@0 expect O1 0.1
+@1 set I3 1
+@1 expect O1 0.157143 tol 1e-5
+@2 set I2 1
+@2 expect O1 0.271429 tol 1e-5
+@3 set I3 0
+@3 set I2 0
+@3 set I1 1
+@3 expect O1 0.328571 tol 1e-5
+@4 set I2 1
+@4 set I3 1
+@4 expect O1 0.5
