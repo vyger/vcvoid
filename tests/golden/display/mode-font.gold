@@ -1,0 +1,30 @@
+# display: numbermode / fontsize are stored verbatim (not rendered here) and
+# clamped to their documented ranges (fontsize 0..3, numbermode 0..18).
+# D1: mode 12 (note value), font 2 -> stored as-is.
+# D2: mode 99, font 7 -> clamped to 18 and 3.
+# The value itself is stored unformatted; formatting is the Wave-3b OLED half.
+tickrate 100
+patch <<<
+[db8e]
+[db8e]
+
+[display]
+    display    = 1
+    value      = I1
+    numbermode = 12
+    fontsize   = 2
+
+[display]
+    display    = 2
+    value      = I2
+    numbermode = 99
+    fontsize   = 7
+>>>
+@0 set I1 0.25
+@0 set I2 0.4
+@0 expectdisplay D1 value 0.25 tol 1e-6
+@0 expectdisplay D1 mode 12
+@0 expectdisplay D1 font 2
+@0 expectdisplay D2 value 0.4 tol 1e-6
+@0 expectdisplay D2 mode 18
+@0 expectdisplay D2 font 3

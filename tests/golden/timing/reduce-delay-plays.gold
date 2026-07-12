@@ -1,0 +1,32 @@
+# Manual rule (timing.md:96): if an output beat has not yet played because it is
+# delayed, and you then reduce the delay by enough to shift it into the past, it
+# is played IMMEDIATELY (not lost). timing2 is driven by a live CV (I3), P=20.
+# beat1 (step1) is scheduled at edge 20 with timing2=0.5 -> target 30. At tick 25
+# the CV drops to 0.1 -> target 22, now in the past -> beat1 fires at once (25),
+# not at its original 30. beat0/beat2 (step0, timing1=0) stay on time at 0/40.
+tickrate 100
+patch <<<
+[timing]
+    clock   = I1
+    output  = O1
+    timing1 = 0
+    timing2 = I3
+>>>
+@0 set I1 1
+@0 set I3 0.5
+@0 expect O1 1
+@1 set I1 0
+@1 expect O1 0
+@20 set I1 1
+@20 expect O1 0
+@21 set I1 0
+@22 expect O1 0
+@24 expect O1 0
+@25 set I3 0.1
+@25 expect O1 1
+@26 expect O1 0
+@30 expect O1 0
+@40 set I1 1
+@40 expect O1 1
+@41 set I1 0
+@41 expect O1 0

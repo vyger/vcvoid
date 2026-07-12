@@ -1,0 +1,35 @@
+# Patching `sample` enables triggered mode: a new tape sample is created only on
+# each rising edge of `sample`. CV changes between triggers are ignored, so a
+# stepped CV is captured one sample per trigger.
+patch <<<
+[recorder]
+    cvin   = I1
+    mode   = I2
+    sample = I3
+    cvout  = O1
+>>>
+# RECORD (triggered): only the CV at each rising edge of `sample` is stored
+@0 set I2 2
+@0 set I1 0.30
+@0 set I3 1
+# edge -> sample 0 = 0.30
+@1 set I1 0.99
+@1 set I3 1
+# no edge (still high) -> 0.99 ignored
+@2 set I1 0.40
+@2 set I3 0
+@3 set I1 0.50
+@3 set I3 1
+# edge -> sample 1 = 0.50
+@4 set I1 0.60
+@4 set I3 0
+@5 set I1 0.70
+@5 set I3 1
+# edge -> sample 2 = 0.70
+# PLAY: tape = [0.30, 0.50, 0.70]
+@6 set I2 1
+@6 set I1 0.0
+@6 expect O1 0.30 tol 1e-5
+@7 expect O1 0.50 tol 1e-5
+@8 expect O1 0.70 tol 1e-5
+@9 expect O1 0.70 tol 1e-5

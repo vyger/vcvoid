@@ -1,0 +1,31 @@
+# "Changes while in the air": the slope is recomputed each tick as (end-output)/
+# remaining_time, so changing `end` mid-flight makes the output continue SMOOTHLY
+# from its current level to the new end, still arriving exactly when phase hits 1.
+# start=0, end=0.5, duration=1 s (tickrate 10). At t5 end jumps to 1.0: output is
+# at 0.2, remaining 0.6 s -> new slope 1.333/s, so it accelerates and reaches 1.0
+# at t10 (no sudden step). phase is the INTERNAL CLOCK ("measures which part of
+# the transient has been run through already"), NOT the normalized output
+# position: it keeps running 0->1 linearly with time, unaffected by the end
+# change (here: 0.5 at t5, the halfway point of the 1 s duration).
+tickrate 10
+patch <<<
+[transient]
+    start    = 0
+    end      = I1
+    duration = 1
+    output   = O1
+    phase    = O2
+>>>
+@0 set I1 0.5
+@4 expect O1 0.2 tol 1e-4
+# end -> 1.0 at t5: smooth continuation (no jump), faster slope
+@5 set I1 1.0
+@5 expect O1 0.33333 tol 1e-4
+# internal clock: halfway through the 1 s duration, regardless of the end change
+# (the normalized output position would be 0.333 here -- that is NOT phase)
+@5 expect O2 0.5 tol 1e-4
+@6 expect O1 0.46667 tol 1e-4
+@7 expect O2 0.7 tol 1e-4
+@7 expect O1 0.6 tol 1e-4
+@10 expect O1 1.0 tol 1e-4
+@10 expect O2 1.0 tol 1e-4

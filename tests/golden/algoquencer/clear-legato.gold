@@ -1,0 +1,66 @@
+# algoquencer gate legato + clear. gatelength=1.0 -> each beat's gate spans a
+# full clock period, so adjacent beats (steps 0,1) merge into one steady gate
+# (manual: 'two succeeding notes will get a steady gate'). SPEC-GAP: no gate
+# until the clock period is measured (the very first step has none). A `clear`
+# trigger loads the default start state: steps wiped (LED shows only the
+# cursor), so no more beats play.
+tickrate 100
+patch <<<
+[p2b8]
+
+[algoquencer]
+    clock      = I1
+    clear      = I2
+    gatelength = 1
+    button1    = B1.1
+    button2    = B1.2
+    button3    = B1.3
+    button4    = B1.4
+    led1       = L1.1
+    led2       = L1.2
+    trigger    = O1
+    gate       = O2
+>>>
+@0 set B1.1 1
+@0 set B1.2 1
+@1 set B1.1 0
+@1 set B1.2 0
+# bar 0: step 0 fires but no period known yet -> trigger yes, gate no
+@3 set I1 1
+@3 expect O1 1 tol 1e-5
+@3 expect O2 0 tol 1e-5
+@4 set I1 0
+# step 1: period = 2 ticks -> gate [3..5) ... here [5..7)
+@5 set I1 1
+@5 expect O2 1 tol 1e-5
+@6 set I1 0
+@6 expect O2 1 tol 1e-5
+@7 set I1 1
+@7 expect O2 0 tol 1e-5
+@8 set I1 0
+@9 set I1 1
+@10 set I1 0
+# bar 1: steps 0 and 1 both gate a full period each -> steady high 11..14
+@11 set I1 1
+@11 expect O2 1 tol 1e-5
+@12 set I1 0
+@12 expect O2 1 tol 1e-5
+@13 set I1 1
+@13 expect O2 1 tol 1e-5
+@14 set I1 0
+@14 expect O2 1 tol 1e-5
+@15 set I1 1
+@15 expect O2 0 tol 1e-5
+@16 set I1 0
+# clear: steps wiped (L1.1 shows nothing; cursor sits on step 2 = L1.3)
+@18 set I2 1
+@19 set I2 0
+@19 expect L1.1 0 tol 1e-5
+@19 expect L1.2 0 tol 1e-5
+# no beats left: next steps are silent
+@21 set I1 1
+@21 expect O1 0 tol 1e-5
+@22 set I1 0
+@23 set I1 1
+@23 expect O1 0 tol 1e-5
+@24 set I1 0

@@ -1,0 +1,31 @@
+# cvlooper: the loop window must be clamped to the tape capacity (manual
+# guarantees an 8-second tape; at tickrate 100 that is 800 samples). Clock
+# period 10, length=128 -> requested window 1280 ticks > 800 -> clamped to the
+# last 800 recorded samples. Input plateaus: 0.1 (t0..399), 0.2 (t400..799),
+# 0.3 (t800..849). Loop on at t850 -> window = samples t50..t849:
+#   phase   0 -> t50  = 0.1
+#   phase 399 -> t449 = 0.2
+#   phase 750 -> t800 = 0.3
+#   phase 800 wraps back to t50 = 0.1
+# (Unclamped, the read head lands on never-written cells and emits 0.)
+tickrate 100
+patch <<<
+[cvlooper]
+    cvin       = I1
+    clock      = I2
+    loopswitch = I3
+    length     = 128
+    cvout      = O1
+>>>
+@0 set I1 0.1
+@0 set I2 1
+@1 set I2 0
+@10 set I2 1
+@11 set I2 0
+@400 set I1 0.2
+@800 set I1 0.3
+@850 set I3 1
+@850 expect O1 0.1 tol 1e-4
+@1249 expect O1 0.2 tol 1e-4
+@1600 expect O1 0.3 tol 1e-4
+@1650 expect O1 0.1 tol 1e-4

@@ -1,0 +1,37 @@
+# encoder: movedup/moveddown triggers, one 10 ms pulse per `movementticks`
+# detents. tickrate 100 -> 10 ms = 1 tick. movementticks = 8.
+#   @1 +8  -> one movedup pulse (O2 high this tick only); value += 8/96 = 0.08333
+#   @2      -> O2 back to 0
+#   @3 -8  -> one moveddown pulse (O3)
+#   @4      -> O3 back to 0
+# Fast turn queueing: +16 = 2 movementticks -> 2 pulses spaced >=20 ms apart
+#   @6 +16 -> pulse 1 (O2 high); next allowed at tick 8
+#   @7      -> gap (O2 low)
+#   @8      -> pulse 2 (O2 high)
+#   @9      -> O2 low
+tickrate 100
+patch <<<
+[e4]
+
+[encoder]
+    encoder       = E1.1
+    output        = O1
+    movementticks = 8
+    movedup       = O2
+    moveddown     = O3
+    smooth        = 0
+>>>
+@1 turn E1.1 8
+@1 expect O2 1 tol 1e-4
+@1 expect O3 0 tol 1e-4
+@1 expect O1 0.083333 tol 1e-4
+@2 expect O2 0 tol 1e-4
+@3 turn E1.1 -8
+@3 expect O3 1 tol 1e-4
+@3 expect O2 0 tol 1e-4
+@4 expect O3 0 tol 1e-4
+@6 turn E1.1 16
+@6 expect O2 1 tol 1e-4
+@7 expect O2 0 tol 1e-4
+@8 expect O2 1 tol 1e-4
+@9 expect O2 0 tol 1e-4

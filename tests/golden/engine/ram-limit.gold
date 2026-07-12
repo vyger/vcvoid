@@ -1,0 +1,11 @@
+# 7 bare cvloopers: 864 + 7*17336 = 122216 > 112867 -> refuse to load
+expect_load_error "exceeds the available memory"
+patch <<<
+[cvlooper]
+[cvlooper]
+[cvlooper]
+[cvlooper]
+[cvlooper]
+[cvlooper]
+[cvlooper]
+>>>

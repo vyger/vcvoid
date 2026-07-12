@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="33.66" height="228.06" viewBox="0 0 33.66 228.06">
+  <!-- DROID M4 fader travel box: fully transparent. The fader slot is baked
+       into the faceplate art (m4.png), so this background contributes no pixels;
+       it only sizes the SvgSlider's interactive box to the measured slot.
+       33.66 = mm2px(11.4) (cap width), 228.06 = mm2px(77.23) (slot span, from
+       slot-top 25.39 mm to slot-bottom 102.62 mm as measured off the art).
+       The ribbed white cap is drawn in DroidM4Fader::draw() (M4.cpp). -->
+  <rect x="0" y="0" width="33.66" height="228.06" fill="none"/>
+</svg>

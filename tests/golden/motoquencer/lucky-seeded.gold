@@ -1,0 +1,35 @@
+# motoquencer "I Feel Lucky": a seeded pin of a genuinely randomized op. With seed
+# 1, luckychance 1 and luckyamount 1 (defaults), a luckycvs trigger draws four
+# chance coins (all < 1 -> every step targeted) and then four fresh CVs from the
+# engine RNG, in ascending step order. Continuous pitch (cvbase 0, cvrange 1) means
+# CV == cvpos, so these are the exact xorshift32 seed-1 values. Regenerate by
+# capturing the "got" values if the RNG draw order ever changes.
+seed 1
+tickrate 100
+patch <<<
+[m4]
+[motoquencer]
+    numfaders = 4
+    quantize  = 0
+    cvbase    = 0
+    cvrange   = 1
+    holdcv    = 0
+    clock     = I1
+    cv        = O1
+    luckycvs  = I2
+>>>
+@0 expect O1 0 tol 1e-4
+# fire luckycvs -> reroll all four steps.
+@1 set I2 1
+@2 set I2 0
+@4 set I1 1
+@4 expect O1 0.558488 tol 1e-5
+@5 set I1 0
+@6 set I1 1
+@6 expect O1 0.173574 tol 1e-5
+@7 set I1 0
+@8 set I1 1
+@8 expect O1 0.147250 tol 1e-5
+@9 set I1 0
+@10 set I1 1
+@10 expect O1 0.101457 tol 1e-5

@@ -1,0 +1,27 @@
+# minifonion manual example 1: quantize I1 to a C lydian major scale (defaults).
+# root=0 degree=0 -> C Lydian, columns I..VII = {C,D,E,F#,G,A,B} = pcs
+# {0,2,4,6,7,9,11}. No selects patched -> smart default = all seven scale notes.
+# direction defaults to 1 (search upward). 1 semitone = 0.1/12 = 0.00833333 engine.
+patch <<<
+[minifonion]
+    input  = I1
+    output = O2
+>>>
+# pc0 (C) is in the scale -> passthrough
+@0 set I1 0
+@0 expect O2 0 tol 1e-5
+# 1 semitone (C#, pc1) not in scale; up -> D (2 semi = 0.0166667)
+@1 set I1 0.0083333
+@1 expect O2 0.0166667 tol 1e-5
+# 3 semitones (D#, pc3) not in scale; up -> E (4 semi = 0.0333333)
+@2 set I1 0.025
+@2 expect O2 0.0333333 tol 1e-5
+# 6 semitones (F#, pc6) IS in lydian (the #4) -> passthrough (0.05)
+@3 set I1 0.05
+@3 expect O2 0.05 tol 1e-5
+# 8 semitones (G#, pc8) not in scale; up -> A (9 semi = 0.075)
+@4 set I1 0.0666667
+@4 expect O2 0.075 tol 1e-5
+# 0.6 semitone snaps up to 1 semi (tie/round rule), pc1 not in scale, up -> D
+@5 set I1 0.005
+@5 expect O2 0.0166667 tol 1e-5

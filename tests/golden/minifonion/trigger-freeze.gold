@@ -1,0 +1,25 @@
+# Triggered mode: with `trigger` patched the output freezes between rising edges
+# and is only recomputed on an edge (C lydian, direction up). Before the first
+# edge the held note is 0 V.
+patch <<<
+[minifonion]
+    input   = I1
+    trigger = I2
+    output  = O2
+>>>
+# trigger connected but low: no edge yet -> held note 0
+@0 set I1 0.0083333
+@0 set I2 0
+@0 expect O2 0 tol 1e-5
+# rising edge: quantize current input (C#, pc1) up -> D (2 semi)
+@1 set I2 1
+@1 expect O2 0.0166667 tol 1e-5
+# input moves to E (pc4, would quantize to itself) but no new edge -> frozen at D
+@2 set I1 0.0333333
+@2 expect O2 0.0166667 tol 1e-5
+# trigger falls: still frozen
+@3 set I2 0
+@3 expect O2 0.0166667 tol 1e-5
+# new rising edge: re-quantize the held input E -> E (4 semi)
+@4 set I2 1
+@4 expect O2 0.0333333 tol 1e-5

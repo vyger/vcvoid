@@ -1,0 +1,27 @@
+# clocktool divide=2: one output pulse per 2 input clocks. Steady clock, period
+# 10 ticks (tickrate 100). Default gate = 10 ms = 1 tick. Output edges at the
+# 0th, 2nd, 4th input beats -> t0, t20, t40.
+tickrate 100
+patch <<<
+[clocktool]
+    clock  = I1
+    divide = 2
+    output = O1
+>>>
+@0 set I1 1
+@0 expect O1 1
+@1 set I1 0
+@1 expect O1 0
+@10 set I1 1
+@10 expect O1 0
+@11 set I1 0
+@20 set I1 1
+@20 expect O1 1
+@21 set I1 0
+@21 expect O1 0
+@30 set I1 1
+@30 expect O1 0
+@31 set I1 0
+@40 set I1 1
+@40 expect O1 1
+@41 set I1 0

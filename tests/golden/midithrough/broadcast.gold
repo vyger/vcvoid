@@ -1,0 +1,17 @@
+# midithrough: broadcast (value 10 on a to* jack) forwards to ALL ports of that
+# type. Manual midithrough.md lines 60-61 ("Setting tousb = 10 or totrs = 10
+# forwards the events to all ports of the given type") and the example lines
+# 81-88 (fromtrs=1, totrs=10, tousb=10). With one TRS and one USB port in the
+# MASTER+X7 config, broadcast resolves to that single port of each type, so the
+# TRS-sourced event lands on both the TRS and USB outputs.
+patch <<<
+[midithrough]
+    fromtrs = 1
+    totrs = 10
+    tousb = 10
+>>>
+@0 midisend trs cc 3 74 55
+@0 expectmidi trs cc 3 74 55
+@0 expectmidi usb cc 3 74 55
+@0 expectmidi trs none
+@0 expectmidi usb none

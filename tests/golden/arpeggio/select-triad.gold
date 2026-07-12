@@ -1,0 +1,41 @@
+# arpeggio manual interval-selection example: a C major triad over two octaves,
+# up and down again. select1 (root), select3 (3rd), select5 (5th) of C Lydian
+# = C,E,G = pcs {0,4,7}. pingpong=1. pitch=0, range=2V (default) -> [0,24].
+# Pool semis: 0,4,7,12,16,19,24 (indices 0..6).
+# Triangle: 0,4,7,12,16,19,24,19,16,... (top not repeated)
+patch <<<
+[arpeggio]
+    clock    = I1
+    output   = O1
+    select1  = 1
+    select3  = 1
+    select5  = 1
+    pingpong = 1
+>>>
+@1 set I1 1
+@1 expect O1 0 tol 1e-5
+@2 set I1 0
+@3 set I1 1
+@3 expect O1 0.0333333 tol 1e-5
+@4 set I1 0
+@5 set I1 1
+@5 expect O1 0.0583333 tol 1e-5
+@6 set I1 0
+@7 set I1 1
+@7 expect O1 0.1 tol 1e-5
+@8 set I1 0
+@9 set I1 1
+@9 expect O1 0.1333333 tol 1e-5
+@10 set I1 0
+@11 set I1 1
+@11 expect O1 0.1583333 tol 1e-5
+@12 set I1 0
+@13 set I1 1
+@13 expect O1 0.2 tol 1e-5
+@14 set I1 0
+# top reached -> reverse
+@15 set I1 1
+@15 expect O1 0.1583333 tol 1e-5
+@16 set I1 0
+@17 set I1 1
+@17 expect O1 0.1333333 tol 1e-5

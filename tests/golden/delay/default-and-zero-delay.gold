@@ -1,0 +1,27 @@
+# delay: two edge cases side by side.
+#
+# Block 1 -- default delay. With no `delay` param the Inputs-table default is
+# 1.0 s. tickrate 100 -> 100 ticks. cvin (I1)=0.25 from t0; cvout (O1) stays 0
+# until 100 ticks of history exist, then emits 0.25.
+#
+# Block 2 -- zero delay. delay=0 -> delayTicks 0 -> pure passthrough (output reads
+# the sample just written this tick). cvin (I5) -> cvout (O5) with no shift.
+tickrate 100
+patch <<<
+[delay]
+    cvin  = I1
+    cvout = O1
+>>>
+patch <<<
+[delay]
+    cvin  = I5
+    cvout = O5
+    delay = 0
+>>>
+@0 set I1 0.25
+@0 set I5 0.3
+@0 expect O5 0.3 tol 1e-4
+@5 set I5 -0.4
+@5 expect O5 -0.4 tol 1e-4
+@99 expect O1 0 tol 1e-4
+@100 expect O1 0.25 tol 1e-4

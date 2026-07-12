@@ -1,0 +1,23 @@
+# matrixmixer: the default startvalue (1) enables the diagonal, so input_i is
+# routed to output_i (unity gain). No buttons patched -> the matrix stays at the
+# diagonal start state.
+tickrate 100
+patch <<<
+[matrixmixer]
+    input1  = I1
+    input2  = I2
+    input3  = I3
+    input4  = I4
+    output1 = O1
+    output2 = O2
+    output3 = O3
+    output4 = O4
+>>>
+@0 set I1 0.1
+@0 set I2 0.2
+@0 set I3 0.3
+@0 set I4 0.4
+@0 expect O1 0.1 tol 1e-4
+@0 expect O2 0.2 tol 1e-4
+@0 expect O3 0.3 tol 1e-4
+@0 expect O4 0.4 tol 1e-4

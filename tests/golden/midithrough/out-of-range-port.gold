@@ -1,0 +1,19 @@
+# midithrough: port numbers with no hardware behind them are silent no-ops.
+# The MASTER+X7 port table (manual midithrough.md lines 32-36) defines only
+# value 1 for each type; higher literals (and the sentinel 10 is handled
+# separately) address ports that do not exist here. A from* out of range reads
+# nothing; a to* out of range writes nothing — no crash, no output.
+# Here fromusb = 5 (out of range) drops the USB event, tousb = 3 (out of range)
+# drops the USB output; only the valid fromtrs=1 -> totrs=1 path forwards.
+patch <<<
+[midithrough]
+    fromtrs = 1
+    fromusb = 5
+    totrs = 1
+    tousb = 3
+>>>
+@0 midisend trs noteon 1 60 100
+@0 midisend usb noteon 2 62 90
+@0 expectmidi trs noteon 1 60 100
+@0 expectmidi trs none
+@0 expectmidi usb none

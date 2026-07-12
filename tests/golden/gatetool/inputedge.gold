@@ -1,0 +1,23 @@
+# gatetool: inputedge counts BOTH transitions (low->high AND high->low) as events,
+# unlike inputtrigger (rising only). One input gate therefore produces TWO events:
+# one on its rise, one on its fall. tickrate 100 -> 10 ms trigger = 1 tick.
+#
+# Input gate: rise at t0 (event 1), fall at t10 (event 2).
+# outputtrigger fires at t0 and t10; outputedge toggles 0->1 at t0, 1->0 at t10.
+tickrate 100
+patch <<<
+[gatetool]
+    inputedge     = I1
+    outputtrigger = O2
+    outputedge    = O3
+>>>
+@0 set I1 1
+@0 expect O2 1 tol 1e-4
+@0 expect O3 1 tol 1e-4
+@1 expect O2 0 tol 1e-4
+@1 expect O3 1 tol 1e-4
+@10 set I1 0
+@10 expect O2 1 tol 1e-4
+@10 expect O3 0 tol 1e-4
+@11 expect O2 0 tol 1e-4
+@11 expect O3 0 tol 1e-4

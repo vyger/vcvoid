@@ -1,0 +1,42 @@
+# encoder: discrete octave switch. discrete = 5 -> integer indices 0..4; output =
+# index*outputscale + outputoffset. Manual "Discrete values": indices scaled by
+# 1V and shifted by -2V give the octave switch -2V,-1V,0V,1V,2V.
+# NOTE: the manual's code block writes `outputscale = 4V`, but its own prose
+# ("scale this by 1 V to get 0 V ... 4 V") and the rule that discrete yields the
+# raw integers 0..N-1 both require 1V. The 4V in the block is a manual typo; this
+# golden uses the 1V that produces the stated result.
+# One turn = 8 positions at sensivity 1, i.e. 12 detents per index step.
+# valuechanged (O2) pulses (10 ms = 1 tick) on each snap.
+#   @0 index 0 -> -2V = -0.2
+#   @1 +12 -> index 1 -> -1V = -0.1 ; valuechanged pulse
+#   @2 +12 -> index 2 -> 0V = 0.0   ; valuechanged pulse
+#   @3 +12 -> index 3 -> 1V = 0.1
+#   @4 +12 -> index 4 -> 2V = 0.2
+#   @5 +12 -> clamp index 4 -> 0.2  ; NO valuechanged (unchanged at limit)
+tickrate 100
+patch <<<
+[e4]
+
+[encoder]
+    encoder      = E1.1
+    output       = O1
+    discrete     = 5
+    outputscale  = 1V
+    outputoffset = -2V
+    valuechanged = O2
+>>>
+@0 expect O1 -0.2 tol 1e-4
+@0 expect O2 0 tol 1e-4
+@1 turn E1.1 12
+@1 expect O1 -0.1 tol 1e-4
+@1 expect O2 1 tol 1e-4
+@2 turn E1.1 12
+@2 expect O1 0.0 tol 1e-4
+@2 expect O2 1 tol 1e-4
+@3 turn E1.1 12
+@3 expect O1 0.1 tol 1e-4
+@4 turn E1.1 12
+@4 expect O1 0.2 tol 1e-4
+@5 turn E1.1 12
+@5 expect O1 0.2 tol 1e-4
+@5 expect O2 0 tol 1e-4

@@ -1,0 +1,18 @@
+# midiout delayinitialccs (manual line 368). When the Droid starts it waits
+# delayinitialccs seconds before sending the first CC events (so the X7/DAW has
+# come up). Here the delay is 0.05 s -> 50 ms: the initial CC#74 is suppressed
+# until t=50. 0.5 -> 64.
+tickrate 1000
+x7 1
+patch <<<
+[midiout]
+    ccnumber1 = 74
+    cc1       = I1
+    activesensing = 0
+    delayinitialccs = 0.05
+>>>
+@0 set I1 0.5
+@0 expectmidi trs none
+@49 expectmidi trs none
+@50 expectmidi trs cc 1 74 64
+@51 expectmidi trs none

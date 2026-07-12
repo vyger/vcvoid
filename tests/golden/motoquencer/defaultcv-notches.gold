@@ -1,0 +1,30 @@
+# motoquencer: defaultcv in notched mode (finding). "If you have set cvnotches,
+# however, the value is expected to be an integer in the range 0 … cvnotches-1."
+# With cvnotches=3 and defaultcv=1, seeding (at init and on `clear`) must set every
+# step to notch INDEX 1 (cvbase/cvrange ignored) — fader rests at notchRest(1,3)=0.5
+# and the `cv` output reads the notch number 1. cvbase=0/cvrange=10 is chosen so the
+# old voltage interpretation, (1-0)/10=0.1, would have landed on notch 0 instead.
+tickrate 100
+patch <<<
+[m4]
+[motoquencer]
+    clock     = I1
+    cvnotches = 3
+    cvbase    = 0
+    cvrange   = 10
+    defaultcv = 1
+    clear     = I3
+    numsteps  = 2
+    cv        = O1
+>>>
+# the seeded fader rests on notch index 1 (unclamped; proves the index mapping).
+@0 expect F1 0.5 tol 1e-4
+# play step 0 -> cv output is the notch number 1.
+@2 set I1 1
+@2 expect O1 1 tol 1e-4
+@3 set I1 0
+# clear re-seeds all steps back to notch index 1.
+@4 set I3 1
+@5 set I3 0
+@6 set I1 1
+@6 expect O1 1 tol 1e-4

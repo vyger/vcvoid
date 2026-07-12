@@ -1,0 +1,34 @@
+# Core record -> playback via the `mode` input (0=stop,1=play,2=record; when
+# `mode` is patched the three buttons are ignored). While recording, the input is
+# bypassed to the output AND written to the tape. Playback replays the tape and
+# ignores the live input. Because mode is driven from outside, playback does NOT
+# auto-stop at the end -- it holds the last sample and stays in playback.
+patch <<<
+[recorder]
+    cvin  = I1
+    mode  = I2
+    cvout = O1
+>>>
+# RECORD (mode 2): output = live input; samples 0..4 captured
+@0 set I2 2
+@0 set I1 0.10
+@0 expect O1 0.10 tol 1e-5
+@1 set I1 0.11
+@1 expect O1 0.11 tol 1e-5
+@2 set I1 0.12
+@2 expect O1 0.12 tol 1e-5
+@3 set I1 0.13
+@3 expect O1 0.13 tol 1e-5
+@4 set I1 0.14
+@4 expect O1 0.14 tol 1e-5
+# PLAY (mode 1): tape replays 0.10..0.14; live input (0.99) ignored
+@5 set I2 1
+@5 set I1 0.99
+@5 expect O1 0.10 tol 1e-5
+@6 expect O1 0.11 tol 1e-5
+@7 expect O1 0.12 tol 1e-5
+@8 expect O1 0.13 tol 1e-5
+@9 expect O1 0.14 tol 1e-5
+# end reached: mode-driven playback holds the last sample (no auto-stop)
+@10 expect O1 0.14 tol 1e-5
+@11 expect O1 0.14 tol 1e-5

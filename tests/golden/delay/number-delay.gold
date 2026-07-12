@@ -1,0 +1,36 @@
+# delay: the discrete number track (numberin -> numberout) delayed. Numbers are
+# rounded to the nearest integer and clamped to 0..255 (manual: "range 0 .. 255").
+# numberout is observed via an internal cable (_NUM) so the value is unclamped by
+# the +/-1.0 O-register limit; the copy circuit reads _NUM to satisfy the
+# "cable must have a reader" rule. tickrate 100, delay 0.3 s = 30 ticks.
+#
+# numberin (I1) -> recorded number:
+#   t0..9   = 42      (42)
+#   t10..19 = 42.6    (rounds to 43)
+#   t20..39 = 300     (clamps to 255)
+#   t40+    = -5       (clamps to 0)
+# _NUM reads (t-30):
+#   t29 -> pos -1  -> 0
+#   t30 -> buf[0]  -> 42
+#   t40 -> buf[10] -> 43
+#   t50 -> buf[20] -> 255
+#   t70 -> buf[40] -> 0
+tickrate 100
+patch <<<
+[delay]
+    numberin  = I1
+    numberout = _NUM
+    delay     = 0.3
+[copy]
+    input  = _NUM
+    output = O5
+>>>
+@0 set I1 42
+@10 set I1 42.6
+@20 set I1 300
+@29 expect _NUM 0 tol 1e-4
+@30 expect _NUM 42 tol 1e-4
+@40 set I1 -5
+@40 expect _NUM 43 tol 1e-4
+@50 expect _NUM 255 tol 1e-4
+@70 expect _NUM 0 tol 1e-4

@@ -1,0 +1,26 @@
+# midiin: basic monophonic note -> pitch/gate/velocity/trigger (manual "Basic
+# operation", lines 38-53). Pitch is 1V/oct with MIDI note 24 (C0) = 0 V; note
+# 60 = 3 V = 0.3 engine units (midiout.md:346 fixes the reference: note 0 =
+# -2 V, note 127 = 8.583 V). Velocity 0..127 -> 0..1 (100/127 = 0.7874). The
+# per-note `trigger` is a 5 ms pulse at note start (manual line 366); tickrate
+# 1000 makes that 5 ticks. On note off the gate falls, velocity resets to 0
+# (holdvelocity default 0, line 336) and the pitch HOLDS its last value.
+tickrate 1000
+patch <<<
+[midiin]
+    pitch    = O1
+    gate     = O2
+    velocity = O3
+    trigger  = O4
+>>>
+@0 midisend trs noteon 1 60 100
+@0 expect O1 0.3
+@0 expect O2 1
+@0 expect O3 0.787402 tol 0.0001
+@0 expect O4 1
+@5 expect O4 0
+@5 expect O2 1
+@10 midisend trs noteoff 1 60 0
+@10 expect O2 0
+@10 expect O1 0.3
+@10 expect O3 0

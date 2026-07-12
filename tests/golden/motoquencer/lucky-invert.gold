@@ -1,0 +1,43 @@
+# motoquencer "I Feel Lucky": luckyinvert flips each affected step's CV within the
+# allowed range (position 0..1 -> 1-position). luckyamount has no influence and the
+# op is deterministic. Scope defaults to 0 (all steps between start and end) and
+# luckychance defaults to 1 (every step affected), so all four steps invert.
+#
+# Continuous pitch (quantize=0, cvbase=0, cvrange=1): CV == fader position, so the
+# four steps set to 0.1/0.3/0.6/0.9 read back inverted as 0.9/0.7/0.4/0.1. A lucky
+# op also re-commands the motor faders to the new values, so the display page does
+# not clobber the reroll on the next tick.
+tickrate 100
+patch <<<
+[m4]
+[motoquencer]
+    numfaders   = 4
+    quantize    = 0
+    cvbase      = 0
+    cvrange     = 1
+    holdcv      = 0
+    clock       = I1
+    cv          = O1
+    luckyinvert = I2
+>>>
+@0 expect O1 0 tol 1e-4
+# tick1: set the four step pitches on the faders.
+@1 move F1 0.1
+@1 move F2 0.3
+@1 move F3 0.6
+@1 move F4 0.9
+# tick2: fire luckyinvert -> cvpos becomes 0.9/0.7/0.4/0.1.
+@2 set I2 1
+@3 set I2 0
+# clock through the four steps: cv follows each inverted step.
+@4 set I1 1
+@4 expect O1 0.9 tol 1e-4
+@5 set I1 0
+@6 set I1 1
+@6 expect O1 0.7 tol 1e-4
+@7 set I1 0
+@8 set I1 1
+@8 expect O1 0.4 tol 1e-4
+@9 set I1 0
+@10 set I1 1
+@10 expect O1 0.1 tol 1e-4

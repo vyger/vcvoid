@@ -1,0 +1,50 @@
+# notchedpot (obsolete; superseded by pot -- crosscheck reports it deprecated).
+# Two circuits share P1.1. Circuit 1 uses the default notch (0.1 -> flat zone
+# [0.45,0.55]); circuit 2 disables the notch (notch=0) to expose the raw pot and
+# its bipolar / hemisphere outputs (all at scale 1, notchedpot has no
+# outputscale).
+#   default notch: x=0.5 ->0.5 ; x=0.44 -> 0.44/0.45*0.5 = 0.488889 ;
+#                  x=0.90 -> 0.5+(0.9-0.55)/0.45*0.5 = 0.888889
+#   notch=0 raw:   x=0.5 -> out .5 bip 0  L 0 Li 1
+#                  x=0   -> out 0  bip -1 L 1 Li 0
+#                  x=1   -> out 1  bip 1  L 0 Li 1
+tickrate 100
+patch <<<
+[p2b8]
+
+[notchedpot]
+    pot     = P1.1
+    output  = O1
+    bipolar = O2
+
+[notchedpot]
+    pot         = P1.1
+    notch       = 0
+    output      = O3
+    bipolar     = O4
+    lefthalf    = O5
+    lefthalfinv = O6
+>>>
+@0 set P1.1 0.5
+@0 expect O1 0.5 tol 1e-4
+@0 expect O2 0 tol 1e-4
+@0 expect O3 0.5 tol 1e-4
+@0 expect O4 0 tol 1e-4
+@0 expect O5 0 tol 1e-4
+@0 expect O6 1 tol 1e-4
+@1 set P1.1 0.44
+@1 expect O1 0.488889 tol 1e-4
+@1 expect O3 0.44 tol 1e-4
+@2 set P1.1 0.9
+@2 expect O1 0.888889 tol 1e-4
+@2 expect O3 0.9 tol 1e-4
+@3 set P1.1 0.0
+@3 expect O3 0 tol 1e-4
+@3 expect O4 -1 tol 1e-4
+@3 expect O5 1 tol 1e-4
+@3 expect O6 0 tol 1e-4
+@4 set P1.1 1.0
+@4 expect O3 1 tol 1e-4
+@4 expect O4 1 tol 1e-4
+@4 expect O5 0 tol 1e-4
+@4 expect O6 1 tol 1e-4

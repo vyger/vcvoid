@@ -1,0 +1,24 @@
+# slewup/slewdown scale the slew rate per direction: effective slew = slew*slewup
+# when moving up, slew*slewdown when moving down (larger slew = slower). Here
+# slew=1, slewup=2 (up is half speed), slewdown=1. Linear, tickrate 100.
+#   up:   effSlew=2 -> step (0.1/2)/100 = 0.0005/tick
+#   down: effSlew=1 -> step (0.1/1)/100 = 0.001/tick
+# Ramp up to 0.005 over 10 ticks (0.0005*10), then down to 0 over 5 ticks.
+tickrate 100
+patch <<<
+[slew]
+    input    = I1
+    slew     = 1
+    slewup   = 2
+    slewdown = 1
+    linear   = O1
+>>>
+@0 set I1 0.005
+@0 expect O1 0.0005 tol 1e-6
+@4 expect O1 0.0025 tol 1e-6
+@9 expect O1 0.005 tol 1e-6
+# now step down to 0 -> faster descent (0.001/tick)
+@10 set I1 0
+@10 expect O1 0.004 tol 1e-6
+@11 expect O1 0.003 tol 1e-6
+@14 expect O1 0 tol 1e-6

@@ -1,0 +1,151 @@
+# algoquencer button surface: pages (normal / accent / alternate / length mode),
+# LED cursor, reset LED rule, length precedence, clearpage.
+# Conventions (SPEC-GAP where the manual is silent):
+#  * step LED = max(page bit, 0.5 * cursor) on the normal view; cursor marks the
+#    most recently played step and is DARK after reset until the next clock
+#    (manual pins the reset rule explicitly).
+#  * length mode / accent / alternate views show pure page bits (no cursor).
+#  * length precedence: `length` input overrides button count; once lengthbutton
+#    has been used, the interactive length wins permanently.
+# accents default startaccents=2: downbeats (odd 1-based steps) pre-set.
+tickrate 100
+patch <<<
+[p2b8]
+
+[algoquencer]
+    clock           = I1
+    clearpage       = I2
+    reset           = I3
+    length          = I4
+    button1         = B1.1
+    button2         = B1.2
+    button3         = B1.3
+    button4         = B1.4
+    led1            = L1.1
+    led2            = L1.2
+    led3            = L1.3
+    led4            = L1.4
+    lengthbutton    = B1.5
+    accentbutton    = B1.6
+    alternatebutton = B1.7
+    trigger         = O1
+    accent          = O2
+    lengthoutput    = _LEN
+    startofbar      = O4
+>>>
+patch <<<
+[copy]
+    input  = _LEN
+    output = O5
+>>>
+# length input wired: effective length 3 (overrides the 4-button default)
+@0 set I4 3
+@0 expect _LEN 3 tol 1e-5
+# set steps 1 and 2 (indices 0, 1)
+@1 set B1.1 1
+@2 set B1.1 0
+@2 set B1.2 1
+@3 set B1.2 0
+@3 expect L1.1 1 tol 1e-5
+@3 expect L1.2 1 tol 1e-5
+@3 expect L1.3 0 tol 1e-5
+# clock 3 steps: beats on steps 0,1; step 2 empty (cursor 0.5 on its LED).
+# accents: downbeats (bi 0 and 2) preset -> accent high on step 0, low on step 1,
+# low on step 2 (accented page bit but NO note triggered there).
+@5 set I1 1
+@5 expect O1 1 tol 1e-5
+@5 expect O2 1 tol 1e-5
+@5 expect O4 1 tol 1e-5
+@5 expect L1.1 1 tol 1e-5
+@6 set I1 0
+@6 expect O1 0 tol 1e-5
+@7 set I1 1
+@7 expect O1 1 tol 1e-5
+@7 expect O2 0 tol 1e-5
+@7 expect O4 0 tol 1e-5
+@8 set I1 0
+@9 set I1 1
+@9 expect O1 0 tol 1e-5
+@9 expect O2 0 tol 1e-5
+@9 expect L1.3 0.5 tol 1e-5
+@10 set I1 0
+# reset: cursor LED dark until the next clock
+@11 set I3 1
+@12 set I3 0
+@12 expect L1.3 0 tol 1e-5
+@12 expect L1.1 1 tol 1e-5
+# next clock plays step 0 again (reset armed)
+@13 set I1 1
+@13 expect O1 1 tol 1e-5
+@13 expect O4 1 tol 1e-5
+@13 expect L1.1 1 tol 1e-5
+@14 set I1 0
+# length mode: while held, LEDs show the length (3); pressing button4 sets
+# length 4. The press must NOT toggle step 4 in the normal page.
+@15 set B1.5 1
+@16 expect L1.1 1 tol 1e-5
+@16 expect L1.2 1 tol 1e-5
+@16 expect L1.3 1 tol 1e-5
+@16 expect L1.4 0 tol 1e-5
+@17 set B1.4 1
+@18 set B1.4 0
+@18 expect L1.4 1 tol 1e-5
+@18 expect _LEN 4 tol 1e-5
+@19 set B1.5 0
+# interactive length now wins over the `length` input permanently
+@20 set I4 2
+@21 expect _LEN 4 tol 1e-5
+@21 expect L1.4 0 tol 1e-5
+# accent page: hold accentbutton -> shows accent bits (downbeats bi0, bi2).
+# Press button2 -> accent added on step 1.
+@22 set B1.6 1
+@23 expect L1.1 1 tol 1e-5
+@23 expect L1.2 0 tol 1e-5
+@23 expect L1.3 1 tol 1e-5
+@23 expect L1.4 0 tol 1e-5
+@24 set B1.2 1
+@25 set B1.2 0
+@25 expect L1.2 1 tol 1e-5
+@26 set B1.6 0
+# step 1 now plays with an accent (transport is at step 0; next clock -> step 1)
+@27 set I1 1
+@27 expect O1 1 tol 1e-5
+@27 expect O2 1 tol 1e-5
+@28 set I1 0
+# clearpage on the normal page: all steps cleared
+@29 set I2 1
+@30 set I2 0
+@30 expect L1.1 0 tol 1e-5
+@30 expect L1.2 0.5 tol 1e-5   # cursor overlay: step 1 last played
+# rebuild: step 0 on; alternate page: hold alternatebutton, set alt bit on step 1.
+# alternatebars=2 (default): every 2nd bar the alternate page flips the steps.
+@31 set B1.1 1
+@32 set B1.1 0
+@33 set B1.7 1
+@34 expect L1.1 0 tol 1e-5
+@34 expect L1.2 0 tol 1e-5
+@35 set B1.2 1
+@36 set B1.2 0
+@36 expect L1.2 1 tol 1e-5
+@37 set B1.7 0
+@37 expect L1.2 0.5 tol 1e-5   # normal view again: alt bit hidden, cursor on step 1
+# reset, then clock 8 steps (length 4): bar 0 plays {0}; bar 1 is alternated ->
+# {0} XOR alt{1} = beats on steps 0 and 1.
+@38 set I3 1
+@39 set I3 0
+@41 set I1 1
+@41 expect O1 1 tol 1e-5
+@42 set I1 0
+@43 set I1 1
+@43 expect O1 0 tol 1e-5
+@44 set I1 0
+@45 set I1 1
+@46 set I1 0
+@47 set I1 1
+@48 set I1 0
+@49 set I1 1
+@49 expect O1 1 tol 1e-5
+@50 set I1 0
+@51 set I1 1
+@51 expect O1 1 tol 1e-5
+@52 set I1 0

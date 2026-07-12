@@ -1,0 +1,28 @@
+# tuningmode / tuningpitch / transpose output stage. transpose adds to the
+# quantized note only when NOT tuning; tuningmode outputs tuningpitch instead of
+# the actual pitch (overriding transpose). C lydian, direction up.
+patch <<<
+[minifonion]
+    input       = I1
+    output      = O2
+    tuningmode  = I2
+    tuningpitch = 0.05
+    transpose   = I3
+>>>
+# normal, no transpose: C# -> D (2 semi)
+@0 set I1 0.0083333
+@0 set I2 0
+@0 set I3 0
+@0 expect O2 0.0166667 tol 1e-5
+# transpose +1 octave (0.1): D + 0.1 = 0.1166667
+@1 set I3 0.1
+@1 expect O2 0.1166667 tol 1e-5
+# tuning mode on: output tuningpitch (0.05), transpose ignored
+@2 set I2 1
+@2 expect O2 0.05 tol 1e-5
+# transpose changes are ignored while tuning
+@3 set I3 0.2
+@3 expect O2 0.05 tol 1e-5
+# tuning off: quantized D + transpose 0.2 = 0.2166667
+@4 set I2 0
+@4 expect O2 0.2166667 tol 1e-5

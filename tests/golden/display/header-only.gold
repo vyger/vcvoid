@@ -1,0 +1,11 @@
+# display: a header on its own never activates the display.  Spec: display.md
+# "It is not possible to just display a header." With no `text` and no `value`
+# there is no body content, so the circuit makes no write attempt and D1 stays OFF.
+tickrate 100
+patch <<<
+[db8e]
+[display]
+    header = "ONLY"
+>>>
+@0 expectdisplay D1 off
+@3 expectdisplay D1 off

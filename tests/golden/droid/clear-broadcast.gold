@@ -1,0 +1,51 @@
+# [droid] clear/clearall broadcast: a trigger to [droid]'s clear sends a clear
+# to every circuit whose OWN clear input is unpatched (manual-pinned); circuits
+# with a patched clear input are skipped. Implemented as a one-tick pulse of
+# the unpatched inputs' default value, so each circuit's own edge detector
+# fires one tick after the [droid] trigger.
+# Button A (toggle, startvalue 0) has no clear patched -> receives broadcast.
+# Button B patches clear = I4 -> broadcast must NOT touch it.
+tickrate 100
+patch <<<
+[droid]
+    clear    = I2
+    clearall = I3
+>>>
+patch <<<
+[p2b8]
+
+[button]
+    button = B1.1
+    output = O1
+>>>
+patch <<<
+[button]
+    button = B1.2
+    clear  = I4
+    output = O2
+>>>
+# toggle both buttons on
+@0 set B1.1 1
+@0 set B1.2 1
+@1 set B1.1 0
+@1 set B1.2 0
+@1 expect O1 1 tol 1e-5
+@1 expect O2 1 tol 1e-5
+# broadcast clear: A resets to startvalue (0) one tick after the trigger; B
+# keeps its state (its clear input is patched)
+@2 set I2 1
+@3 set I2 0
+@3 expect O1 0 tol 1e-5
+@3 expect O2 1 tol 1e-5
+# the pulse is one tick: A can be toggled right back on
+@5 set B1.1 1
+@6 set B1.1 0
+@6 expect O1 1 tol 1e-5
+# B's own patched clear still works directly
+@7 set I4 1
+@7 expect O2 0 tol 1e-5
+@8 set I4 0
+# clearall broadcasts the same way (A cleared again)
+@9 set I3 1
+@10 set I3 0
+@10 expect O1 0 tol 1e-5

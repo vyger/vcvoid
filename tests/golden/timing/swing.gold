@@ -1,0 +1,48 @@
+# Manual example (timing.md:34): standard swing -- every SECOND clock pulse
+# delayed by 30% of one clock cycle. Steady clock, period P=20 ticks, so a
+# 0.3 shift = 6 ticks. Beats: 0,2,4,6 on time; 1,3,5,7 delayed to edge+6.
+# (`output`/`clock` on I/O registers -- G1/G2 in the manual are MASTER18-only.)
+tickrate 100
+patch <<<
+[timing]
+    clock  = I1
+    output = O1
+    timing1 = 0
+    timing2 = 0.3
+>>>
+@0 set I1 1
+@0 expect O1 1
+@1 set I1 0
+@1 expect O1 0
+@20 set I1 1
+@20 expect O1 0
+@21 set I1 0
+@26 expect O1 1
+@27 expect O1 0
+@40 set I1 1
+@40 expect O1 1
+@41 set I1 0
+@41 expect O1 0
+@60 set I1 1
+@60 expect O1 0
+@61 set I1 0
+@66 expect O1 1
+@67 expect O1 0
+@80 set I1 1
+@80 expect O1 1
+@81 set I1 0
+@81 expect O1 0
+@100 set I1 1
+@100 expect O1 0
+@101 set I1 0
+@106 expect O1 1
+@107 expect O1 0
+@120 set I1 1
+@120 expect O1 1
+@121 set I1 0
+@121 expect O1 0
+@140 set I1 1
+@140 expect O1 0
+@141 set I1 0
+@146 expect O1 1
+@147 expect O1 0

@@ -1,0 +1,30 @@
+# midiout pitch tracking (manual lines 249-254, 362-363). Monophonic: while a note
+# plays, changes in pitch1 are converted to MIDI pitch bend relative to the struck
+# note, scaled by pitchbendrange. pitchtracking=1 alters within range and clips.
+# Here the note is struck at pitch 0 (note 24 = 0 V exactly, so the reference is
+# exact). pitchbendrange = 0.1 (1 V = one octave). Raising pitch1 to 0.025 is +1/4
+# of that range -> bend value 8192 + round(0.25*8191) = 10240. No initial center is
+# sent because pitchbend itself is not patched (tracking drives the bend on change,
+# updaterate high so it lands the next tick).
+tickrate 1000
+x7 1
+patch <<<
+[midiout]
+    pitch = I1
+    gate  = I2
+    pitchtracking = 1
+    pitchbendrange = 0.1
+    pitchstabilization = 0
+    activesensing = 0
+    delayinitialccs = 0
+    updaterate = 1000
+>>>
+@0 set I1 0
+@1 set I2 1
+@1 expectmidi trs noteon 1 24 127
+@1 expectmidi trs none
+@2 set I1 0.025
+@2 expectmidi trs bend 1 10240
+@3 expectmidi trs none
+@10 set I2 0
+@10 expectmidi trs noteoff 1 24 127

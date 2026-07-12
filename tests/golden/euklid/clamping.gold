@@ -1,0 +1,45 @@
+# Input clamping from the Inputs table:
+#  A: beats (10) > length (4) is capped to length -> every step is a beat.
+#  B: beats = 0 -> no beats, every step is an off-beat.
+#  C: length <= 0 is treated as 1 -> a single step (always step 0, always a beat
+#     since beats is then capped to 1).
+# All three share the clock I1.
+patch <<<
+[euklid]
+    clock    = I1
+    length   = 4
+    beats    = 10
+    output   = O1
+>>>
+
+patch <<<
+[euklid]
+    clock    = I1
+    length   = 4
+    beats    = 0
+    output   = O2
+    offbeats = O3
+>>>
+
+patch <<<
+[euklid]
+    clock    = I1
+    length   = 0
+    beats    = 5
+    output   = O4
+>>>
+
+@1 set I1 1
+@1 expect O1 1
+@1 expect O2 0
+@1 expect O3 1
+@1 expect O4 1
+@2 set I1 0
+@2 expect O1 0
+@2 expect O3 0
+@2 expect O4 0
+@3 set I1 1
+@3 expect O1 1
+@3 expect O3 1
+@3 expect O4 1
+@4 set I1 0

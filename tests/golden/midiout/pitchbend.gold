@@ -1,0 +1,24 @@
+# midiout pitchbend CV (manual lines 361, 386). The pitchbend CV ranges -1..1 and
+# maps to the 14-bit MIDI bend 0..16383 with center 8192. Because pitchbend is a
+# continuous controller it sends an initial value once (after delayinitialccs,
+# here 0) and then on change, rate-limited by updaterate (here 1000/s -> every
+# 1 ms so each change lands the next tick). p=0.5 -> 12288, p=1 -> 16383,
+# p=-1 -> 0.
+tickrate 1000
+x7 1
+patch <<<
+[midiout]
+    pitchbend = I1
+    activesensing = 0
+    delayinitialccs = 0
+    updaterate = 1000
+>>>
+@0 set I1 0
+@0 expectmidi trs bend 1 8192
+@5 set I1 0.5
+@5 expectmidi trs bend 1 12288
+@6 set I1 1
+@6 expectmidi trs bend 1 16383
+@7 set I1 -1
+@7 expectmidi trs bend 1 0
+@8 expectmidi trs none

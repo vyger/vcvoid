@@ -1,0 +1,11 @@
+# Smoke test: midisend/expectmidi plumbing with X7 present (default).
+# No circuit consumes the inbound event or emits anything, so both out-queues
+# stay empty -- this proves the harness wiring without a false positive.
+patch <<<
+[copy]
+  input = I1
+  output = O1
+>>>
+@0 midisend trs noteon 1 60 100
+@0 expectmidi trs none
+@0 expectmidi usb none

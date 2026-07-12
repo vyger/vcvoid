@@ -1,0 +1,24 @@
+# "load" loads the value defined by loadvalue into the flip flop.
+# First patch: loadvalue explicitly 0, starting from startvalue=1 -- load
+# should drive the bit to 0. Second patch: loadvalue left at its documented
+# default of 1, starting from the default startvalue=0 -- load should drive
+# the bit to 1. Both share the same I1 trigger register (goldfile events are
+# globally tick-ordered, sets-before-expects, across merged patch blocks).
+patch <<<
+[flipflop]
+    load = I1
+    loadvalue = 0
+    startvalue = 1
+    output = O1
+>>>
+
+patch <<<
+[flipflop]
+    load = I1
+    output = O2
+>>>
+@0 expect O1 1
+@0 expect O2 0
+@1 set I1 1
+@1 expect O1 0
+@1 expect O2 1

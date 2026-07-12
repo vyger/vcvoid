@@ -1,0 +1,52 @@
+# math: modulo "folds" input1 into the range [0, input2). Manual's exact
+# worked numbers (in volts, /10 for engine units): with input2 = 1V (0.1):
+#   1.234V -> 0.234V   i.e. input1=0.1234 -> 0.0234
+#     0.1234 - 0.1*floor(0.1234/0.1) = 0.1234 - 0.1*floor(1.234) = 0.1234 - 0.1*1 = 0.0234
+#  -2.1V   -> 0.9V     i.e. input1=-0.21  -> 0.09
+#     -0.21 - 0.1*floor(-0.21/0.1) = -0.21 - 0.1*floor(-2.1) = -0.21 - 0.1*(-3) = 0.09
+#   0.5V   -> 0.5V     i.e. input1=0.05   -> 0.05 (already in range)
+#     0.05 - 0.1*floor(0.05/0.1) = 0.05 - 0.1*floor(0.5) = 0.05 - 0 = 0.05
+# "If input2 is zero or negative, the output will be zero":
+#   I5=0.7, I6 unpatched (0)      -> 0
+#   I7=0.7, I8=-0.3 (negative)    -> 0
+# All 8 master inputs (I1..I8) are used, one per distinct value needed. All
+# results are within [-1,1] so plain O registers are used.
+patch <<<
+[math]
+    input1 = I1
+    input2 = I2
+    modulo = O1
+
+[math]
+    input1 = I3
+    input2 = I2
+    modulo = O2
+
+[math]
+    input1 = I4
+    input2 = I2
+    modulo = O3
+
+[math]
+    input1 = I5
+    input2 = I6
+    modulo = O4
+
+[math]
+    input1 = I7
+    input2 = I8
+    modulo = O5
+>>>
+
+@0 set I1 0.1234
+@0 set I2 0.1
+@0 set I3 -0.21
+@0 set I4 0.05
+@0 set I5 0.7
+@0 set I7 0.7
+@0 set I8 -0.3
+@0 expect O1 0.0234 tol 1e-4
+@0 expect O2 0.09 tol 1e-4
+@0 expect O3 0.05 tol 1e-4
+@0 expect O4 0.0 tol 1e-6
+@0 expect O5 0.0 tol 1e-6

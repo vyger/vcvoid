@@ -1,0 +1,39 @@
+# button: states = 4 cycles 0 -> 1 -> 2 -> 3 -> 0. output emits the default
+# values 0,1,2,3 (routed through a cable so 2 and 3 are observed unclamped).
+# led dims through 0, 1/3, 2/3, 1 (= E/(states-1)).
+#   t1 press -> state1: output 1, led 0.3333
+#   t3 press -> state2: output 2, led 0.6667
+#   t5 press -> state3: output 3, led 1
+#   t7 press -> state0 (wrap): output 0, led 0
+tickrate 100
+patch <<<
+[p2b8]
+
+[button]
+    button = B1.1
+    led    = L1.1
+    states = 4
+    output = _S
+
+[copy]
+    input  = _S
+    output = O1
+>>>
+@0 expect _S 0 tol 1e-4
+@0 expect L1.1 0 tol 1e-4
+@1 set B1.1 1
+@1 expect _S 1 tol 1e-4
+@1 expect L1.1 0.33333 tol 1e-3
+@2 set B1.1 0
+@3 set B1.1 1
+@3 expect _S 2 tol 1e-4
+@3 expect L1.1 0.66667 tol 1e-3
+@4 set B1.1 0
+@5 set B1.1 1
+@5 expect _S 3 tol 1e-4
+@5 expect L1.1 1 tol 1e-4
+@6 set B1.1 0
+@7 set B1.1 1
+@7 expect _S 0 tol 1e-4
+@7 expect L1.1 0 tol 1e-4
+@8 set B1.1 0

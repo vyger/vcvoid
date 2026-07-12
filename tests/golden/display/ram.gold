@@ -1,0 +1,12 @@
+# display RAM accounting (display.md frontmatter: ram_bytes 56).
+# Hand-computed Forge accounting on a MASTER (typeOfMaster()==16 always adds the
+# X7's 864 bytes, attached or not):
+#   x7            864
+#   display base   56   (display.md ram_bytes; jack tables list 14 inputs, no output)
+#   constants      16   (Forge always seeds {0.0, 1.0} = 2 x 4 bytes = 8 -> ALIGN_UP(8,16) = 16)
+#   ------------------
+#   total         936
+expect_ram 936
+patch <<<
+[display]
+>>>

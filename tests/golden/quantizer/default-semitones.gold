@@ -1,0 +1,25 @@
+# quantizer with default steps=12 -> 12 steps per 1 V, i.e. semitones. Step size
+# = 0.1/12 engine units. Default direction=1 (nearest). output = round(input/step)*step.
+#   0      -> 0
+#   0.1    -> round(12)  * step = 0.1        (1 V = 12 semitones)
+#   0.05   -> round(6)   * step = 0.05
+#   0.045  -> round(5.4) * step = 5  -> 0.0416667
+#   0.04   -> round(4.8) * step = 5  -> 0.0416667
+#  -0.045  -> round(-5.4)* step = -5 -> -0.0416667
+patch <<<
+[quantizer]
+    input  = I1
+    output = O1
+>>>
+@0 set I1 0
+@0 expect O1 0 tol 1e-5
+@1 set I1 0.1
+@1 expect O1 0.1 tol 1e-5
+@2 set I1 0.05
+@2 expect O1 0.05 tol 1e-5
+@3 set I1 0.045
+@3 expect O1 0.0416667 tol 1e-5
+@4 set I1 0.04
+@4 expect O1 0.0416667 tol 1e-5
+@5 set I1 -0.045
+@5 expect O1 -0.0416667 tol 1e-5

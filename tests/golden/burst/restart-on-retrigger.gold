@@ -1,0 +1,37 @@
+# "When a new trigger arrives while the current burst is still ongoing, it will
+# not be finished but restarted from the beginning immediately."
+# Same params as basic-burst (tickrate 8, hz 1, count 3). Trigger at t1 begins
+# pulse 1 (t1..t4 high). A second trigger at t5 restarts the burst from phase 0,
+# so t5..t8 is a NEW pulse 1 -- WITHOUT the restart t5..t8 would be low (the
+# original burst's low half). The tell is 5 consecutive highs t4..t8: the
+# original burst alone only ever produces 4-tick-wide pulses.
+tickrate 8
+patch <<<
+[burst]
+    trigger = I1
+    hz      = 1
+    count   = 3
+    output  = O1
+>>>
+@0 expect O1 0
+@1 set I1 1
+@1 expect O1 1
+@2 set I1 0
+@2 expect O1 1
+@3 expect O1 1
+@4 expect O1 1
+@5 set I1 1
+@5 expect O1 1
+@6 set I1 0
+@6 expect O1 1
+@7 expect O1 1
+@8 expect O1 1
+@9 expect O1 0
+@10 expect O1 0
+@11 expect O1 0
+@12 expect O1 0
+@13 expect O1 1
+@14 expect O1 1
+@15 expect O1 1
+@16 expect O1 1
+@17 expect O1 0

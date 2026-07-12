@@ -1,0 +1,49 @@
+# Manual example (timing.md:59): a 3-step pattern. Every second note OF THREE
+# delayed 20% (4 ticks), every third by 10% (2 ticks). step0=0, step1=0.2,
+# step2=0.1. Beats 1,4 -> edge+4; beats 2,5 -> edge+2; beats 0,3,6 on time.
+tickrate 100
+patch <<<
+[timing]
+    clock  = I1
+    output = O1
+    timing1 = 0
+    timing2 = 0.2
+    timing3 = 0.1
+>>>
+@0 set I1 1
+@0 expect O1 1
+@1 set I1 0
+@1 expect O1 0
+@20 set I1 1
+@20 expect O1 0
+@21 set I1 0
+@24 expect O1 1
+@25 expect O1 0
+@40 set I1 1
+@40 expect O1 0
+@41 set I1 0
+@42 expect O1 1
+@43 expect O1 0
+@60 set I1 1
+@60 expect O1 1
+@61 set I1 0
+@61 expect O1 0
+@80 set I1 1
+@80 expect O1 0
+@81 set I1 0
+@84 expect O1 1
+@85 expect O1 0
+@100 set I1 1
+@100 expect O1 0
+@101 set I1 0
+@102 expect O1 1
+@103 expect O1 0
+@120 set I1 1
+@120 expect O1 1
+@121 set I1 0
+@121 expect O1 0
+@140 set I1 1
+@140 expect O1 0
+@141 set I1 0
+@144 expect O1 1
+@145 expect O1 0

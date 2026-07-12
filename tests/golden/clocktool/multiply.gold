@@ -1,0 +1,27 @@
+# clocktool multiply=2: an extra output pulse is inserted midway between input
+# clocks. period 10 (tickrate 100). The first cycle is a learning transient (the
+# period isn't known until the 2nd input edge), so mid pulses appear from the
+# 2nd cycle on: output edges at t10, t15, t20, t25, ... (every 5 ticks). 1-tick
+# default gate.
+tickrate 100
+patch <<<
+[clocktool]
+    clock    = I1
+    multiply = 2
+    output   = O1
+>>>
+@0 set I1 1
+@1 set I1 0
+@10 set I1 1
+@10 expect O1 1
+@11 set I1 0
+@11 expect O1 0
+@15 expect O1 1
+@16 expect O1 0
+@20 set I1 1
+@20 expect O1 1
+@21 set I1 0
+@25 expect O1 1
+@30 set I1 1
+@30 expect O1 1
+@31 set I1 0

@@ -1,0 +1,34 @@
+# matrixmixer: when `preset` is NOT patched, the load/save triggers carry the
+# preset number as their own value (e.g. a trigger of value 2 targets preset 2).
+# This mode is automatically active without a preset input. savepreset = I7,
+# loadpreset = I8, no preset jack.
+#   t1: press button11 -> node on -> O1 = 0.6
+#   t3: savepreset with value 2 -> preset 2 = current
+#   t5: toggle button11 off -> O1 = 0
+#   t7: loadpreset value 1 (never saved) -> preset 1 is empty -> O1 = 0
+#   t9: loadpreset value 2 -> restores the saved node -> O1 = 0.6
+tickrate 100
+patch <<<
+[matrixmixer]
+    startvalue = 0
+    input1     = I1
+    output1    = O1
+    button11   = I5
+    savepreset = I7
+    loadpreset = I8
+>>>
+@0 set I1 0.6
+@1 set I5 1
+@2 set I5 0
+@2 expect O1 0.6 tol 1e-4
+@3 set I7 2
+@4 set I7 0
+@5 set I5 1
+@6 set I5 0
+@6 expect O1 0 tol 1e-4
+@7 set I8 1
+@7 expect O1 0 tol 1e-4
+@8 set I8 0
+@9 set I8 2
+@9 expect O1 0.6 tol 1e-4
+@10 set I8 0

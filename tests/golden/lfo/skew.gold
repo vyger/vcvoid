@@ -1,0 +1,37 @@
+# lfo: `skew` reshapes the `triangle` output by moving the peak.
+#   skew=0.5 symmetric (covered in waveforms.gold).
+#   skew=0.0 -> exact falling ramp  (u = 1-p), identical to the `ramp` output.
+#   skew=1.0 -> rising sawtooth      (u = p).
+#   skew=0.25 -> peak at phase 0.25: rising u=p/0.25 then falling u=(1-p)/0.75.
+# hz=4, tickrate 6000, one cycle = 1500 ticks.
+tickrate 6000
+patch <<<
+[lfo]
+    hz       = 4
+    skew     = 0.0
+    triangle = O1
+
+[lfo]
+    hz       = 4
+    skew     = 1.0
+    triangle = O2
+
+[lfo]
+    hz       = 4
+    skew     = 0.25
+    triangle = O3
+>>>
+
+# skew=0 == ramp (falling): tick0->1.0, tick750->0.5, tick1125->0.25
+@0    expect O1 1.0  tol 1e-3
+@750  expect O1 0.5  tol 1e-3
+@1125 expect O1 0.25 tol 1e-3
+
+# skew=1 == sawtooth (rising): tick375->0.25, tick1125->0.75
+@375  expect O2 0.25 tol 1e-3
+@1125 expect O2 0.75 tol 1e-3
+
+# skew=0.25: peak at phase 0.25 (tick 375). rising side steeper.
+@150  expect O3 0.4    tol 1e-3   # phase 0.1 -> 0.1/0.25
+@375  expect O3 1.0    tol 1e-3   # peak
+@750  expect O3 0.6667 tol 1e-3   # phase 0.5 -> (1-0.5)/0.75

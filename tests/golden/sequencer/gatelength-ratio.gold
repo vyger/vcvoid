@@ -1,0 +1,27 @@
+# When gatelength is patched (0..1) the output gate length is that ratio of the
+# input clock period. gatelength=0.5 with a 4-tick clock period -> gate high for
+# 2 ticks after each step. The period is learned from consecutive clock edges, so
+# the ratio applies from the second cycle on (first cycle falls back to clock
+# passthrough while the period is still unknown).
+patch <<<
+[sequencer]
+    clock       = I1
+    gatelength  = I3
+    pitchoutput = O1
+    gateoutput  = O2
+    pitch1      = 0.10
+>>>
+@0 set I3 0.5
+@0 set I1 1
+@1 set I1 0
+@4 set I1 1
+@4 expect O2 1
+@5 set I1 0
+@5 expect O2 1
+@6 expect O2 0
+@7 expect O2 0
+@8 set I1 1
+@8 expect O2 1
+@9 set I1 0
+@9 expect O2 1
+@10 expect O2 0

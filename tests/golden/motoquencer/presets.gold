@@ -1,0 +1,31 @@
+# motoquencer: immediate preset switching (preset input, no load/save triggers).
+# Editing then switching the preset saves the current sequence into the old slot,
+# loads the new slot, and the motors recall the loaded values (expect F<n>). 4
+# presets. Here step 0's pitch is edited differently in preset 0 and preset 1.
+tickrate 100
+patch <<<
+[m4]
+[motoquencer]
+    clock  = I1
+    preset = I2
+    cv     = O1
+>>>
+# preset 0: step 0 -> 0.1 V (notch 7, pos 0.5).
+@1 move F1 0.5
+@1 expect F1 0.5 tol 1e-4
+# switch to preset 1: seeded (all 0) recalled -> fader drops to 0.
+@2 set I2 1
+@2 expect F1 0.0 tol 1e-4
+# preset 1: step 0 -> 0.2 V (notch 14, pos 1.0).
+@3 move F1 1.0
+@3 expect F1 1.0 tol 1e-4
+# back to preset 0: the 0.5 edit is recalled.
+@4 set I2 0
+@4 expect F1 0.5 tol 1e-4
+# clock preset 0: the first edge plays step 0 = 0.1 V.
+@5 set I1 1
+@5 expect O1 0.1 tol 1e-4
+# switch to preset 1 again (no clock): its edited 0.2 V is recalled to the fader.
+@6 set I1 0
+@6 set I2 1
+@6 expect F1 1.0 tol 1e-4

@@ -1,0 +1,39 @@
+# encoder: autozoom. Fast turns cover more ground than slow ones. SPEC-GAP curve
+# (encodercore.hpp): a tick's movement is scaled by pow(|detents|, autozoom*1.5).
+# autozoom = 1, sensivity = 0.1 (base step = 0.1/96 per detent), mode 1, smooth 0.
+# encA (E1.1): 10 detents in ONE tick -> zoom = pow(10,1.5) = 31.6228
+#   -> 10 * (0.1/96) * 31.6228 = 0.329404
+# encB (E1.2): 1 detent per tick over 10 ticks -> zoom = pow(1,1.5) = 1 each
+#   -> 10 * (0.1/96) = 0.0104167  (10x + slower to move)
+tickrate 100
+patch <<<
+[e4]
+
+[encoder]
+    encoder   = E1.1
+    output    = O1
+    autozoom  = 1
+    sensivity = 0.1
+    smooth    = 0
+
+[encoder]
+    encoder   = E1.2
+    output    = O2
+    autozoom  = 1
+    sensivity = 0.1
+    smooth    = 0
+>>>
+@1 turn E1.1 10
+@1 turn E1.2 1
+@1 expect O1 0.329404 tol 1e-3
+@2 turn E1.2 1
+@3 turn E1.2 1
+@4 turn E1.2 1
+@5 turn E1.2 1
+@6 turn E1.2 1
+@7 turn E1.2 1
+@8 turn E1.2 1
+@9 turn E1.2 1
+@10 turn E1.2 1
+@10 expect O2 0.0104167 tol 1e-4
+@10 expect O1 0.329404 tol 1e-3

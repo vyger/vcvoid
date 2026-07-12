@@ -1,0 +1,26 @@
+# pot: outputscale multiplies then outputoffset is added -- but ONLY on `output`;
+# the hemisphere outputs are scaled by outputscale WITHOUT the offset.
+# outputscale=2, outputoffset=-0.5 -> output = V*2 - 0.5, bipolar = (2V-1)*2.
+#   V=0.5  -> out 0.5 ; bip 0
+#   V=0.25 -> out 0.0 ; bip (2*.25-1)*2 = -1
+#   V=0.75 -> out 1.0 ; bip (2*.75-1)*2 =  1
+tickrate 100
+patch <<<
+[p2b8]
+
+[pot]
+    pot          = P1.1
+    outputscale  = 2
+    outputoffset = -0.5
+    output       = O1
+    bipolar      = O2
+>>>
+@0 set P1.1 0.5
+@0 expect O1 0.5 tol 1e-4
+@0 expect O2 0 tol 1e-4
+@1 set P1.1 0.25
+@1 expect O1 0 tol 1e-4
+@1 expect O2 -1 tol 1e-4
+@2 set P1.1 0.75
+@2 expect O1 1 tol 1e-4
+@2 expect O2 1 tol 1e-4

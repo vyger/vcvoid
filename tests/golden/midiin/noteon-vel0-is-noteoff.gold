@@ -1,0 +1,14 @@
+# midiin: a note-on with velocity 0 is a note-off (MIDI running-status
+# convention; global M5 constraint normalized at the circuit input). The gate
+# falls exactly as for an explicit note-off; pitch holds.
+patch <<<
+[midiin]
+    pitch = O1
+    gate  = O2
+>>>
+@0 midisend trs noteon 1 60 100
+@0 expect O2 1
+@0 expect O1 0.3
+@1 midisend trs noteon 1 60 0
+@1 expect O2 0
+@1 expect O1 0.3

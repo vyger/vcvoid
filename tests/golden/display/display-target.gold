@@ -1,0 +1,16 @@
+# display: `display = N` targets the N-th DB8E (1-based, DB8Es only in chain order).
+# Spec: display.md `display` input.  With two DB8Es, `display = 2` writes only the
+# second screen; the first is never touched and stays OFF.
+tickrate 100
+patch <<<
+[db8e]
+[db8e]
+[display]
+    display = 2
+    value   = I1
+>>>
+@0 expectdisplay D1 off
+@0 expectdisplay D2 off
+@1 set I1 0.33
+@1 expectdisplay D1 off
+@1 expectdisplay D2 value 0.33 tol 1e-6

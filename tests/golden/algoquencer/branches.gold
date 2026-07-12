@@ -1,0 +1,166 @@
+# branches: bar b uses branch 1 (even b) or 2+min(ctz((b+1)/2), branches-1)
+# (odd b) -- the ruler sequence A B A C for branches=2. The branch number salts
+# the hash so each branch freezes its own decisions; `branch` outputs the
+# number. activity=0.75 -> round(0.75*16)=12 random beats/bar (no buttons).
+tickrate 100
+patch <<<
+[algoquencer]
+    clock    = I1
+    activity = 0.75
+    branches = 2
+    trigger  = O1
+    branch   = _BR
+>>>
+patch <<<
+[copy]
+    input  = _BR
+    output = O2
+>>>
+@1 set I1 1
+@1 expect _BR 1 tol 1e-5   # bar0: branch 1
+@2 set I1 0
+@3 set I1 1
+@4 set I1 0
+@5 set I1 1
+@6 set I1 0
+@7 set I1 1
+@8 set I1 0
+@9 set I1 1
+@9 expect O1 0 tol 1e-5   # bar0 (branch A) step 4
+@10 set I1 0
+@11 set I1 1
+@12 set I1 0
+@13 set I1 1
+@14 set I1 0
+@15 set I1 1
+@16 set I1 0
+@17 set I1 1
+@18 set I1 0
+@19 set I1 1
+@20 set I1 0
+@21 set I1 1
+@22 set I1 0
+@23 set I1 1
+@24 set I1 0
+@25 set I1 1
+@26 set I1 0
+@27 set I1 1
+@28 set I1 0
+@29 set I1 1
+@30 set I1 0
+@31 set I1 1
+@32 set I1 0
+@33 set I1 1
+@33 expect _BR 2 tol 1e-5   # bar1: branch 2
+@34 set I1 0
+@35 set I1 1
+@36 set I1 0
+@37 set I1 1
+@38 set I1 0
+@39 set I1 1
+@40 set I1 0
+@41 set I1 1
+@41 expect O1 1 tol 1e-5   # bar1 (branch B) step 4
+@42 set I1 0
+@43 set I1 1
+@44 set I1 0
+@45 set I1 1
+@46 set I1 0
+@47 set I1 1
+@48 set I1 0
+@49 set I1 1
+@50 set I1 0
+@51 set I1 1
+@52 set I1 0
+@53 set I1 1
+@54 set I1 0
+@55 set I1 1
+@56 set I1 0
+@57 set I1 1
+@58 set I1 0
+@59 set I1 1
+@60 set I1 0
+@61 set I1 1
+@62 set I1 0
+@63 set I1 1
+@64 set I1 0
+@65 set I1 1
+@65 expect _BR 1 tol 1e-5   # bar2: branch 1
+@66 set I1 0
+@67 set I1 1
+@68 set I1 0
+@69 set I1 1
+@70 set I1 0
+@71 set I1 1
+@72 set I1 0
+@73 set I1 1
+@73 expect O1 0 tol 1e-5   # bar2 (branch A) == bar0
+@74 set I1 0
+@75 set I1 1
+@76 set I1 0
+@77 set I1 1
+@78 set I1 0
+@79 set I1 1
+@80 set I1 0
+@81 set I1 1
+@82 set I1 0
+@83 set I1 1
+@84 set I1 0
+@85 set I1 1
+@86 set I1 0
+@87 set I1 1
+@88 set I1 0
+@89 set I1 1
+@90 set I1 0
+@91 set I1 1
+@92 set I1 0
+@93 set I1 1
+@94 set I1 0
+@95 set I1 1
+@96 set I1 0
+@97 set I1 1
+@97 expect _BR 3 tol 1e-5   # bar3: branch 3
+@98 set I1 0
+@99 set I1 1
+@100 set I1 0
+@101 set I1 1
+@102 set I1 0
+@103 set I1 1
+@104 set I1 0
+@105 set I1 1
+@105 expect O1 0 tol 1e-5   # bar3 (branch C) differs at step 4
+@106 set I1 0
+@107 set I1 1
+@108 set I1 0
+@109 set I1 1
+@110 set I1 0
+@111 set I1 1
+@112 set I1 0
+@113 set I1 1
+@114 set I1 0
+@115 set I1 1
+@116 set I1 0
+@117 set I1 1
+@118 set I1 0
+@119 set I1 1
+@120 set I1 0
+@121 set I1 1
+@122 set I1 0
+@123 set I1 1
+@124 set I1 0
+@125 set I1 1
+@126 set I1 0
+@127 set I1 1
+@128 set I1 0
+@129 set I1 1
+@130 set I1 0
+@131 set I1 1
+@132 set I1 0
+@133 set I1 1
+@134 set I1 0
+@135 set I1 1
+@136 set I1 0
+@137 set I1 1
+@138 set I1 0
+@139 set I1 1
+@140 set I1 0

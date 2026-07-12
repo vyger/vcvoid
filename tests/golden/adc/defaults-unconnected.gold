@@ -1,0 +1,14 @@
+# Defaults from the Inputs table: input defaults to 0.0, minimum to 0.0,
+# maximum to 1.0. With `input` left unpatched entirely (in().connected()==false
+# -> default 0.0) and no minimum/maximum lines, the converted value is 0, so
+# every patched bit reads 0. This pins the unconnected-input default path.
+patch <<<
+[adc]
+    bit1 = O1
+    bit2 = O2
+    bit3 = O3
+>>>
+
+@0 expect O1 0
+@0 expect O2 0
+@0 expect O3 0

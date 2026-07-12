@@ -1,0 +1,15 @@
+# select: with neither `select` nor `selectat` patched, the smart default makes
+# the circuit ALWAYS selected -- it behaves exactly like `copy` (output follows
+# input every tick). This is the degenerate-but-harmless default.
+tickrate 100
+patch <<<
+[select]
+    input  = I1
+    output = O1
+>>>
+@0 set I1 0.3
+@0 expect O1 0.3 tol 1e-4
+@2 set I1 0.6
+@2 expect O1 0.6 tol 1e-4
+@4 set I1 -0.25
+@4 expect O1 -0.25 tol 1e-4

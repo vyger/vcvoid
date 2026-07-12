@@ -1,0 +1,35 @@
+# motoquencer: touch plates edit gates (buttonmode 0). Touching a step's plate
+# toggles its gate; with defaultgate=1 the first touch silences step 0. Then moving
+# that step's PITCH fader (fadermode 0) to a new notch auto-switches its gate back
+# on ("the gate is automatically switched on when you change the note value").
+tickrate 100
+patch <<<
+[m4]
+[motoquencer]
+    clock = I1
+    cv    = O1
+    gate  = O2
+>>>
+# tick1: touch F1 -> toggle gate[0] off. tick2: release (so it toggles only once).
+@1 touch F1 1
+@2 touch F1 0
+# step 0 is now silent, step 1 still plays.
+@3 set I1 1
+@3 expect O2 0 tol 1e-4
+@4 set I1 0
+@5 set I1 1
+@5 expect O2 1 tol 1e-4
+# tick6: move step 0's pitch to a new notch -> gate[0] auto-on, pitch = 0.1 V.
+@6 set I1 0
+@6 move F1 0.5
+# steps 2, 3 play (default gate on)...
+@7 set I1 1
+@7 expect O2 1 tol 1e-4
+@8 set I1 0
+@9 set I1 1
+@9 expect O2 1 tol 1e-4
+@10 set I1 0
+# ...back to step 0: gate is on again and cv is the freshly edited 0.1 V.
+@11 set I1 1
+@11 expect O2 1 tol 1e-4
+@11 expect O1 0.1 tol 1e-4

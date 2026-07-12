@@ -1,0 +1,39 @@
+# watch mode 2: edge detection. An `edge` fires only when the input jumps by at
+# least `edgesize` in ONE loop cycle (here, one engine tick) -- comparing to the
+# previous tick's raw input, not to a persistent sample. A slow slope whose
+# per-tick delta stays below edgesize produces NO edge (this is the documented
+# difference from `changed`, which would trigger on the slope).
+#
+# edgesize 0.05.
+#   t1..t5: input ramps 0.02,0.04,0.06,0.08,0.10 -- per-tick delta 0.02 < 0.05,
+#           so NO edge fires the whole ramp.
+#   t7: input jumps 0.10 -> 0.30 (delta 0.20 >= 0.05) -> edge + edgeup.
+#   t9: input jumps 0.30 -> 0.10 (delta -0.20)        -> edge + edgedown.
+tickrate 100
+patch <<<
+[watch]
+    input    = I1
+    edgesize = 0.05
+    edge     = O1
+    edgeup   = O2
+    edgedown = O3
+>>>
+@0 set I1 0
+@1 set I1 0.02
+@2 set I1 0.04
+@3 set I1 0.06
+@4 set I1 0.08
+@5 set I1 0.10
+@2 expect O1 0 tol 1e-4
+@4 expect O1 0 tol 1e-4
+@5 expect O1 0 tol 1e-4
+@7 set I1 0.30
+@7 expect O1 1 tol 1e-4
+@7 expect O2 1 tol 1e-4
+@7 expect O3 0 tol 1e-4
+@8 expect O1 0 tol 1e-4
+@9 set I1 0.10
+@9 expect O1 1 tol 1e-4
+@9 expect O3 1 tol 1e-4
+@9 expect O2 0 tol 1e-4
+@10 expect O1 0 tol 1e-4

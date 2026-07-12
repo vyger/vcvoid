@@ -1,0 +1,18 @@
+# midiout midiclock (manual lines 229-240, 384). midiclock takes a raw 24-PPQN
+# MIDI clock: each rising edge emits exactly one MIDI clock pulse (0xF8), 1:1.
+tickrate 1000
+x7 1
+patch <<<
+[midiout]
+    midiclock = I1
+    activesensing = 0
+>>>
+@0 expectmidi trs none
+@1 set I1 1
+@1 expectmidi trs clock
+@2 set I1 0
+@2 expectmidi trs none
+@3 set I1 1
+@3 expectmidi trs clock
+@4 set I1 0
+@4 expectmidi trs none

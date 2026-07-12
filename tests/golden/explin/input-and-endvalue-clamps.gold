@@ -1,0 +1,22 @@
+# Input clamp: "This value must be positive or otherwise it will be set to 0.0."
+# Endvalue clamp: "must be positive... forced to be >= 0.001."
+# Here endvalue=-1 is forced to 0.001, startvalue=1, mix=1:
+#   input=-0.5 -> clamped to 0 -> below endvalue -> 0
+#   input=0    -> 0
+#   input=0.001 (=forced endvalue) -> 0
+#   input=0.1  -> ln(0.1/0.001)/ln(1/0.001) = ln100/ln1000 = 0.666667
+patch <<<
+[explin]
+    input      = I1
+    startvalue = 1
+    endvalue   = -1
+    output     = O1
+>>>
+@0 set I1 -0.5
+@0 expect O1 0 tol 1e-5
+@1 set I1 0
+@1 expect O1 0 tol 1e-5
+@2 set I1 0.001
+@2 expect O1 0 tol 1e-5
+@3 set I1 0.1
+@3 expect O1 0.666667 tol 1e-5

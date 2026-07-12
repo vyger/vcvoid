@@ -1,0 +1,28 @@
+# watch mode 4: with `taptempo` patched, `slope` is expressed per CLOCK TICK
+# instead of per second (manual: "1.0 per clock tick"). slope_perTick =
+# slope_perSecond * clockPeriodSeconds. The clock period is learned from
+# consecutive rising edges.
+#
+# clock (I2): rising edges t0, t10 -> period = 10 ticks = 0.1 s (known @t10).
+# response 0, tickrate 100 (dt = 0.01 s). Input delta 0.01/tick -> slope_perSec
+# = 0.01/0.01 = 1.0 -> slope_perTick = 1.0 * 0.1 = 0.1.
+#   t12: input 0 -> 0.01 -> slope 0.1
+#   t13: input   -> 0.02 -> slope 0.1
+#   t14: held           -> slope 0
+tickrate 100
+patch <<<
+[watch]
+    input    = I1
+    taptempo = I2
+    response = 0
+    slope    = O1
+>>>
+@0 set I2 1
+@1 set I2 0
+@10 set I2 1
+@11 set I2 0
+@12 set I1 0.01
+@13 set I1 0.02
+@12 expect O1 0.1 tol 2e-3
+@13 expect O1 0.1 tol 2e-3
+@14 expect O1 0 tol 2e-3

@@ -1,0 +1,27 @@
+# encoderbank: three independent lanes from E1.1..E1.3 (bank size = highest
+# output<N> used = 3). Shared outputscale = 2V = 0.2 applies to every lane;
+# output = value*0.2. smooth 0. Each physical encoder drives only its own lane.
+#   @1 E1.1 +96 -> value 1.0 -> O1 0.2
+#      E1.2 +48 -> value 0.5 -> O2 0.1
+#      E1.3 +24 -> value 0.25 -> O3 0.05
+tickrate 100
+patch <<<
+[e4]
+
+[encoderbank]
+    firstencoder = E1.1
+    output1      = O1
+    output2      = O2
+    output3      = O3
+    outputscale  = 2V
+    smooth       = 0
+>>>
+@0 expect O1 0 tol 1e-4
+@0 expect O2 0 tol 1e-4
+@0 expect O3 0 tol 1e-4
+@1 turn E1.1 96
+@1 turn E1.2 48
+@1 turn E1.3 24
+@1 expect O1 0.2 tol 1e-4
+@1 expect O2 0.1 tol 1e-4
+@1 expect O3 0.05 tol 1e-4

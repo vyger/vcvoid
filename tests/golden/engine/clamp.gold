@@ -1,0 +1,10 @@
+# O registers clamp to +-10 V (+-1.0)
+patch <<<
+[copy]
+    input = I1 * 3
+    output = O1
+>>>
+@0 set I1 0.5
+@0 expect O1 1.0
+@1 set I1 -0.5
+@1 expect O1 -1.0

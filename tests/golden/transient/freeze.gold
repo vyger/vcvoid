@@ -1,0 +1,20 @@
+# freeze=1 holds the transient at its current position (phase and output frozen).
+# Frozen at t6-t7, then resumes at t8 from where it left off.
+tickrate 10
+patch <<<
+[transient]
+    start    = 0
+    end      = 0.5
+    duration = 1
+    freeze   = I1
+    output   = O1
+    phase    = O2
+>>>
+@5 expect O1 0.25 tol 1e-4
+@6 set I1 1
+@6 expect O1 0.25 tol 1e-4
+@6 expect O2 0.5 tol 1e-4
+@7 expect O1 0.25 tol 1e-4
+@8 set I1 0
+@8 expect O1 0.3 tol 1e-4
+@9 expect O1 0.35 tol 1e-4

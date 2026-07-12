@@ -1,0 +1,31 @@
+# math: square (input1^2) and root (sqrt(input1), with the documented
+# negative-input rule: -sqrt(-input1) when input1 < 0). All results are
+# within [-1,1] so plain O registers are used.
+#   square(0.3)  = 0.09          square(-0.3) = 0.09
+#   root(0.16)   = 0.4           root(-0.09)  = -sqrt(0.09) = -0.3
+patch <<<
+[math]
+    input  = I1
+    square = O1
+
+[math]
+    input  = I2
+    square = O2
+
+[math]
+    input = I3
+    root  = O3
+
+[math]
+    input = I4
+    root  = O4
+>>>
+
+@0 set I1 0.3
+@0 set I2 -0.3
+@0 set I3 0.16
+@0 set I4 -0.09
+@0 expect O1 0.09 tol 1e-6
+@0 expect O2 0.09 tol 1e-6
+@0 expect O3 0.4 tol 1e-6
+@0 expect O4 -0.3 tol 1e-6

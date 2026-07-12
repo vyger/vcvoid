@@ -1,0 +1,28 @@
+# `skip`: "Number of time slots to wait before starting with the burst." A time
+# slot is one period. With skip=2, count=1 at tickrate 8, hz 1 (period 8), the
+# single pulse fires in cycle 2 -- i.e. delayed by 2 periods (16 ticks) after
+# the trigger. This is the clocked-trigger-delay use in the manual.
+#   trigger at t1 -> k=t-1, phase=k/8. High iff floor(phase)==2 and frac<0.5.
+#   floor(phase)==2 for k in 16..23; frac<0.5 for k in 16..19 -> t17..t20 high.
+tickrate 8
+patch <<<
+[burst]
+    trigger = I1
+    hz      = 1
+    count   = 1
+    skip    = 2
+    output  = O1
+>>>
+@0 expect O1 0
+@1 set I1 1
+@1 expect O1 0
+@2 set I1 0
+@2 expect O1 0
+@8 expect O1 0
+@16 expect O1 0
+@17 expect O1 1
+@18 expect O1 1
+@19 expect O1 1
+@20 expect O1 1
+@21 expect O1 0
+@25 expect O1 0

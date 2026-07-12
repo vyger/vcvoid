@@ -1,0 +1,12 @@
+# midiin: with no X7 in the chain the circuit needs the X7 to work (line 21) and
+# is a runtime no-op -- it writes NONE of its outputs, exactly like midithrough.
+# The patch still loads; the note is delivered but no output register moves.
+x7 0
+patch <<<
+[midiin]
+    pitch = O1
+    gate  = O2
+>>>
+@0 midisend trs noteon 1 60 100
+@0 expect O1 0
+@0 expect O2 0

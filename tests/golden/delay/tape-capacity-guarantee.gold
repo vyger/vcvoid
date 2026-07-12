@@ -1,0 +1,34 @@
+# delay: the manual guarantees a MINIMUM recordable tape length of 5.12 s
+# ("256 x 20 ms"), independent of the engine tick rate. The tape must therefore
+# be sized from tickRateHz, not a fixed tick count (a fixed 65536-tick tape is
+# only 1.37 s at 48 kHz). Block A: at tickrate 16000 a 5-second delay needs
+# 80000 ticks of history; input steps 0.25 -> 0.4 at t10000, so the delayed
+# output must replay 0.25 until t90000 and 0.4 after -- with NO overflow.
+# Block B: a 20-second delay exceeds the 16 s tape and must raise `overflow`.
+tickrate 16000
+patch <<<
+[delay]
+    cvin     = I1
+    delay    = 5
+    cvout    = O1
+    overflow = O2
+>>>
+
+patch <<<
+[delay]
+    cvin     = I1
+    delay    = 20
+    cvout    = O3
+    overflow = O4
+>>>
+
+@0 set I1 0.25
+@10000 set I1 0.4
+# 5 s in: replay of t4000 (0.25); overflow must be low
+@84000 expect O1 0.25 tol 1e-4
+@84000 expect O2 0
+# past the step's delayed arrival: replay of t15000 (0.4)
+@95000 expect O1 0.4 tol 1e-4
+@95000 expect O2 0
+# block B: 20 s > 16 s tape -> overflow gate high
+@84000 expect O4 1

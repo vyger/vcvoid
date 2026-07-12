@@ -1,0 +1,48 @@
+# display: header-only change does not independently trigger a display write.
+# Spec: manual/circuits/display.md "It is not possible to just display a header."
+# Task-6 binding resolution 1 lists write-attempt triggers as "value change
+# beyond threshold, text/header change, trigger edge, useasdefault re-assert" —
+# but display.md's own worked example (a constant BPM header riding over an
+# unchanged value stays OFF, see value-threshold.gold) shows the header can
+# never activate a write on its own; it only rides along with a body-driven
+# (value/text, trigger, or useasdefault) write. engine/circuits/display.cpp
+# reads+stores `header` only inside the accepted-attempt branch (see its
+# "candidate content" / "decide whether to attempt a write" sections) — no
+# attempt path is keyed on the header changing by itself, so a header-only
+# change updates nothing until the NEXT body-driven write, at which point the
+# header value already in effect is what gets shown.
+#
+# SPEC-GAP: resolution 1's summary phrase "text/header change" over-states the
+# header's independent role; display.md governs, and this golden locks the
+# ACTUAL coded behavior (body-only activation) rather than that summary.
+#
+#   t0: I1=0 (default), I2=0 so header factor is 0 -> header number 0 (none).
+#       val 0 vs sentValue_ baseline 0 -> no change -> no attempt -> OFF.
+#   t1: I1 set to 5 -> body change (|5-0| > default threshold) -> attempt
+#       fires and is accepted (first write, no owner yet) -> header written
+#       from the header input AS OF THIS TICK: I2 is still 0, so header = "".
+#   t2: I2 set to 1 -> header's *live* value becomes "TEMPO" (factor now 1),
+#       but the BODY (value) did not change -> no attempt -> the stored
+#       header stays "" (unchanged), proving the header-only change was not
+#       independently written.
+#   t3: I1 set to 6 -> body changes again -> attempt fires -> this write picks
+#       up the header input AS OF THIS TICK (I2 is now 1) -> header = "TEMPO".
+#       This shows the already-updated header is applied on the next
+#       body-driven write, exactly as the SPEC-GAP above states.
+tickrate 100
+patch <<<
+[db8e]
+[display]
+    header = "TEMPO" * I2
+    value  = I1
+>>>
+@0 expectdisplay D1 off
+@1 set I1 5
+@1 expectdisplay D1 header ""
+@1 expectdisplay D1 value 5 tol 1e-6
+@2 set I2 1
+@2 expectdisplay D1 header ""
+@2 expectdisplay D1 value 5 tol 1e-6
+@3 set I1 6
+@3 expectdisplay D1 header "TEMPO"
+@3 expectdisplay D1 value 6 tol 1e-6

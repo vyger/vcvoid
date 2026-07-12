@@ -1,0 +1,31 @@
+# watch mode 3: strumming / step detection. The CV range is sliced into
+# compartments of size `stepsize`; a `step` trigger fires whenever the input
+# moves into a different compartment (compartment index = floor(input/stepsize)),
+# with stepup/stepdown for direction. Manual example: stepsize 0.1, moving from
+# 1.9 V (0.19) to 2.1 V (0.21) crosses the 2 V border.
+#
+#   t0: input 0.19 -> compartment floor(1.9) = 1
+#   t1: input 0.21 -> compartment floor(2.1) = 2  -> step + stepup
+#   t3: input 0.05 -> compartment floor(0.5) = 0  -> step + stepdown (one trigger
+#       even though two borders are crossed)
+tickrate 100
+patch <<<
+[watch]
+    input    = I1
+    stepsize = 0.1
+    step     = O1
+    stepup   = O2
+    stepdown = O3
+>>>
+@0 set I1 0.19
+@0 expect O1 0 tol 1e-4
+@1 set I1 0.21
+@1 expect O1 1 tol 1e-4
+@1 expect O2 1 tol 1e-4
+@1 expect O3 0 tol 1e-4
+@2 expect O1 0 tol 1e-4
+@3 set I1 0.05
+@3 expect O1 1 tol 1e-4
+@3 expect O3 1 tol 1e-4
+@3 expect O2 0 tol 1e-4
+@4 expect O1 0 tol 1e-4

@@ -1,0 +1,28 @@
+# gatetool: outputtrigger fires a 10 ms trigger on each event; outputedge toggles
+# 0/1 on each event. With inputtrigger this also builds the manual's divide-by-two
+# clock (two input triggers make one full output-edge cycle). tickrate 100 ->
+# 10 ms = 1 tick, so outputtrigger is high for exactly the event tick.
+#
+# Triggers at t0, t10, t20. outputedge starts 0 and toggles: 1, 0, 1.
+tickrate 100
+patch <<<
+[gatetool]
+    inputtrigger  = I1
+    outputtrigger = O2
+    outputedge    = O3
+>>>
+@0 set I1 1
+@0 expect O2 1 tol 1e-4
+@0 expect O3 1 tol 1e-4
+@1 set I1 0
+@1 expect O2 0 tol 1e-4
+@1 expect O3 1 tol 1e-4
+@10 set I1 1
+@10 expect O2 1 tol 1e-4
+@10 expect O3 0 tol 1e-4
+@11 set I1 0
+@11 expect O3 0 tol 1e-4
+@20 set I1 1
+@20 expect O2 1 tol 1e-4
+@20 expect O3 1 tol 1e-4
+@21 set I1 0

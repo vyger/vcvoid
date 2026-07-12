@@ -1,0 +1,34 @@
+# When `mode` is patched the manual says the three buttons "(and LED outputs)
+# are ignored". So recordled / playled / stopled are never driven -- they stay
+# at their default 0 through every transport state (record, play, stop), leaving
+# those output registers free for another circuit to use.
+patch <<<
+[recorder]
+    cvin      = I1
+    mode      = I2
+    cvout     = O1
+    recordled = O2
+    playled   = O3
+    stopled   = O4
+>>>
+# RECORD (mode 2): cvout follows the live input, but no LED is lit
+@0 set I2 2
+@0 set I1 0.10
+@0 expect O1 0.10 tol 1e-5
+@0 expect O2 0
+@0 expect O3 0
+@0 expect O4 0
+@1 set I1 0.11
+# PLAY (mode 1): tape replays, still no LED lit
+@2 set I2 1
+@2 expect O1 0.10 tol 1e-5
+@2 expect O2 0
+@2 expect O3 0
+@2 expect O4 0
+# STOP (mode 0): passthrough, still no LED lit
+@3 set I2 0
+@3 set I1 0.42
+@3 expect O1 0.42 tol 1e-5
+@3 expect O2 0
+@3 expect O3 0
+@3 expect O4 0

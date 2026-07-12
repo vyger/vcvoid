@@ -1,0 +1,54 @@
+# logic truth table over 3 patched inputs (threshold default 0.1, high=1 low=0).
+# and = all high; or = any high; xor = odd # high; nand = !and; nor = !or.
+# highvalue=1, lowvalue=0 (defaults). O1=and O2=or O3=xor O4=nand O5=nor.
+#   inputs   nHigh  and or xor nand nor
+#   000      0      0   0   0    1    1
+#   001      1      0   1   1    1    0
+#   011      2      0   1   0    1    0
+#   111      3      1   1   1    0    0
+#   101      2      0   1   0    1    0
+patch <<<
+[logic]
+    input1 = I1
+    input2 = I2
+    input3 = I3
+    and    = O1
+    or     = O2
+    xor    = O3
+    nand   = O4
+    nor    = O5
+>>>
+# 000
+@0 expect O1 0
+@0 expect O2 0
+@0 expect O3 0
+@0 expect O4 1
+@0 expect O5 1
+# 001
+@1 set I3 1
+@1 expect O1 0
+@1 expect O2 1
+@1 expect O3 1
+@1 expect O4 1
+@1 expect O5 0
+# 011
+@2 set I2 1
+@2 expect O1 0
+@2 expect O2 1
+@2 expect O3 0
+@2 expect O4 1
+@2 expect O5 0
+# 111
+@3 set I1 1
+@3 expect O1 1
+@3 expect O2 1
+@3 expect O3 1
+@3 expect O4 0
+@3 expect O5 0
+# 101
+@4 set I2 0
+@4 expect O1 0
+@4 expect O2 1
+@4 expect O3 0
+@4 expect O4 1
+@4 expect O5 0

@@ -1,0 +1,46 @@
+# arpeggio autoreset + external reset. C Lydian, pitch=0, range=1V ->
+# pool semis {0,2,4,6,7,9,11,12}. pattern 0.
+# autoreset=3: after every 3 main notes the melody restarts at the start note.
+#   notes: 0,2,4,[restart]0,2,...  (each group of 3 then back to the start)
+# An external reset trigger (I2) also restarts AND zeroes the autoreset counter.
+patch <<<
+[arpeggio]
+    clock     = I1
+    reset     = I2
+    output    = O1
+    pitch     = 0
+    range     = 1V
+    autoreset = 3
+>>>
+@1 set I1 1
+@1 expect O1 0 tol 1e-5
+@2 set I1 0
+@3 set I1 1
+@3 expect O1 0.0166667 tol 1e-5
+@4 set I1 0
+@5 set I1 1
+@5 expect O1 0.0333333 tol 1e-5
+@6 set I1 0
+# 3 notes played -> autoreset restarts at the start note (semi 0)
+@7 set I1 1
+@7 expect O1 0 tol 1e-5
+@8 set I1 0
+@9 set I1 1
+@9 expect O1 0.0166667 tol 1e-5
+# external reset fires while the clock is low; it restarts and zeroes the counter
+@10 set I1 0
+@10 set I2 1
+# next clock -> the start note again (counter now fresh)
+@11 set I1 1
+@11 expect O1 0 tol 1e-5
+@12 set I1 0
+@12 set I2 0
+@13 set I1 1
+@13 expect O1 0.0166667 tol 1e-5
+@14 set I1 0
+@15 set I1 1
+@15 expect O1 0.0333333 tol 1e-5
+@16 set I1 0
+# 3 notes since the reset -> autoreset restarts again
+@17 set I1 1
+@17 expect O1 0 tol 1e-5

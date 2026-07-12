@@ -1,0 +1,40 @@
+# midifileplayer: clocks, end, reset. File A (EOT @96 = engine tick 3000).
+# clockout = 1 trigger per 16th = 24 file ticks = 750 engine ticks (fires at
+# position 0 too); midiclock = 24 per quarter = 4 file ticks = 125 engine
+# ticks. Triggers are 10 ms = 60 engine ticks.
+# end = 2 sets the playing end to 2 quarters = 192 ticks = engine tick 6000,
+# inserting a pause after the natural EOT; with loop = 1 the wrap at 6000
+# refires the tick-0 note-on. A reset trigger at 4000 restarts playback
+# immediately (note-on refires, position back to 0).
+midifile 1 4D546864000000060000000100604D54726B0000000C00903C6460803C0000FF2F00
+patch <<<
+[midifileplayer]
+    end = 2
+    gate = O1
+    clockout = O2
+    midiclock = O3
+    endoftrack = O4
+
+[midifileplayer]
+    loop = 0
+    reset = I1
+    gate = O5
+>>>
+@0 expect O1 1
+@0 expect O2 1
+@0 expect O3 1
+@70 expect O2 0
+@70 expect O3 0
+@130 expect O3 1
+@740 expect O2 0
+@760 expect O2 1
+@2990 expect O1 1
+@3010 expect O1 0
+@3010 expect O4 0
+@3010 expect O5 0
+@4000 set I1 1
+@4000 expect O5 1
+@5990 expect O1 0
+@6010 expect O1 1
+@6010 expect O4 1
+@6080 expect O4 0

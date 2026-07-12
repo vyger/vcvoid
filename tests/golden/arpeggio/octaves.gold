@@ -1,0 +1,48 @@
+# arpeggio octaves: each note is followed by the same note one octave up
+# (octaves=1) or down (octaves=2). The octave copy ignores `range` and does NOT
+# advance the pattern -- it consumes one clock between main notes.
+# Two instances share clock I1: octaves=1 -> O1, octaves=2 -> O2.
+# C Lydian, pitch=0, range=1V -> pool semis {0,2,4,6,7,9,11,12}, indices 0..7.
+# O1 (up):   main 0,  +12=12; main 2, +12=14; main 4, +12=16
+#   volts:   0, 0.1, 0.0166667, 0.1166667, 0.0333333, 0.1333333
+# O2 (down): main 0,  -12;     main 2, -12=-10; main 4, -12=-8
+#   volts:   0, -0.1, 0.0166667, -0.0833333, 0.0333333, -0.0666667
+patch <<<
+[arpeggio]
+    clock   = I1
+    output  = O1
+    pitch   = 0
+    range   = 1V
+    octaves = 1
+>>>
+patch <<<
+[arpeggio]
+    clock   = I1
+    output  = O2
+    pitch   = 0
+    range   = 1V
+    octaves = 2
+>>>
+@1 set I1 1
+@1 expect O1 0 tol 1e-5
+@1 expect O2 0 tol 1e-5
+@2 set I1 0
+@3 set I1 1
+@3 expect O1 0.1 tol 1e-5
+@3 expect O2 -0.1 tol 1e-5
+@4 set I1 0
+@5 set I1 1
+@5 expect O1 0.0166667 tol 1e-5
+@5 expect O2 0.0166667 tol 1e-5
+@6 set I1 0
+@7 set I1 1
+@7 expect O1 0.1166667 tol 1e-5
+@7 expect O2 -0.0833333 tol 1e-5
+@8 set I1 0
+@9 set I1 1
+@9 expect O1 0.0333333 tol 1e-5
+@9 expect O2 0.0333333 tol 1e-5
+@10 set I1 0
+@11 set I1 1
+@11 expect O1 0.1333333 tol 1e-5
+@11 expect O2 -0.0666667 tol 1e-5

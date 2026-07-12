@@ -1,0 +1,67 @@
+# offbeats/distribution weight random beat placement (SPEC-GAP: multiplicative
+# weights + Efraimidis-Spirakis keys u^(1/w)). offbeats=1 with the no-buttons
+# default activity 0.5 (target 8 of 16) places beats exactly on the 8 offbeats
+# (even 1-based steps); distribution=1 places them all in the second half.
+tickrate 100
+patch <<<
+[algoquencer]
+    clock    = I1
+    offbeats = 1
+    trigger  = O1
+>>>
+patch <<<
+[algoquencer]
+    clock        = I1
+    distribution = 1
+    trigger      = O2
+>>>
+@1 set I1 1
+@1 expect O1 0 tol 1e-5   # offbeats=1: step 0
+@1 expect O2 0 tol 1e-5   # distribution=1: step 0
+@2 set I1 0
+@3 set I1 1
+@3 expect O1 1 tol 1e-5   # offbeats=1: step 1
+@4 set I1 0
+@5 set I1 1
+@5 expect O1 0 tol 1e-5   # offbeats=1: step 2
+@6 set I1 0
+@7 set I1 1
+@7 expect O1 1 tol 1e-5   # offbeats=1: step 3
+@8 set I1 0
+@9 set I1 1
+@9 expect O1 0 tol 1e-5   # offbeats=1: step 4
+@10 set I1 0
+@11 set I1 1
+@11 expect O1 1 tol 1e-5   # offbeats=1: step 5
+@11 expect O2 0 tol 1e-5   # distribution=1: step 5
+@12 set I1 0
+@13 set I1 1
+@13 expect O1 0 tol 1e-5   # offbeats=1: step 6
+@14 set I1 0
+@15 set I1 1
+@15 expect O1 1 tol 1e-5   # offbeats=1: step 7
+@15 expect O2 0 tol 1e-5   # distribution=1: step 7
+@16 set I1 0
+@17 set I1 1
+@17 expect O2 1 tol 1e-5   # distribution=1: step 8
+@18 set I1 0
+@19 set I1 1
+@19 expect O2 1 tol 1e-5   # distribution=1: step 9
+@20 set I1 0
+@21 set I1 1
+@22 set I1 0
+@23 set I1 1
+@24 set I1 0
+@25 set I1 1
+@26 set I1 0
+@27 set I1 1
+@28 set I1 0
+@29 set I1 1
+@30 set I1 0
+@31 set I1 1
+@31 expect O2 1 tol 1e-5   # distribution=1: step 15
+@32 set I1 0
+@33 set I1 1
+@34 set I1 0
+@35 set I1 1
+@36 set I1 0

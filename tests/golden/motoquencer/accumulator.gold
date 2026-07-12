@@ -1,0 +1,30 @@
+# motoquencer: the pitch accumulator. A single step whose randomize-CV fader is at
+# position 6 (fadermode 1, notch 6) means "shift up one scale note each turn". With
+# accumulatorrange=2 the accumulator counts 0,1,2 then wraps. Each sequence turn
+# (here one clock = one turn, numsteps=1) moves the note up one C-lydian degree:
+# C(0) -> D(0.01667) -> E(0.03333) -> back to C.
+tickrate 100
+patch <<<
+[m4]
+[motoquencer]
+    clock            = I1
+    fadermode        = I2
+    numsteps         = 1
+    accumulatorrange = 2
+    cv               = O1
+>>>
+@1 set I2 1
+@2 move F1 0.8571429
+@2 expect F1 0.8571429 tol 1e-4
+@3 set I2 0
+@4 set I1 1
+@4 expect O1 0.0 tol 1e-4
+@5 set I1 0
+@6 set I1 1
+@6 expect O1 0.0166667 tol 1e-4
+@7 set I1 0
+@8 set I1 1
+@8 expect O1 0.0333333 tol 1e-4
+@9 set I1 0
+@10 set I1 1
+@10 expect O1 0.0 tol 1e-4

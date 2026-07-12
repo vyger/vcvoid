@@ -1,0 +1,15 @@
+# "clear" sets the flip flop to the value defined by startvalue (not
+# necessarily 0). startvalue=1 here; after toggling away from 1, clear
+# should bring it back to 1, not to 0.
+patch <<<
+[flipflop]
+    toggle = I1
+    clear  = I2
+    startvalue = 1
+    output = O1
+>>>
+@0 expect O1 1
+@1 set I1 1
+@1 expect O1 0
+@2 set I2 1
+@2 expect O1 1

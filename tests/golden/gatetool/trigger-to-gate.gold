@@ -1,0 +1,25 @@
+# gatetool: manual example -- inputtrigger + gatelength. A trigger produces an
+# outputgate of a fixed length (gatelength seconds); the input's own high-time is
+# irrelevant. tickrate 100 -> gatelength 0.5 s = 50 ticks.
+#
+# Trigger 1 at t0 (input held high until t30 to prove length is IGNORED): output
+# gate spans t0..t49 regardless of the input falling at t30.
+# Trigger 2 at t60 (a re-trigger): fresh 50-tick gate t60..t109.
+tickrate 100
+patch <<<
+[gatetool]
+    inputtrigger = I1
+    outputgate   = O1
+    gatelength   = 0.5
+>>>
+@0 set I1 1
+@0 expect O1 1 tol 1e-4
+@30 set I1 0
+@35 expect O1 1 tol 1e-4
+@49 expect O1 1 tol 1e-4
+@50 expect O1 0 tol 1e-4
+@60 set I1 1
+@61 set I1 0
+@60 expect O1 1 tol 1e-4
+@109 expect O1 1 tol 1e-4
+@110 expect O1 0 tol 1e-4

@@ -1,0 +1,28 @@
+# mixer over three inputs: output=sum, maximum, minimum, average of the patched
+# inputs. O1=output O2=maximum O3=minimum O4=average.
+patch <<<
+[mixer]
+    input1  = I1
+    input2  = I2
+    input3  = I3
+    output  = O1
+    maximum = O2
+    minimum = O3
+    average = O4
+>>>
+# 0.1, 0.2, 0.3
+@0 set I1 0.1
+@0 set I2 0.2
+@0 set I3 0.3
+@0 expect O1 0.6 tol 1e-6
+@0 expect O2 0.3
+@0 expect O3 0.1
+@0 expect O4 0.2 tol 1e-6
+# -0.2, 0.4, 0.1
+@1 set I1 -0.2
+@1 set I2 0.4
+@1 set I3 0.1
+@1 expect O1 0.3 tol 1e-6
+@1 expect O2 0.4
+@1 expect O3 -0.2
+@1 expect O4 0.1 tol 1e-6

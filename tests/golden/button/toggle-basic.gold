@@ -1,0 +1,30 @@
+# button: the fundamental toggle. states defaults to 2; each rising edge of the
+# button toggles the persisted state, led mirrors it (0/1), output emits value1
+# (0) off / value2 (1) on. B1.1 on a p2b8; toggle happens on the PRESS edge
+# (no longpress connected).
+#   t0: released, state 0        -> led 0, output 0
+#   t1: press  -> toggle state 1 -> led 1, output 1
+#   t2: release, state stays 1   -> led 1, output 1
+#   t3: press  -> toggle state 0 -> led 0, output 0
+tickrate 100
+patch <<<
+[p2b8]
+
+[button]
+    button = B1.1
+    led    = L1.1
+    output = O1
+>>>
+@0 expect L1.1 0 tol 1e-4
+@0 expect O1 0 tol 1e-4
+@1 set B1.1 1
+@1 expect L1.1 1 tol 1e-4
+@1 expect O1 1 tol 1e-4
+@2 set B1.1 0
+@2 expect L1.1 1 tol 1e-4
+@2 expect O1 1 tol 1e-4
+@3 set B1.1 1
+@3 expect L1.1 0 tol 1e-4
+@3 expect O1 0 tol 1e-4
+@4 set B1.1 0
+@4 expect O1 0 tol 1e-4

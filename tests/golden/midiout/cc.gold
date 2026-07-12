@@ -1,0 +1,28 @@
+# midiout CC updates + updaterate + updateccs (manual lines 169-183, 364-368, 386).
+# ccnumber1=74 routes cc1 (0..1 -> 0..127) to MIDI CC#74. A used CC sends once
+# initially (after delayinitialccs, here 0) then on change, rate-limited by
+# updaterate. With updaterate=50 the minimum interval is 20 ms: a change at t=1 is
+# not emitted until t=20. updateccs (line 367) forces an immediate resend of the
+# current value, bypassing the rate limit. 0.1 -> 13, 0.2 -> 25.
+tickrate 1000
+x7 1
+patch <<<
+[midiout]
+    ccnumber1 = 74
+    cc1       = I1
+    updateccs = I2
+    activesensing = 0
+    delayinitialccs = 0
+    updaterate = 50
+>>>
+@0 set I1 0.1
+@0 expectmidi trs cc 1 74 13
+@1 set I1 0.2
+@1 expectmidi trs none
+@19 expectmidi trs none
+@20 expectmidi trs cc 1 74 25
+@21 expectmidi trs none
+@25 set I2 1
+@25 expectmidi trs cc 1 74 25
+@26 set I2 0
+@26 expectmidi trs none

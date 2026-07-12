@@ -1,0 +1,24 @@
+# In idle/stop mode (mode 0) the input is bypassed to the output so you can
+# "hear" the live CV. `bypass` forces the input straight to the output
+# regardless of the current mode.
+patch <<<
+[recorder]
+    cvin   = I1
+    mode   = I2
+    bypass = I3
+    cvout  = O1
+>>>
+# STOP (mode 0): passthrough
+@0 set I2 0
+@0 set I1 0.20
+@0 expect O1 0.20 tol 1e-5
+@1 set I1 0.25
+@1 expect O1 0.25 tol 1e-5
+# bypass on while in playback mode -> still passes the live input through
+@2 set I2 1
+@2 set I3 1
+@2 set I1 0.30
+@2 expect O1 0.30 tol 1e-5
+# bypass off, playback mode, nothing recorded -> empty tape outputs 0
+@3 set I3 0
+@3 expect O1 0 tol 1e-5

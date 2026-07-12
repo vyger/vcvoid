@@ -1,0 +1,24 @@
+# A stage with gate = 0 produces no output gate, and the pitch is kept at the
+# previous value (the muted stage does not change the pitch output). Stage 2 has
+# gate2 = 0, so at that step the pitch stays 0.10 and gateoutput is 0.
+patch <<<
+[sequencer]
+    clock       = I1
+    pitchoutput = O1
+    gateoutput  = O2
+    pitch1      = 0.10
+    pitch2      = 0.20
+    pitch3      = 0.30
+    gate2       = 0
+>>>
+@0 set I1 1
+@0 expect O1 0.10 tol 1e-5
+@0 expect O2 1
+@1 set I1 0
+@2 set I1 1
+@2 expect O1 0.10 tol 1e-5
+@2 expect O2 0
+@3 set I1 0
+@4 set I1 1
+@4 expect O1 0.30 tol 1e-5
+@4 expect O2 1

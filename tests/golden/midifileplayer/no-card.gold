@@ -1,0 +1,10 @@
+# midifileplayer: no SD card at all (no file provider installed — no midifile
+# directive in this golden): error -1 (white, "SD card or MIDI file missing"),
+# nothing plays.
+patch <<<
+[midifileplayer]
+    error = O1
+    gate = O2
+>>>
+@0 expect O1 -1
+@0 expect O2 0

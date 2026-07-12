@@ -1,0 +1,35 @@
+# togglebutton: onvalue/offvalue remap output; inverted swaps them; negated is
+# 1 iff off. offvalue = 2, onvalue = 4 (routed through cables to avoid the O
+# register clamp). negated fits on an O register.
+#   off (state 0): output = 2, inverted = 4, negated = 1
+#   on  (state 1): output = 4, inverted = 2, negated = 0
+tickrate 100
+patch <<<
+[p2b8]
+
+[togglebutton]
+    button   = B1.1
+    led      = L1.1
+    offvalue = 2
+    onvalue  = 4
+    output   = _O
+    inverted = _INV
+    negated  = O1
+
+[copy]
+    input  = _O
+    output = O2
+
+[copy]
+    input  = _INV
+    output = O3
+>>>
+@0 expect _O 2 tol 1e-4
+@0 expect _INV 4 tol 1e-4
+@0 expect O1 1 tol 1e-4
+@1 set B1.1 1
+@1 expect _O 4 tol 1e-4
+@1 expect _INV 2 tol 1e-4
+@1 expect O1 0 tol 1e-4
+@2 set B1.1 0
+@2 expect _O 4 tol 1e-4

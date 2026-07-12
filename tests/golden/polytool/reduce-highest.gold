@@ -1,0 +1,32 @@
+# voiceallocation = 3 (highest): when all outputs are busy the HIGHEST-pitch
+# note is cancelled. Same setup as reduce-lowest but the new note 0.4 steals the
+# highest (0.5 on out2).
+patch <<<
+[polytool]
+    pitchinput1     = I1
+    gateinput1      = I2
+    pitchinput2     = I3
+    gateinput2      = I4
+    pitchinput3     = I5
+    gateinput3      = I6
+    voiceallocation = 3
+    pitchoutput1    = O1
+    pitchoutput2    = O2
+    gateoutput1     = O3
+    gateoutput2     = O4
+>>>
+@0 set I1 0.3
+@0 set I2 1
+@0 expect O1 0.3 tol 1e-5
+@0 expect O3 1
+@1 set I3 0.5
+@1 set I4 1
+@1 expect O2 0.5 tol 1e-5
+@1 expect O4 1
+# v3 (0.4) on, all busy: highest is out2 (0.5) -> stolen
+@2 set I5 0.4
+@2 set I6 1
+@2 expect O2 0.4 tol 1e-5
+@2 expect O4 1
+@2 expect O1 0.3 tol 1e-5
+@2 expect O3 1

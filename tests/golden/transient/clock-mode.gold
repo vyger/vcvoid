@@ -1,0 +1,31 @@
+# With `clock` patched, `duration` is measured in clock ticks rather than seconds.
+# The clock interval is measured (like taptempo) and duration*interval gives the
+# time. Here a steady clock with period 5 ticks (0.5 s at tickrate 10) is
+# established, then the transient is reset at t10 (interval now known). duration=2
+# clock ticks -> 1 s -> a 10-tick ramp from t10 to t20.
+tickrate 10
+patch <<<
+[transient]
+    start          = 0
+    end            = 0.5
+    duration       = 2
+    clock          = I1
+    reset          = I2
+    output         = O1
+    endoftransient = O2
+>>>
+# steady clock: rising edges at t0,t5 (establish the 5-tick interval)
+@0 set I1 1
+@1 set I1 0
+@5 set I1 1
+@6 set I1 0
+@10 set I1 1
+# reset the transient now that the interval is measured
+@10 set I2 1
+@10 expect O1 0 tol 1e-4
+@11 set I1 0
+@11 set I2 0
+@11 expect O1 0.05 tol 1e-4
+@15 expect O1 0.25 tol 1e-4
+@20 expect O1 0.5 tol 1e-4
+@20 expect O2 1

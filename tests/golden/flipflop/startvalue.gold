@@ -1,0 +1,10 @@
+# "The flip flop starts its live with this value." startvalue=1 (a gate
+# input, threshold 0.1 == 1V) means the flip flop is 1 from tick 0, with no
+# trigger needed.
+patch <<<
+[flipflop]
+    startvalue = 1
+    output = O1
+>>>
+@0 expect O1 1
+@3 expect O1 1

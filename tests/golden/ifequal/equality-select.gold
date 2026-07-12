@@ -1,0 +1,25 @@
+# ifequal: output = (input1 == input2) ? ifequal : else, using EXACT equality.
+# ifequal=0.7, else=0.2.
+patch <<<
+[ifequal]
+    input1  = I1
+    input2  = I2
+    ifequal = 0.7
+    else    = 0.2
+    output  = O1
+>>>
+# equal -> ifequal
+@0 set I1 0.5
+@0 set I2 0.5
+@0 expect O1 0.7
+# not equal -> else
+@1 set I2 0.6
+@1 expect O1 0.2
+# equal (negative) -> ifequal
+@2 set I1 -0.3
+@2 set I2 -0.3
+@2 expect O1 0.7
+# near miss (0.5 vs 0.5001) -> not exactly equal -> else
+@3 set I1 0.5
+@3 set I2 0.5001
+@3 expect O1 0.2

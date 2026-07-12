@@ -1,0 +1,23 @@
+# lfo: the `phase` input shifts the waveform. A value of 0.25 shifts by 90deg,
+# 0.5 by 180deg. Observed on the sawtooth output where value == effective phase.
+# hz=4, tickrate 6000, one cycle = 1500 ticks.
+tickrate 6000
+patch <<<
+[lfo]
+    hz       = 4
+    phase    = 0.25
+    sawtooth = O1
+
+[lfo]
+    hz       = 4
+    phase    = 0.5
+    sawtooth = O2
+>>>
+
+# phase=0.25: effective phase = accumulated + 0.25 (mod 1)
+@0   expect O1 0.25 tol 1e-3   # 0 + 0.25
+@375 expect O1 0.5  tol 1e-3   # 0.25 + 0.25
+
+# phase=0.5
+@0   expect O2 0.5  tol 1e-3
+@375 expect O2 0.75 tol 1e-3

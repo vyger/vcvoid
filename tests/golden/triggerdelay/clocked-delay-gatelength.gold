@@ -1,0 +1,29 @@
+# triggerdelay: manual worked example 4 -- clocked mode with explicit delay and
+# gatelength, both measured in clock cycles. period = 20 ticks (edges t0,t20).
+# delay = 2 cycles -> 40 ticks; gatelength = 0.5 cycle -> 10 ticks.
+#
+# input (I1): rising edge t25 -> output rises t25+40=65, fixed length 10 ->
+# output high t65..74, low from t75.
+tickrate 100
+patch <<<
+[triggerdelay]
+    input      = I1
+    output     = O1
+    clock      = I2
+    delay      = 2
+    gatelength = 0.5
+>>>
+@0 set I2 1
+@1 set I2 0
+@20 set I2 1
+@21 set I2 0
+@25 set I1 1
+@27 set I1 0
+@40 set I2 1
+@41 set I2 0
+@60 set I2 1
+@61 set I2 0
+@64 expect O1 0 tol 1e-4
+@65 expect O1 1 tol 1e-4
+@74 expect O1 1 tol 1e-4
+@75 expect O1 0 tol 1e-4

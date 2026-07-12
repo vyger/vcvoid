@@ -1,0 +1,48 @@
+# buttongroup: long/short press timing. longpresstime = 0.1 s -> 10 ticks at
+# tickrate 100. Because `longpress` is connected, `buttonpress` fires on RELEASE
+# iff the press was short; `longpress` fires once when a held button reaches the
+# threshold. The selection toggle itself always happens on the PRESS edge.
+# minactive 0 / maxactive 1, startbutton 0, value1 = 0.5. longpress=O2,
+# buttonpress=O3, output=O1.
+#
+# Short press (held 2 ticks):
+#   t1 press1 -> toggle on {1} (output 0.5); buttonpress deferred (0)
+#   t3 release -> short -> buttonpress pulse (tick 3)
+# Long press (held >= 10 ticks):
+#   t5 press1 -> toggle off {} (output 0); deferred
+#   t14 held reaches 10 ticks -> longpress pulse (this tick only)
+#   t17 release -> was long -> NO buttonpress
+tickrate 100
+patch <<<
+[p2b8]
+
+[buttongroup]
+    button1   = B1.1
+    led1      = L1.1
+    value1    = 0.5
+    minactive = 0
+    maxactive = 1
+    startbutton = 0
+    longpresstime = 0.1
+    longpress   = O2
+    buttonpress = O3
+    output      = O1
+>>>
+@0 expect O1 0 tol 1e-4
+@1 set B1.1 1
+@1 expect O1 0.5 tol 1e-4
+@1 expect O2 0 tol 1e-4
+@1 expect O3 0 tol 1e-4
+@3 set B1.1 0
+@3 expect O3 1 tol 1e-4
+@3 expect O1 0.5 tol 1e-4
+@4 expect O3 0 tol 1e-4
+@5 set B1.1 1
+@5 expect O1 0 tol 1e-4
+@8 expect O2 0 tol 1e-4
+@14 expect O2 1 tol 1e-4
+@15 expect O2 0 tol 1e-4
+@17 set B1.1 0
+@17 expect O3 0 tol 1e-4
+@17 expect O2 0 tol 1e-4
+@17 expect O1 0 tol 1e-4

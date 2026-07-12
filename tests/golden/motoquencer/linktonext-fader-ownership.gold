@@ -1,0 +1,42 @@
+# motoquencer linktonext: two linked instances share ONE physical M4 fader bank.
+# The chain reads a single fadermode off the main (first) instance; `fadermode /
+# 10` selects which chain member owns the faders (editing with `fadermode % 10`),
+# and the others RELEASE them. Without this, every linked instance grabbed the
+# same faders and the last one in patch order won -- in the MFPS that was the
+# "activity" lane (defaultcv 7 of 8 notches -> top), which snapped all 8 faders
+# to 1.0 at boot.
+#   main   (index 0): defaultcv 0 -> dent 0 -> rest 0.0
+#   linked (index 1): defaultcv 7 -> dent 7 -> rest 1.0
+# fadermode  0 -> main owns   -> faders show 0.0
+# fadermode 10 -> linked owns -> faders show 1.0
+tickrate 100
+patch <<<
+[m4]
+
+[motoquencer]
+    fadermode  = I1
+    linktonext = 1
+    numfaders  = 4
+    numsteps   = 4
+    cvnotches  = 8
+    defaultcv  = 0
+    cv         = O1
+
+[motoquencer]
+    cvnotches  = 8
+    defaultcv  = 7
+    cv         = O2
+>>>
+# boot: fadermode 0 -> main owns the faders; the linked lane is released.
+@0 set I1 0
+@0 expect F1 0 tol 1e-4
+@0 expect F2 0 tol 1e-4
+@0 expect F3 0 tol 1e-4
+@0 expect F4 0 tol 1e-4
+# fadermode 10 -> the linked instance takes the faders and recalls its dent 7.
+@1 set I1 10
+@1 expect F1 1 tol 1e-4
+@1 expect F4 1 tol 1e-4
+# back to fadermode 0 -> the main re-takes the faders (motorized recall to 0).
+@2 set I1 0
+@2 expect F1 0 tol 1e-4

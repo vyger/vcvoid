@@ -1,0 +1,26 @@
+# triggerdelay: manual worked example 2 -- when `gatelength` is patched, the
+# original gate length is IGNORED and the output gate length is fixed at
+# `gatelength` seconds. delay = 0.1 s (10 ticks), gatelength = 0.05 s (5 ticks)
+# at tickrate 100.
+#
+# The input gate here is deliberately LONG (high t0..19, ~200 ms). If the input
+# length were preserved the output would be 200 ms; instead it is a fixed 5-tick
+# gate. This also shows the output gate STARTS (t10) before the input gate ends
+# (t20) -- the fixed length is known at the rising edge.
+#
+# input (I1): rising edge t0.  delay 10 -> output rises t10, fixed len 5 ->
+# output high t10..14, low from t15.
+tickrate 100
+patch <<<
+[triggerdelay]
+    input      = I1
+    output     = O1
+    delay      = 0.1
+    gatelength = 0.05
+>>>
+@0 set I1 1
+@20 set I1 0
+@9 expect O1 0 tol 1e-4
+@10 expect O1 1 tol 1e-4
+@14 expect O1 1 tol 1e-4
+@15 expect O1 0 tol 1e-4

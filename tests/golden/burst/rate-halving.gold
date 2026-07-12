@@ -1,0 +1,30 @@
+# `rate` selects speed on a 1V/oct base (shared with lfo): freq = hz * 2^(rate*10).
+# hz=2 with rate=-1V (-0.1) halves the frequency to 1 Hz, so at tickrate 8 the
+# period is 8 ticks (4-tick-wide pulses), NOT the 4-tick period (2-tick pulses)
+# that hz=2 alone would give. count=2 -> two pulses.
+#   freq = 2 * 2^(-1) = 1 -> P=8. trigger t1: pulses at cycles 0,1.
+#   cycle0 high t1..t4, low t5..t8; cycle1 high t9..t12, low t13.. (done).
+tickrate 8
+patch <<<
+[burst]
+    trigger = I1
+    hz      = 2
+    rate    = -1V
+    count   = 2
+    output  = O1
+>>>
+@0 expect O1 0
+@1 set I1 1
+@1 expect O1 1
+@2 set I1 0
+@2 expect O1 1
+@3 expect O1 1
+@4 expect O1 1
+@5 expect O1 0
+@8 expect O1 0
+@9 expect O1 1
+@10 expect O1 1
+@11 expect O1 1
+@12 expect O1 1
+@13 expect O1 0
+@17 expect O1 0

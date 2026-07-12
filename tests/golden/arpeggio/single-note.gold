@@ -1,0 +1,21 @@
+# arpeggio range=0: "just one single note possible and the arpeggio will stick
+# to that note." The single note is the first selected note at or above `pitch`.
+# pitch=0.0333333 (4 semitones = E), C Lydian -> E (pc4, semi4) is selected, so
+# the pool is the single note semi4 = 0.0333333. Even with a nonzero pattern the
+# output sticks (M=1 -> index always 0).
+patch <<<
+[arpeggio]
+    clock   = I1
+    output  = O1
+    pitch   = 0.0333333
+    range   = 0
+    pattern = 1
+>>>
+@1 set I1 1
+@1 expect O1 0.0333333 tol 1e-5
+@2 set I1 0
+@3 set I1 1
+@3 expect O1 0.0333333 tol 1e-5
+@4 set I1 0
+@5 set I1 1
+@5 expect O1 0.0333333 tol 1e-5

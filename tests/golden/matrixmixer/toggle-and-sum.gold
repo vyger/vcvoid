@@ -1,0 +1,28 @@
+# matrixmixer: starting from an all-clear matrix (startvalue 0), pressing a
+# button toggles that node on. Two inputs routed to the same output sum at unity
+# gain. button11 = input1->output1, button21 = input2->output1.
+#   t0: clear -> O1 = 0
+#   t1: press button11 -> input1 to output1 -> O1 = 0.3
+#   t3: press button21 -> +input2         -> O1 = 0.3 + 0.2 = 0.5
+#   t5: press button11 again (toggle off)  -> O1 = 0.2
+tickrate 100
+patch <<<
+[matrixmixer]
+    startvalue = 0
+    input1   = I1
+    input2   = I2
+    output1  = O1
+    button11 = I5
+    button21 = I6
+>>>
+@0 set I1 0.3
+@0 set I2 0.2
+@0 expect O1 0 tol 1e-4
+@1 set I5 1
+@1 expect O1 0.3 tol 1e-4
+@2 set I5 0
+@3 set I6 1
+@3 expect O1 0.5 tol 1e-4
+@4 set I6 0
+@5 set I5 1
+@5 expect O1 0.2 tol 1e-4

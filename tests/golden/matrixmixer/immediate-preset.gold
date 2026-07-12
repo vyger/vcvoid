@@ -1,0 +1,24 @@
+# matrixmixer: immediate preset switching (preset patched, no load/save
+# triggers). Changing `preset` auto-saves the current state to the old preset and
+# loads the new one. preset = I6.
+#   t1: press button11 (in preset 0) -> O1 = 0.5
+#   t3: preset 0 -> 1: auto-save preset 0 (node on), load preset 1 (clear) -> O1 = 0
+#   t7: preset 1 -> 0: auto-save preset 1 (clear), load preset 0 (node on) -> O1 = 0.5
+tickrate 100
+patch <<<
+[matrixmixer]
+    startvalue = 0
+    input1   = I1
+    output1  = O1
+    button11 = I5
+    preset   = I6
+>>>
+@0 set I1 0.5
+@0 expect O1 0 tol 1e-4
+@1 set I5 1
+@2 set I5 0
+@2 expect O1 0.5 tol 1e-4
+@3 set I6 1
+@4 expect O1 0 tol 1e-4
+@7 set I6 0
+@8 expect O1 0.5 tol 1e-4

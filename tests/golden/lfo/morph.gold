@@ -1,0 +1,46 @@
+# lfo: the `output` jack with waveform selection/morphing (manual table +
+# worked examples). Codes: 0 square, 1 sawtooth, 2 triangle, 3 ramp,
+# 4 paraboloid, 5 sine, 6 cosine. Non-integer values linearly interpolate
+# between the two neighbouring waveforms (e.g. 2.1 = 90% triangle + 10% ramp).
+# hz=4, tickrate 6000, one cycle = 1500 ticks. Phases: 375->0.25, 900->0.6.
+tickrate 6000
+patch <<<
+[lfo]
+    hz       = 4
+    waveform = 0.0
+    output   = O1
+
+[lfo]
+    hz       = 4
+    waveform = 1.0
+    output   = O2
+
+[lfo]
+    hz       = 4
+    waveform = 2.0
+    output   = O3
+
+[lfo]
+    hz       = 4
+    waveform = 0.5
+    output   = O4
+
+[lfo]
+    hz       = 4
+    waveform = 2.1
+    output   = O5
+>>>
+
+@200 expect O1 1.0 tol 1e-3    # waveform 0 = square, high at phase 0.1333
+@900 expect O1 0.0 tol 1e-3    # square low at phase 0.6
+
+@375 expect O2 0.25 tol 1e-3   # waveform 1 = sawtooth
+
+@375 expect O3 0.5  tol 1e-3   # waveform 2 = triangle
+
+# waveform 0.5 = 50% square + 50% sawtooth
+@375 expect O4 0.625 tol 1e-3  # 0.5*1 + 0.5*0.25
+@900 expect O4 0.3   tol 1e-3  # 0.5*0 + 0.5*0.6
+
+# waveform 2.1 = 90% triangle + 10% ramp
+@375 expect O5 0.525 tol 1e-3  # 0.9*0.5 + 0.1*0.75

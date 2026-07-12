@@ -1,0 +1,57 @@
+# triggerdelay: the circuit keeps memory of up to 16 in-flight triggers. When a
+# 17th trigger arrives while 16 are still in the delay line, it cannot be stored
+# and `overflow` (O2) emits a 0.5 s gate. delay = 1.0 s = 100 ticks at tickrate
+# 100, so every trigger's output is far in the future (t100+) and all 16 stay in
+# memory. Triggers fire on even ticks t0,t2,...,t32 (17 rising edges, each a
+# 1-tick gate).
+#
+#   triggers t0..t30 (16 of them) -> all stored, no overflow.
+#   trigger  t32 (the 17th)       -> memory full -> overflow gate high.
+# overflow length 0.5 s = 50 ticks: high t32..81, low from t82.
+tickrate 100
+patch <<<
+[triggerdelay]
+    input    = I1
+    output   = O1
+    overflow = O2
+    delay    = 1.0
+>>>
+@0 set I1 1
+@1 set I1 0
+@2 set I1 1
+@3 set I1 0
+@4 set I1 1
+@5 set I1 0
+@6 set I1 1
+@7 set I1 0
+@8 set I1 1
+@9 set I1 0
+@10 set I1 1
+@11 set I1 0
+@12 set I1 1
+@13 set I1 0
+@14 set I1 1
+@15 set I1 0
+@16 set I1 1
+@17 set I1 0
+@18 set I1 1
+@19 set I1 0
+@20 set I1 1
+@21 set I1 0
+@22 set I1 1
+@23 set I1 0
+@24 set I1 1
+@25 set I1 0
+@26 set I1 1
+@27 set I1 0
+@28 set I1 1
+@29 set I1 0
+@30 set I1 1
+@31 set I1 0
+@32 set I1 1
+@33 set I1 0
+@30 expect O2 0 tol 1e-4
+@31 expect O2 0 tol 1e-4
+@32 expect O2 1 tol 1e-4
+@81 expect O2 1 tol 1e-4
+@82 expect O2 0 tol 1e-4

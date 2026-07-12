@@ -1,0 +1,36 @@
+# delay: triggered mode with `timewindow`. After a `sample` trigger the tape keeps
+# adapting the last sample to the changing input CV for `timewindow` seconds, then
+# freezes it. tickrate 100, timewindow 0.05 s = 5 ticks, delay 0.3 s = 30 ticks.
+#
+# Single sample edge at t0. The window covers ticks t0..t4 (5 ticks); the held
+# value tracks live cvin during that span, then freezes on the value at t4.
+#   t0: cvin 0.5 -> held 0.5
+#   t2: cvin 0.7 -> held 0.7 (in window)
+#   t3: cvin 0.9 -> held 0.9 (in window)
+#   t4:            held 0.9 (last in-window tick)
+#   t5: cvin 1.0 -> IGNORED, held frozen at 0.9
+# Recorded tape: t0=0.5, t1=0.5, t2=0.7, t3..=0.9
+# cvout (O1) reads (t-30):
+#   t30 -> buf[0]  -> 0.5
+#   t32 -> buf[2]  -> 0.7
+#   t33 -> buf[3]  -> 0.9
+#   t35 -> buf[5]  -> 0.9   (proves post-window freeze: the t5 -> 1.0 was ignored)
+tickrate 100
+patch <<<
+[delay]
+    cvin       = I1
+    sample     = I2
+    timewindow = 0.05
+    cvout      = O1
+    delay      = 0.3
+>>>
+@0 set I1 0.5
+@0 set I2 1
+@1 set I2 0
+@2 set I1 0.7
+@3 set I1 0.9
+@5 set I1 1.0
+@30 expect O1 0.5 tol 1e-4
+@32 expect O1 0.7 tol 1e-4
+@33 expect O1 0.9 tol 1e-4
+@35 expect O1 0.9 tol 1e-4

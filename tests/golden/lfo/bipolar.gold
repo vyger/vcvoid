@@ -1,0 +1,25 @@
+# lfo: bipolar=on doubles the swing to -level..+level.
+# out = (2u - 1)*level + offset. level=1 -> swing -1..+1 (-10 V..+10 V).
+# Also checks the documented identity: in bipolar mode `ramp` == -`sawtooth`.
+# hz=4, tickrate 6000, inc=1/1500. Sample ticks: 0->0, 375->0.25, 750->0.5.
+tickrate 6000
+patch <<<
+[lfo]
+    hz       = 4
+    bipolar  = on
+    triangle = O1
+    sawtooth = O2
+    ramp     = O3
+>>>
+
+@0 expect O1 -1.0 tol 1e-3    # triangle u=0 -> 2*0-1
+@0 expect O2 -1.0 tol 1e-3    # sawtooth u=0
+@0 expect O3  1.0 tol 1e-3    # ramp u=1 -> 2*1-1 ; == -sawtooth
+
+@375 expect O1  0.0  tol 1e-3 # triangle u=0.5
+@375 expect O2 -0.5  tol 1e-3 # sawtooth u=0.25 -> 2*0.25-1
+@375 expect O3  0.5  tol 1e-3 # ramp = -sawtooth
+
+@750 expect O1  1.0  tol 1e-3 # triangle peak u=1
+@750 expect O2  0.0  tol 1e-3 # sawtooth u=0.5
+@750 expect O3  0.0  tol 1e-3 # ramp = -sawtooth

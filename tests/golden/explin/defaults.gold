@@ -1,0 +1,18 @@
+# Defaults: startvalue=1.0, endvalue=0.01, mix=1.0.
+#   input=1.0 (=start) -> 1.0
+#   input=0.1          -> 0.5   (ln10/ln100 = 1/2)
+#   input=0.5          -> 0.849485 (ln50/ln100)
+#   input=0.01 (=end)  -> 0.0
+patch <<<
+[explin]
+    input  = I1
+    output = O1
+>>>
+@0 set I1 1.0
+@0 expect O1 1.0 tol 1e-5
+@1 set I1 0.1
+@1 expect O1 0.5 tol 1e-5
+@2 set I1 0.5
+@2 expect O1 0.849485 tol 1e-5
+@3 set I1 0.01
+@3 expect O1 0 tol 1e-5

@@ -1,0 +1,17 @@
+# Anomaly 2: when minimum > maximum, folding UP takes precedence. foldby=1V,
+# minimum=2.5V (0.25), maximum=1.5V (0.15).
+#   2.4V (0.24) -> below min -> folds up to 3.4V (0.34) and stays (manual example)
+#   2.0V (0.20) -> below min -> folds up to 3.0V (0.30), stays (fold-down would
+#                  break min, so fold-up wins)
+patch <<<
+[fold]
+    input   = I1
+    foldby  = 1V
+    minimum = 2.5V
+    maximum = 1.5V
+    output  = O1
+>>>
+@0 set I1 0.24
+@0 expect O1 0.34 tol 1e-6
+@1 set I1 0.2
+@1 expect O1 0.3 tol 1e-6

@@ -1,0 +1,40 @@
+# Manual example (timing.md:75): a single-step pattern with a small NEGATIVE
+# timing shifts the whole clock forward (earlier) to compensate a delayed
+# master. timing1=-0.03, period P=100 ticks -> 3 ticks early. Steady-state
+# beats fire at 197,297,397 (3 before 200,300,400). Beat 1 (tick 100) is the
+# startup transient (on time, period not yet usable for the early shift).
+tickrate 100
+patch <<<
+[timing]
+    clock  = I1
+    output = O1
+    timing1 = -0.03
+>>>
+@0 set I1 1
+@0 expect O1 1
+@1 set I1 0
+@1 expect O1 0
+@100 set I1 1
+@100 expect O1 1
+@101 set I1 0
+@101 expect O1 0
+@194 expect O1 0
+@197 expect O1 1
+@198 expect O1 0
+@200 set I1 1
+@200 expect O1 0
+@201 set I1 0
+@294 expect O1 0
+@297 expect O1 1
+@298 expect O1 0
+@300 set I1 1
+@300 expect O1 0
+@301 set I1 0
+@394 expect O1 0
+@397 expect O1 1
+@398 expect O1 0
+@400 set I1 1
+@400 expect O1 0
+@401 set I1 0
+@497 expect O1 1
+@498 expect O1 0

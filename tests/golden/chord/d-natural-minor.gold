@@ -1,0 +1,20 @@
+# chord root/scale example: root=2 (D), degree=7 (natural minor) -> D natural
+# minor. Smart default all-7; first four interval-order notes = root/3rd/5th/7th
+# = D,F,A,C -> a D minor 7. pitch=0, spread=0, inversion=0.
+# Inversion 0 lets any note be lowest, choosing the voicing nearest above pitch:
+# the lowest chord note is C (pc0, semi 0), which is voice 4's note. Each output
+# keeps its own selected note's pitch class:
+#   O1=D(semi 2), O2=F(5), O3=A(9), O4=C(0)  (O4 is the lowest note here)
+patch <<<
+[chord]
+    output1 = O1
+    output2 = O2
+    output3 = O3
+    output4 = O4
+    root    = 2
+    degree  = 7
+>>>
+@0 expect O1 0.0166667 tol 1e-5
+@0 expect O2 0.0416667 tol 1e-5
+@0 expect O3 0.075 tol 1e-5
+@0 expect O4 0 tol 1e-5

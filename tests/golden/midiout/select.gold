@@ -1,0 +1,23 @@
+# midiout select/selectat (manual line 387). IMPORTANT: the manual says select
+# only gates the processing of BUTTONS and LEDs, and that "even if the circuit is
+# currently not selected, it will nevertheless work and process all its other
+# inputs and its outputs ... in a normal way." midiout has NO button or LED jacks,
+# so select has NO effect on its MIDI output. This CONTRADICTS the task brief's
+# assumption that an unselected circuit "emits nothing"; the manual governs. Here
+# the circuit is deselected (select=0 while selectat=1) yet still emits its notes.
+tickrate 1000
+x7 1
+patch <<<
+[midiout]
+    pitch = I1
+    gate  = I2
+    select = 0
+    selectat = 1
+    pitchstabilization = 0
+    activesensing = 0
+>>>
+@0 set I1 0.3
+@1 set I2 1
+@1 expectmidi trs noteon 1 60 127
+@2 set I2 0
+@2 expectmidi trs noteoff 1 60 127

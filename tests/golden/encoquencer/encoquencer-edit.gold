@@ -1,0 +1,37 @@
+# encoquencer: editing on the E4. Encoder TURNS nudge a step's value by detents (no
+# absolute position); in pitch mode each detent = one scale-note notch. Encoder PUSH
+# toggles the gate (buttonmode 0). Here step0 is turned +7 notches (C -> C+1oct =
+# 0.1 V), step1 +14 (C+2oct = 0.2 V), and step2's gate is pushed off so it stays
+# silent. E1.n addresses the n-th E4 encoder.
+tickrate 100
+patch <<<
+[e4]
+[encoquencer]
+    clock = I1
+    cv    = O1
+    gate  = O2
+>>>
+# tick1: dial in step0 and step1 pitches via encoder turns.
+@1 turn E1.1 7
+@1 turn E1.2 14
+# step0 plays 0.1 V.
+@2 set I1 1
+@2 expect O1 0.1 tol 1e-4
+@2 expect O2 1 tol 1e-4
+# push step2's encoder -> toggle its gate off.
+@3 set I1 0
+@3 push E1.3 1
+# step1 plays 0.2 V.
+@4 set I1 1
+@4 push E1.3 0
+@4 expect O1 0.2 tol 1e-4
+@4 expect O2 1 tol 1e-4
+# step2: gate is off -> silent; cv holds the previous 0.2 (holdcv default).
+@5 set I1 0
+@6 set I1 1
+@6 expect O2 0 tol 1e-4
+# step3: default gate on, pitch 0.
+@7 set I1 0
+@8 set I1 1
+@8 expect O1 0.0 tol 1e-4
+@8 expect O2 1 tol 1e-4

@@ -1,0 +1,18 @@
+# chord SPEC-GAP: empty allowed-note set. harmonicshift=-7 disables all seven
+# scale notes (no fills selected), so no note is available. The manual does not
+# define chord output in this case; the literal reading is that no voice is
+# placed and each output holds its initial 0 V. transpose=0.025 makes that
+# observable: every output is a constant 0.025 (0 held + transpose).
+patch <<<
+[chord]
+    output1       = O1
+    output2       = O2
+    output3       = O3
+    output4       = O4
+    harmonicshift = -7
+    transpose     = 0.025
+>>>
+@0 expect O1 0.025 tol 1e-5
+@0 expect O2 0.025 tol 1e-5
+@0 expect O3 0.025 tol 1e-5
+@0 expect O4 0.025 tol 1e-5

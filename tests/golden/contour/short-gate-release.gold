@@ -1,0 +1,29 @@
+# contour: gate ends during attack (abortattack off, the default). Manual
+# (contour.md 145): the attack phase "will be finalized regardless of the gate
+# state"; then, since the gate is low, release is entered directly -- decay and
+# sustain are skipped (manual 141/142). tickrate 100. attack=1 -> 10 ticks;
+# decay=0.05 -> 10 ticks (patched only to prove it is SKIPPED); release=0.05 ->
+# 10 ticks. Gate high t0..t4 (low from t5, mid-attack).
+#   attack  t0..t10: 0 -> 1.0 (finalized despite gate low from t5)
+#   release t10..t20: 1.0 -> 0 (no decay, no sustain), idle after
+# Regression: the envelope must NOT park at sustain (0.5) forever, and
+# endofdecay must never fire.
+tickrate 100
+patch <<<
+[contour]
+    gate       = I1
+    attack     = 1
+    decay      = 0.05
+    release    = 0.05
+    output     = O1
+    endofdecay = O3
+>>>
+@0 set I1 1
+@0 expect O1 0 tol 1e-4
+@5 set I1 0
+@5 expect O1 0.5 tol 1e-4
+@10 expect O1 1.0 tol 1e-4
+@15 expect O1 0.5 tol 1e-4
+@20 expect O1 0 tol 1e-4
+@20 expect O3 0
+@60 expect O1 0 tol 1e-4

@@ -1,0 +1,32 @@
+# All twelve select inputs (select1..13 + selectfill1..5) on = chromatic scale:
+# every pitch class allowed, so quantization degrades to pure snap-to-nearest-
+# semitone with no scale search. Ties round up (0.5 semi -> 1 semi).
+patch <<<
+[minifonion]
+    input       = I1
+    output      = O2
+    select1     = 1
+    select3     = 1
+    select5     = 1
+    select7     = 1
+    select9     = 1
+    select11    = 1
+    select13    = 1
+    selectfill1 = 1
+    selectfill2 = 1
+    selectfill3 = 1
+    selectfill4 = 1
+    selectfill5 = 1
+>>>
+# pc1 kept as-is (chromatic), unlike the lydian case where it would be shifted
+@0 set I1 0.0083333
+@0 expect O2 0.0083333 tol 1e-5
+# 0.6 semi snaps up to 1 semi
+@1 set I1 0.005
+@1 expect O2 0.0083333 tol 1e-5
+# 0.4 semi snaps down to 0
+@2 set I1 0.0033333
+@2 expect O2 0 tol 1e-5
+# negative pitch snaps to -1 semitone
+@3 set I1 -0.0083333
+@3 expect O2 -0.0083333 tol 1e-5

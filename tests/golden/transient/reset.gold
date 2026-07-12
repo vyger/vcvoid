@@ -1,0 +1,20 @@
+# A trigger at `reset` immediately sets the transient back to start (the one
+# allowed sudden step) and restarts the ramp. reset at t6 -> output jumps to 0,
+# then ramps again, reaching end at t16.
+tickrate 10
+patch <<<
+[transient]
+    start    = 0
+    end      = 0.5
+    duration = 1
+    reset    = I1
+    output   = O1
+    phase    = O2
+>>>
+@5 expect O1 0.25 tol 1e-4
+@6 set I1 1
+@6 expect O1 0 tol 1e-4
+@6 expect O2 0 tol 1e-4
+@7 set I1 0
+@7 expect O1 0.05 tol 1e-4
+@16 expect O1 0.5 tol 1e-4

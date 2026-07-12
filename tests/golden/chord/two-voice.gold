@@ -1,0 +1,11 @@
+# chord two-voice mode: only output1/output2 connected. "Just the first two
+# select inputs are taken into account." C major default -> the first two
+# interval-order notes = root/3rd = C,E. pitch=0, spread=0.
+#   O1=C(0), O2=E(4)
+patch <<<
+[chord]
+    output1 = O1
+    output2 = O2
+>>>
+@0 expect O1 0 tol 1e-5
+@0 expect O2 0.0333333 tol 1e-5

@@ -1,0 +1,24 @@
+# triggerdelay: manual worked example 1 -- the simplest case. With no `delay`
+# patched the default is 1.0 (seconds, no clock), so at tickrate 100 the delay
+# is 100 ticks. The input gate is delayed verbatim, preserving its length.
+#
+# The circuit "does not look at the voltage level" of the input and always emits
+# a full 10 V (engine 1.0) gate: the input here is driven at 0.5, but the output
+# is 1.0.
+#
+# input (I1): rising edge t0, falling edge t3  -> gate length G = 3 ticks
+# output (O1): rising edge t0+100=100, high t100..102, low from t103
+tickrate 100
+patch <<<
+[triggerdelay]
+    input  = I1
+    output = O1
+>>>
+@0 set I1 0.5
+@3 set I1 0
+@50 expect O1 0 tol 1e-4
+@99 expect O1 0 tol 1e-4
+@100 expect O1 1 tol 1e-4
+@101 expect O1 1 tol 1e-4
+@102 expect O1 1 tol 1e-4
+@103 expect O1 0 tol 1e-4

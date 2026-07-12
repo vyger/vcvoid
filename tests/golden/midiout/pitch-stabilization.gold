@@ -1,0 +1,35 @@
+# midiout pitch stabilization (manual lines 256-291, 352). Default ON: after the
+# gate edge the note-on is held until the pitch has been stable (unchanged) for
+# the settle window. CHOSEN READING: the window is 2 ms ("stable ... for at least
+# some very short time"; the manual gives no exact figure). A pitch that keeps
+# moving keeps resetting the window, so the note-on is delayed and finally uses
+# the settled pitch. See pitch-stab-off.gold for the pitchstabilization=0 case.
+tickrate 1000
+x7 1
+patch <<<
+[midiout]
+    pitch = I1
+    gate  = I2
+    activesensing = 0
+>>>
+# stable pitch: note-on lands 2 ms after the gate edge (t=1 -> t=3)
+@0 set I1 0.3
+@1 set I2 1
+@1 expectmidi trs none
+@2 expectmidi trs none
+@3 expectmidi trs noteon 1 60 127
+@10 set I2 0
+@10 expectmidi trs noteoff 1 60 127
+# moving pitch: each change resets the window; last change is at t=23, so the
+# note-on lands at t=25 using the settled pitch 0.33 -> note 64
+@20 set I1 0.3
+@20 set I2 1
+@21 set I1 0.31
+@22 set I1 0.32
+@23 set I1 0.33
+@23 expectmidi trs none
+@24 set I1 0.33
+@24 expectmidi trs none
+@25 expectmidi trs noteon 1 64 127
+@30 set I2 0
+@30 expectmidi trs noteoff 1 64 127

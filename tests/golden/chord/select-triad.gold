@@ -1,0 +1,18 @@
+# chord note selection with 3 notes in 4-voice mode: select1/3/5 = root/3rd/5th
+# = C,E,G. "If you select three notes, output4 will play the same as output1."
+# So the four voices are C,E,G,C. spread=0 -> the doubled C is a unison with O1.
+#   O1=C(semi 0), O2=E(4), O3=G(7), O4=C(0, same as O1)
+patch <<<
+[chord]
+    output1 = O1
+    output2 = O2
+    output3 = O3
+    output4 = O4
+    select1 = 1
+    select3 = 1
+    select5 = 1
+>>>
+@0 expect O1 0 tol 1e-5
+@0 expect O2 0.0333333 tol 1e-5
+@0 expect O3 0.0583333 tol 1e-5
+@0 expect O4 0 tol 1e-5

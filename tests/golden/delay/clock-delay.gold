@@ -1,0 +1,43 @@
+# delay: manual worked example 2 -- with `clock` patched, `delay` is measured in
+# clock ticks, not seconds. Clock rises every 10 engine ticks (t0,10,20,...); the
+# period is learned from the first two edges, so from t>=10 the period is 10 and
+# delay=4 clock ticks -> 40 engine ticks. Until the period is known (t<10) nothing
+# is played back yet; and until 40 ticks of history exist the tape reads empty (0).
+#
+# cvin (I1): t0..4 = 0.3, t5..49 = 0.6, t50+ = -0.2
+# cvout (O1) reads (t-40) once period known:
+#   t35 -> pos -5 -> 0
+#   t40 -> buf[0]  -> 0.3
+#   t44 -> buf[4]  -> 0.3
+#   t45 -> buf[5]  -> 0.6
+#   t89 -> buf[49] -> 0.6
+#   t90 -> buf[50] -> -0.2
+tickrate 100
+patch <<<
+[delay]
+    cvin  = I1
+    cvout = O1
+    clock = I2
+    delay = 4
+>>>
+@0 set I1 0.3
+@0 set I2 1
+@1 set I2 0
+@5 set I1 0.6
+@10 set I2 1
+@11 set I2 0
+@20 set I2 1
+@21 set I2 0
+@30 set I2 1
+@31 set I2 0
+@35 expect O1 0 tol 1e-4
+@40 set I2 1
+@40 expect O1 0.3 tol 1e-4
+@41 set I2 0
+@44 expect O1 0.3 tol 1e-4
+@45 expect O1 0.6 tol 1e-4
+@50 set I1 -0.2
+@50 set I2 1
+@51 set I2 0
+@89 expect O1 0.6 tol 1e-4
+@90 expect O1 -0.2 tol 1e-4

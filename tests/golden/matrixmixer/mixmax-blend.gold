@@ -1,0 +1,21 @@
+# matrixmixer: mixmax between 0 and 1 is a linear blend of sum and max:
+# output = (1-mixmax)*sum + mixmax*max. mixmax 0.5, inputs 0.2 and 0.6 both
+# routed to output1 -> sum 0.8, max 0.6 -> 0.5*0.8 + 0.5*0.6 = 0.7.
+tickrate 100
+patch <<<
+[matrixmixer]
+    startvalue = 0
+    mixmax   = 0.5
+    input1   = I1
+    input2   = I2
+    output1  = O1
+    button11 = I5
+    button21 = I6
+>>>
+@0 set I1 0.2
+@0 set I2 0.6
+@1 set I5 1
+@2 set I5 0
+@3 set I6 1
+@4 set I6 0
+@5 expect O1 0.7 tol 1e-4

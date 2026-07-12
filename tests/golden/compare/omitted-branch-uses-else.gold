@@ -1,0 +1,17 @@
+# An omitted ifless/ifequal/ifgreater uses the `else` VALUE (not 0), and because
+# `else` is patched here the all-four-omitted -> ifequal=1 rule does NOT apply.
+# So with only else=0.5 patched, EVERY relation (incl. equal) outputs 0.5 --
+# crucially equal outputs 0.5, not 1.
+patch <<<
+[compare]
+    input   = I1
+    compare = 0
+    else    = 0.5
+    output  = O1
+>>>
+@0 set I1 0
+@0 expect O1 0.5
+@1 set I1 0.5
+@1 expect O1 0.5
+@2 set I1 -0.5
+@2 expect O1 0.5

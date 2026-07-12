@@ -1,0 +1,22 @@
+# motorfader: startvalue seeding + continuous (notches 0) user movement.
+# No select -> always selected -> owns the fader. The motor is commanded to the
+# seeded start position at load, then tracks the user's fader position.
+#   @0 seed startvalue 0.3 -> output & fader = 0.3
+#   @1 user moves fader to 0.75 -> output & fader follow
+tickrate 100
+patch <<<
+[m4]
+
+[motorfader]
+    fader      = 1
+    startvalue = 0.3
+    output     = O1
+>>>
+@0 expect O1 0.3 tol 1e-4
+@0 expect F1 0.3 tol 1e-4
+@1 move F1 0.75
+@1 expect O1 0.75 tol 1e-4
+@1 expect F1 0.75 tol 1e-4
+@2 move F1 0.1
+@2 expect O1 0.1 tol 1e-4
+@2 expect F1 0.1 tol 1e-4

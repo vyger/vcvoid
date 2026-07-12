@@ -1,0 +1,15 @@
+# "Omitted inputs": if ifless, ifequal, ifgreater AND else are ALL omitted,
+# ifequal defaults to 1 (a bare equality check). less/greater still fall back to
+# else's default (0). Worked example: input=B1.1, compare=0 -> 1 when equal.
+patch <<<
+[compare]
+    input   = I1
+    compare = 0
+    output  = O1
+>>>
+@0 set I1 0
+@0 expect O1 1
+@1 set I1 0.5
+@1 expect O1 0
+@2 set I1 -0.5
+@2 expect O1 0

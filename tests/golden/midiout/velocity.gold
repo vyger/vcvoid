@@ -1,0 +1,23 @@
+# midiout velocity + note-off velocity + channel (manual lines 48-65, 343, 348,
+# 349). velocity 0..1 maps to 0..127 (round). Here velocity=0.5 -> 64,
+# noteoffvelocity=0.25 -> 32. channel=10 selects MIDI channel 10 (low nibble 9).
+# pitchstabilization=0 so the note-on lands on the gate edge. pitch 0 -> note 24.
+tickrate 1000
+x7 1
+patch <<<
+[midiout]
+    channel = 10
+    pitch = I1
+    gate  = I2
+    velocity = I3
+    noteoffvelocity = I4
+    pitchstabilization = 0
+    activesensing = 0
+>>>
+@0 set I1 0
+@0 set I3 0.5
+@0 set I4 0.25
+@1 set I2 1
+@1 expectmidi trs noteon 10 24 64
+@2 set I2 0
+@2 expectmidi trs noteoff 10 24 32

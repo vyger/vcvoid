@@ -1,0 +1,17 @@
+# compare worked example (equality): input equal to compare -> ifequal,
+# otherwise else. (Manual uses ifequal=4/else=8; those would clamp at the ±10 V
+# output, so we use in-range 0.4/0.8 to test the branching itself.) compare=0.
+patch <<<
+[compare]
+    input   = I1
+    compare = 0
+    ifequal = 0.4
+    else    = 0.8
+    output  = O1
+>>>
+@0 set I1 0
+@0 expect O1 0.4
+@1 set I1 0.5
+@1 expect O1 0.8
+@2 set I1 -0.5
+@2 expect O1 0.8

@@ -1,0 +1,22 @@
+# detune tuningmode: while high, every wired output emits tuningpitch instead
+# of the (detuned) pitch; releasing it restores normal operation. Unpatched
+# inputs default to 0 V and are detuned like any other voice.
+tickrate 100
+patch <<<
+[detune]
+    detune      = 1
+    tuningmode  = I1
+    tuningpitch = 0.2
+    input1      = 0.1
+    output1     = O1
+    output2     = O2
+>>>
+# normal mode: voice1 = 0.1 + 1/120; voice2 unpatched -> 0 - 0.9/120
+@0 expect O1 0.1083333 tol 1e-6
+@0 expect O2 -0.0075 tol 1e-6
+@1 set I1 1
+@1 expect O1 0.2 tol 1e-6
+@1 expect O2 0.2 tol 1e-6
+@2 set I1 0
+@2 expect O1 0.1083333 tol 1e-6
+@2 expect O2 -0.0075 tol 1e-6

@@ -1,0 +1,23 @@
+# midifileplayer: format-1 file with a meta-only tempo track. File E: track 1
+# holds only Set Tempo 250000 us/quarter (240 BPM); track 2 is file A's note
+# track. Track selection counts non-empty tracks only (manual "Selecting file
+# and track"), so the DEFAULT track (first non-empty) is the note track, and
+# an out-of-range track number selects the last one.
+# Tempo 250000 -> 384 file-ticks/sec -> noteoff at tick 96 = engine tick 1500.
+midifile 1 4D546864000000060001000200604D54726B0000000B00FF510303D09000FF2F004D54726B0000000C00903C6460803C0000FF2F00
+patch <<<
+[midifileplayer]
+    loop = 0
+    gate = O1
+
+[midifileplayer]
+    loop = 0
+    track = 99
+    gate = O2
+>>>
+@0 expect O1 1
+@0 expect O2 1
+@1490 expect O1 1
+@1490 expect O2 1
+@1510 expect O1 0
+@1510 expect O2 0

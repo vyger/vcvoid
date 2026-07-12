@@ -1,0 +1,19 @@
+# trigger mode: the trigger duration is ignored and there is NO decay/sustain --
+# attack (and hold) go straight to release. A 1-tick trigger at t0 still runs the
+# full attack (t0..t10: 0->1), then release (t10..t20: 1->0). decay/sustain have
+# no effect. release=0.05 -> 10 ticks.
+tickrate 100
+patch <<<
+[contour]
+    trigger = I1
+    attack  = 1
+    decay   = 0.05
+    sustain = 0.5
+    release = 0.05
+    output  = O1
+>>>
+@0 set I1 1
+@1 set I1 0
+@10 expect O1 1.0 tol 1e-4
+@15 expect O1 0.5 tol 1e-4
+@20 expect O1 0 tol 1e-4

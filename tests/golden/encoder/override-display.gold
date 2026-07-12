@@ -1,0 +1,24 @@
+# encoder: override turns the circuit into a mere display. The knob is IGNORED;
+# `output` follows the override input (clamped into the mode range). mode 1,
+# smooth 0.
+#   @0 override I1 = 0 -> output 0
+#   @1 I1 = 0.7 -> output 0.7
+#   @2 turn +48 (knob ignored) -> output still 0.7
+#   @3 I1 = 1.5 -> clamped to 1.0
+tickrate 100
+patch <<<
+[e4]
+
+[encoder]
+    encoder  = E1.1
+    output   = O1
+    override = I1
+    smooth   = 0
+>>>
+@0 expect O1 0 tol 1e-4
+@1 set I1 0.7
+@1 expect O1 0.7 tol 1e-4
+@2 turn E1.1 48
+@2 expect O1 0.7 tol 1e-4
+@3 set I1 1.5
+@3 expect O1 1.0 tol 1e-4

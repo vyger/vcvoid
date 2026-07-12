@@ -1,0 +1,21 @@
+# motorfader: notches = 2 -> binary switch. Output is 0 at the bottom, 1 at the
+# top; moving the fader away from a rest snaps it to the other side. The fader
+# position itself snaps to the dent (0.0 or 1.0), observable via `expect F1`.
+tickrate 100
+patch <<<
+[m4]
+
+[motorfader]
+    fader      = 1
+    notches    = 2
+    startvalue = 0
+    output     = O1
+>>>
+@0 expect O1 0 tol 1e-4
+@0 expect F1 0 tol 1e-4
+@1 move F1 0.6
+@1 expect O1 1 tol 1e-4
+@1 expect F1 1 tol 1e-4
+@2 move F1 0.4
+@2 expect O1 0 tol 1e-4
+@2 expect F1 0 tol 1e-4

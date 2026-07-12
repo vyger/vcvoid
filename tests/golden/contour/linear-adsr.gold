@@ -1,0 +1,32 @@
+# contour linear ADSR (shape default 0.5). tickrate 100. attack=1 -> 0.1 s = 10
+# ticks (attack value 1 => 0.1 s). decay=0.05 -> 0.1 s = 10 ticks (value*2 s).
+# sustain=0.5 (default). release=0.05 -> 0.1 s = 10 ticks. Gate high t0..t29.
+#   attack  t0..t10: 0 -> 1.0 (0.1/tick), endofattack at t10
+#   decay   t10..t20: 1.0 -> 0.5, endofdecay at t20
+#   sustain t20..t30: 0.5
+#   release t30..t40: 0.5 -> 0, envelope idle after
+tickrate 100
+patch <<<
+[contour]
+    gate        = I1
+    attack      = 1
+    decay       = 0.05
+    release     = 0.05
+    output      = O1
+    endofattack = O2
+    endofdecay  = O3
+>>>
+@0 set I1 1
+@0 expect O1 0 tol 1e-4
+@5 expect O1 0.5 tol 1e-4
+@10 expect O1 1.0 tol 1e-4
+@10 expect O2 1
+@11 expect O2 0
+@15 expect O1 0.75 tol 1e-4
+@20 expect O1 0.5 tol 1e-4
+@20 expect O3 1
+@25 expect O1 0.5 tol 1e-4
+@30 set I1 0
+@30 expect O1 0.5 tol 1e-4
+@35 expect O1 0.25 tol 1e-4
+@40 expect O1 0 tol 1e-4

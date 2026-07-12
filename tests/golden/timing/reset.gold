@@ -1,0 +1,51 @@
+# `reset` (timing.md:105): a trigger resets the internal step counter, so the
+# next clock restarts at step 1. Swing timing [0,0.3], P=20. A reset at tick
+# 50 (after beats 0,1,2) makes the edge at 60 a fresh step-0 downbeat (on
+# time), 80 a step-1 (delayed to 86), etc. -- re-synchronising the groove.
+tickrate 100
+patch <<<
+[timing]
+    clock  = I1
+    output = O1
+    reset  = I2
+    timing1 = 0
+    timing2 = 0.3
+>>>
+@0 set I1 1
+@0 expect O1 1
+@1 set I1 0
+@1 expect O1 0
+@20 set I1 1
+@20 expect O1 0
+@21 set I1 0
+@26 expect O1 1
+@27 expect O1 0
+@40 set I1 1
+@40 expect O1 1
+@41 set I1 0
+@41 expect O1 0
+@50 set I2 1
+@51 set I2 0
+@60 set I1 1
+@60 expect O1 1
+@61 set I1 0
+@61 expect O1 0
+@66 expect O1 0
+@80 set I1 1
+@80 expect O1 0
+@81 set I1 0
+@86 expect O1 1
+@87 expect O1 0
+@100 set I1 1
+@100 expect O1 1
+@101 set I1 0
+@101 expect O1 0
+@120 set I1 1
+@120 expect O1 0
+@121 set I1 0
+@126 expect O1 1
+@127 expect O1 0
+@140 set I1 1
+@140 expect O1 1
+@141 set I1 0
+@141 expect O1 0

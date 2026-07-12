@@ -1,0 +1,47 @@
+# Manual rule (timing.md:89): when two beats land on the same time, just ONE
+# trigger is output. timing = [0.5, -0.5], P=20: beat2 (step0) delays to 50,
+# beat3 (step1) advances to 50 -- they coincide and merge into a single pulse
+# at 50 (likewise 90, 130). Only one output-high tick each, not two.
+tickrate 100
+patch <<<
+[timing]
+    clock  = I1
+    output = O1
+    timing1 = 0.5
+    timing2 = -0.5
+>>>
+@0 set I1 1
+@0 expect O1 1
+@1 set I1 0
+@1 expect O1 0
+@20 set I1 1
+@20 expect O1 1
+@21 set I1 0
+@21 expect O1 0
+@40 set I1 1
+@40 expect O1 0
+@41 set I1 0
+@49 expect O1 0
+@50 expect O1 1
+@51 expect O1 0
+@60 set I1 1
+@60 expect O1 0
+@61 set I1 0
+@80 set I1 1
+@80 expect O1 0
+@81 set I1 0
+@89 expect O1 0
+@90 expect O1 1
+@91 expect O1 0
+@100 set I1 1
+@100 expect O1 0
+@101 set I1 0
+@120 set I1 1
+@120 expect O1 0
+@121 set I1 0
+@129 expect O1 0
+@130 expect O1 1
+@131 expect O1 0
+@140 set I1 1
+@140 expect O1 0
+@141 set I1 0

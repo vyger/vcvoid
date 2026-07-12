@@ -1,0 +1,32 @@
+# crossfader worked example 2: with N inputs, fade 0..1 maps to position
+# p = fade*(N-1); output linearly interpolates input[floor(p)] and input[floor(p)+1].
+# N=4 (N-1=3): fade=0 -> input1, fade=1 -> input4 (last). inputs 0.1/0.2/0.3/0.4.
+# Binary-exact fades keep p exact:
+#   fade 0     -> p=0.0  -> input1                         = 0.1
+#   fade 0.25  -> p=0.75 -> 0.25*i1 + 0.75*i2 = .025+.15   = 0.175
+#   fade 0.5   -> p=1.5  -> 0.5*i2 + 0.5*i3   = .1+.15     = 0.25
+#   fade 0.75  -> p=2.25 -> 0.75*i3 + 0.25*i4 = .225+.1    = 0.325
+#   fade 1.0   -> p=3.0  -> input4                         = 0.4
+patch <<<
+[crossfader]
+    input1 = I1
+    input2 = I2
+    input3 = I3
+    input4 = I4
+    fade   = I5
+    output = O1
+>>>
+@0 set I1 0.1
+@0 set I2 0.2
+@0 set I3 0.3
+@0 set I4 0.4
+@0 set I5 0
+@0 expect O1 0.1
+@1 set I5 0.25
+@1 expect O1 0.175
+@2 set I5 0.5
+@2 expect O1 0.25
+@3 set I5 0.75
+@3 expect O1 0.325
+@4 set I5 1
+@4 expect O1 0.4

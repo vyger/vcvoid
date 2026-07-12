@@ -1,0 +1,22 @@
+# display: same-tick two-writer tie-break.  SPEC-GAP (display.md is silent): when
+# two display circuits both change on the SAME tick, patch order decides and the
+# LATER circuit's accepted write lands last.  A fresh write installs a linger, but
+# that linger must not block a later writer on the very tick it was installed
+# (that is cross-tick arbitration); the DisplayState.lastWriteTick seam allows the
+# same-tick overwrite while still blocking future ticks.
+#   t0: A(=0.3) writes first, then B(=0.6) overwrites  -> screen shows 0.6 (B)
+#   t1: both constant, no change                        -> screen holds 0.6
+tickrate 100
+patch <<<
+[db8e]
+
+[display]
+    value = I1
+
+[display]
+    value = I2
+>>>
+@0 set I1 0.3
+@0 set I2 0.6
+@0 expectdisplay D1 value 0.6 tol 1e-6
+@1 expectdisplay D1 value 0.6 tol 1e-6

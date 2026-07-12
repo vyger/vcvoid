@@ -1,0 +1,20 @@
+# selectfill: select1 (root, pc0) + selectfill1 (C lydian fill1 = C# = pc1) ->
+# allowed = {0,1}. direction=2 (down) to keep the search local. This proves a
+# fill note (a non-scale note) becomes a legal target.
+patch <<<
+[minifonion]
+    input       = I1
+    output      = O2
+    select1     = 1
+    selectfill1 = 1
+    direction   = 2
+>>>
+# C# (pc1) is now allowed via the fill -> passthrough
+@0 set I1 0.0083333
+@0 expect O2 0.0083333 tol 1e-5
+# C (pc0) allowed
+@1 set I1 0
+@1 expect O2 0 tol 1e-5
+# D (2 semi, pc2) not allowed; down -> C# (1 semi, the fill)
+@2 set I1 0.0166667
+@2 expect O2 0.0083333 tol 1e-5

@@ -1,0 +1,41 @@
+# motoquencer (finding F8): at a fast clock the ratchet subgates must still
+# retrigger. Each subgate's length is floored to a ~10 ms trigger; when the
+# ratchet interval is shorter than that floor, the naive floor fused every
+# subgate into one continuous gate (zero edges -> a silent/held gate). The fix
+# caps each subgate so it always ends before the next subgate boundary.
+#
+# tickrate 1000 -> 10 ms floor = 10 ticks. Period-64 clock -> with 8 ratchets the
+# interval is 8 ticks (< the 10-tick floor). Step 1 (2nd step) is set to 8
+# ratchets (fadermode 5, top notch) and tested on the 2nd edge, where the period
+# is known. Expect 8 distinct gates: high for 7 ticks, low for 1, every 8 ticks.
+tickrate 1000
+patch <<<
+[m4]
+[motoquencer]
+    clock     = I1
+    fadermode = I2
+    numsteps  = 2
+    gate      = O2
+>>>
+@1 set I2 5
+@2 move F2 1.0
+@2 expect F2 1.0 tol 1e-4
+@3 set I2 0
+# period-64 clock: step0 on the 1st edge (period unknown), step1 on the 2nd.
+@64 set I1 1
+@65 set I1 0
+@128 set I1 1
+# step1's 8 ratchet subgates (interval 8 ticks, each gate ~7 ticks then a gap):
+@128 expect O2 1 tol 1e-4
+@134 expect O2 1 tol 1e-4
+@135 expect O2 0 tol 1e-4
+@136 expect O2 1 tol 1e-4
+@142 expect O2 1 tol 1e-4
+@143 expect O2 0 tol 1e-4
+@144 expect O2 1 tol 1e-4
+@159 expect O2 0 tol 1e-4
+@160 expect O2 1 tol 1e-4
+@184 expect O2 1 tol 1e-4
+@190 expect O2 1 tol 1e-4
+@191 expect O2 0 tol 1e-4
+@192 set I1 1

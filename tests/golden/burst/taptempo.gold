@@ -1,0 +1,32 @@
+# `taptempo`: feed a reference clock and the burst runs at that clock's speed.
+# Rising edges on the taptempo input at t0 and t4 establish an interval of 4
+# ticks = 0.5 s (at tickrate 8) -> 2 Hz -> period P = tickRate/freq = 4 ticks.
+# A trigger at t8 then fires count=2 pulses at that rate: each 2 ticks high,
+# 2 ticks low.
+#   trigger t8 -> k=t-8, phase=k/4. cycle0 high t8..t9, low t10..t11;
+#   cycle1 high t12..t13, low t14.. (done at cycle 2).
+tickrate 8
+patch <<<
+[burst]
+    taptempo = I2
+    trigger  = I1
+    count    = 2
+    output   = O1
+>>>
+# establish tap interval (two rising edges 4 ticks apart)
+@0 set I2 1
+@0 expect O1 0
+@1 set I2 0
+@4 set I2 1
+@5 set I2 0
+@7 expect O1 0
+@8 set I1 1
+@8 expect O1 1
+@9 set I1 0
+@9 expect O1 1
+@10 expect O1 0
+@11 expect O1 0
+@12 expect O1 1
+@13 expect O1 1
+@14 expect O1 0
+@16 expect O1 0

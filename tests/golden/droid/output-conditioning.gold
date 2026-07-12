@@ -1,0 +1,47 @@
+# [droid] per-output smoothing: lpfilter/maxslope condition the master's O
+# outputs at the "DAC" stage (applied by the Engine after all circuits tick).
+# SPEC-GAP pins (the manual describes the filter only qualitatively):
+#  * one-pole smoothing, alpha = max((1-lpfilter)^2, 0.01) per engine tick;
+#  * changes >= maxslope pass unfiltered (intentional jumps); maxslope = 0
+#    turns smoothing off entirely (manual-pinned);
+#  * conditioning applies ONLY to outputs whose lpfilter/maxslope jack is
+#    patched -- the hardware's always-on default (0.25/0.25) is deliberately
+#    not emulated (engine outputs are artifact-free floats).
+# O1 conditioned (lpfilter 0.5, maxslope 0.05 -> alpha 0.25); O2 raw copy of
+# the same input for comparison; O3 conditioned but maxslope 0 -> passthrough.
+tickrate 100
+patch <<<
+[droid]
+    lpfilter1 = 0.5
+    maxslope1 = 0.05
+    lpfilter3 = 1
+    maxslope3 = 0
+>>>
+patch <<<
+[copy]
+    input  = I1
+    output = O1
+>>>
+patch <<<
+[copy]
+    input  = I1
+    output = O2
+>>>
+patch <<<
+[copy]
+    input  = I1
+    output = O3
+>>>
+@0 expect O1 0 tol 1e-6
+# small step 0.02 (< maxslope 0.05): smoothed with alpha 0.25; O2 raw; O3
+# passthrough despite lpfilter=1 because maxslope=0 disables smoothing
+@1 set I1 0.02
+@1 expect O1 0.005 tol 1e-6
+@1 expect O2 0.02 tol 1e-6
+@1 expect O3 0.02 tol 1e-6
+@2 expect O1 0.00875 tol 1e-6
+@3 expect O1 0.0115625 tol 1e-6
+# big jump (>= maxslope): passes unfiltered
+@4 set I1 0.5
+@4 expect O1 0.5 tol 1e-6
+@4 expect O2 0.5 tol 1e-6

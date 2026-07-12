@@ -1,0 +1,45 @@
+# "This output trigger is only happening once, even if there were multiple input
+# triggers since the last clock signal." Multiple triggers keep one pending
+# state; the most recent trigger re-freezes the value. One clock -> one output.
+patch <<<
+[clockedtrigger]
+    clock          = I1
+    trigger        = I2
+    value          = I4
+    clockedtrigger = O1
+    clockedvalue   = O2
+    pendingtrigger = O3
+    pendingvalue   = O4
+>>>
+
+# first trigger, value 0.2
+@1 set I2 1
+@1 set I4 0.2
+@1 expect O3 1
+@1 expect O4 0.2
+@2 set I2 0
+@2 expect O3 1
+@2 expect O4 0.2
+
+# second trigger before any clock, value 0.7 -> re-freezes to 0.7
+@3 set I2 1
+@3 set I4 0.7
+@3 expect O1 0
+@3 expect O3 1
+@3 expect O4 0.7
+@4 set I2 0
+
+# one clock -> single output, releases the latest frozen value (0.7)
+@5 set I1 1
+@5 expect O1 1
+@5 expect O2 0.7
+@5 expect O3 0
+@6 set I1 0
+@6 expect O1 0
+@6 expect O2 0.7
+
+# a second clock produces no further output (only one per pending trigger)
+@7 set I1 1
+@7 expect O1 0
+@7 expect O2 0.7
+@8 set I1 0

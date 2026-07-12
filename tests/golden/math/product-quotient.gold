@@ -1,0 +1,56 @@
+# math: product/quotient basic values, plus quotient's divide-by-zero rule
+# ("a very large number will be returned, while the correct sign is being
+# kept"). Implementation uses kLarge = 1e9f and derives the sign from the
+# natural IEEE division result (input1/input2 -> +-inf -> copysign(kLarge)).
+# Results here exceed [-1,1] (2.0, 1e9), so they're probed via N registers
+# (N1-N8: unclamped, and -- unlike internal cables -- don't require a
+# downstream reader).
+#
+# Note: the "zero" divisor cases below OMIT the input2 line rather than
+# binding it to some other unset I register. N registers double as an input's
+# default value for the same-numbered I register (see CLAUDE.md); binding an
+# unused input to an explicitly-unset I register while ALSO writing to the
+# same-numbered N register elsewhere in this patch creates a same-tick read/
+# write hazard. Omitting the line sidesteps that entirely -- a disconnected
+# Input just reads its plain 0.0 framework default, no register indirection.
+#
+# basic: I1=0.6, I2=0.3 -> product=0.18, quotient=2.0.
+#
+# quotient with input2 omitted, positive numerator (I1=0.6) -> input2 reads
+# framework default 0.0 -> divide-by-zero rule -> +1e9.
+# quotient with input2 omitted, negative numerator (I5=-0.6) -> -1e9.
+# quotient with BOTH inputs omitted (0/0): sign is not determined by IEEE
+# division (NaN) -- manual doesn't address this compound corner case.
+# SPEC-GAP: implemented convention is +1e9 for 0/0; not pinned by the manual.
+#
+# Also SPEC-GAP: the manual only documents a neutral default (1.0,
+# pass-through) for *product*'s omitted operand; quotient's omitted-input2
+# behavior is not stated. This implementation does NOT extend the neutral-1
+# convention to quotient -- conventions unverified vs hardware.
+patch <<<
+[math]
+    input1  = I1
+    input2  = I2
+    product = N1
+    quotient = N2
+
+[math]
+    input1   = I1
+    quotient = N3
+
+[math]
+    input1   = I5
+    quotient = N4
+
+[math]
+    quotient = N5
+>>>
+
+@0 set I1 0.6
+@0 set I2 0.3
+@0 set I5 -0.6
+@0 expect N1 0.18 tol 1e-6
+@0 expect N2 2.0 tol 1e-6
+@0 expect N3 1e9 tol 1.0
+@0 expect N4 -1e9 tol 1.0
+@0 expect N5 1e9 tol 1.0

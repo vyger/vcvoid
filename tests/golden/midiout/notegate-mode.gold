@@ -1,0 +1,24 @@
+# midiout note gates (manual lines 186-201, 356-358). Each notegate is a dedicated
+# trigger for a fixed note set by note1..16. A rising edge plays that note, a
+# falling edge releases it. Note gates use notegatevelocity (default 1.0 -> 127)
+# for both on and off, and are not affected by lowestnote/highestnote. Emission is
+# immediate (no pitch stabilization).
+tickrate 1000
+x7 1
+patch <<<
+[midiout]
+    note1 = 60
+    note2 = 62
+    notegate1 = I1
+    notegate2 = I2
+    activesensing = 0
+>>>
+@0 expectmidi trs none
+@1 set I1 1
+@1 expectmidi trs noteon 1 60 127
+@2 set I1 0
+@2 expectmidi trs noteoff 1 60 127
+@3 set I2 1
+@3 expectmidi trs noteon 1 62 127
+@4 set I2 0
+@4 expectmidi trs noteoff 1 62 127

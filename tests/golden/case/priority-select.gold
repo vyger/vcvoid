@@ -1,0 +1,45 @@
+# case worked example (manual/circuits/case.md): a priority selector. The FIRST
+# case input (lowest index) that is non-zero selects its paired value; order
+# defines precedence. If none is non-zero, `else` is output.
+# Fixed values: value1=0.1, value2=0.2, value3=0.3, else=0.9.
+patch <<<
+[case]
+    case1  = I1
+    value1 = I2
+    case2  = I3
+    value2 = I4
+    case3  = I5
+    value3 = I6
+    else   = I7
+    output = O1
+>>>
+
+# no case non-zero -> else (0.9)
+@0 set I2 0.1
+@0 set I4 0.2
+@0 set I6 0.3
+@0 set I7 0.9
+@0 expect O1 0.9
+
+# only case2 -> value2
+@1 set I3 1
+@1 expect O1 0.2
+
+# only case3 -> value3
+@2 set I3 0
+@2 set I5 1
+@2 expect O1 0.3
+
+# case1, case2, case3 all non-zero -> lowest index (case1) wins
+@3 set I1 1
+@3 set I3 1
+@3 expect O1 0.1
+
+# case1 cleared; case2 and case3 still set -> case2 wins
+@4 set I1 0
+@4 expect O1 0.2
+
+# all cleared -> else again
+@5 set I3 0
+@5 set I5 0
+@5 expect O1 0.9

@@ -1,0 +1,18 @@
+# chord `pitch`: sets the minimum pitch of the lowest chord note. The lowest
+# note placed is the chord note nearest AT OR ABOVE pitch. C major 7 (default),
+# pitch = 0.0166667 (semi 2 = D). The chord note nearest above D is E (semi 4),
+# so E becomes the lowest and the voicing rises from there within one octave.
+#   voice pcs C/E/G/B anchored on E(4): C->12, E->4, G->7, B->11
+#   O1=C(semi 12), O2=E(4), O3=G(7), O4=B(11)
+patch <<<
+[chord]
+    pitch   = 0.0166667
+    output1 = O1
+    output2 = O2
+    output3 = O3
+    output4 = O4
+>>>
+@0 expect O1 0.1 tol 1e-5
+@0 expect O2 0.0333333 tol 1e-5
+@0 expect O3 0.0583333 tol 1e-5
+@0 expect O4 0.0916667 tol 1e-5

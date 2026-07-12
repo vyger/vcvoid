@@ -1,0 +1,49 @@
+# `reset` (switch.md:133): returns the switch to its initial position (offset 0,
+# shuffle forgotten). Crucially, if reset and a forward/backward land within
+# 5 ms of each other, RESET WINS -- guarding against an external sequencer's
+# imprecise reset+clock pair advancing past 0. tickrate=1000 so 5 ms = 5 ticks;
+# the suppression window is round(0.005*1000)=5 ticks after a reset.
+tickrate 1000
+patch <<<
+[switch]
+    input1 = I1
+    input2 = I2
+    input3 = I3
+    input4 = I4
+    output1 = O1
+    forward = I8
+    reset   = I6
+>>>
+@0 set I1 0.1
+@0 set I2 0.2
+@0 set I3 0.3
+@0 set I4 0.4
+@0 expect O1 0.1
+# advance to offset 2
+@1 set I8 1
+@1 expect O1 0.2
+@2 set I8 0
+@3 set I8 1
+@3 expect O1 0.3
+@4 set I8 0
+# reset -> back to offset 0
+@5 set I6 1
+@5 expect O1 0.1
+@6 set I6 0
+# advance again, but only AFTER the 5 ms window (tick 12: 12-5=7 > 5 ticks)
+@12 set I8 1
+@12 expect O1 0.2
+@13 set I8 0
+# reset and forward on the SAME tick -> reset wins (offset returns to 0, not 2)
+@20 set I6 1
+@20 set I8 1
+@20 expect O1 0.1
+@21 set I6 0
+@21 set I8 0
+# a forward 3 ticks (3 ms) after the reset is still suppressed
+@23 set I8 1
+@23 expect O1 0.1
+@24 set I8 0
+# a forward 6 ticks (6 ms > 5 ms) after the reset is honored
+@26 set I8 1
+@26 expect O1 0.2

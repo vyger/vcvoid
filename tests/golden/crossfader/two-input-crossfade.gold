@@ -1,0 +1,21 @@
+# crossfader worked example 1: classic two-input crossfade. fade=0 -> input1,
+# fade=1 -> input2, fade=0.5 -> 0.5*input1+0.5*input2. input1=0.2, input2=0.8.
+patch <<<
+[crossfader]
+    input1 = I1
+    input2 = I2
+    fade   = I3
+    output = O1
+>>>
+@0 set I1 0.2
+@0 set I2 0.8
+@0 set I3 0
+@0 expect O1 0.2
+@1 set I3 0.5
+@1 expect O1 0.5
+@2 set I3 1
+@2 expect O1 0.8
+@3 set I3 0.25
+@3 expect O1 0.35
+@4 set I3 0.75
+@4 expect O1 0.65

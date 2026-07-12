@@ -1,0 +1,39 @@
+# fadermatrix: full 4x4 rowcolumn table. The matrix dimension is 4 (output44 is
+# connected). Per-column startvalues (0.1/0.2/0.3/0.4) seed every cell, so column
+# c holds (c+1)*0.1 in every row. Reading the fader positions after selecting a
+# row or column verifies the exact mapping from the manual's table:
+#   rc 0 -> row 0 (cols 0..3): F1..F4 = 0.1,0.2,0.3,0.4
+#   rc 4 -> col 0 (rows 0..3): F1..F4 all = 0.1
+#   rc 5 -> col 1: all = 0.2
+#   rc 7 -> col 3: all = 0.4
+tickrate 100
+patch <<<
+[m4]
+
+[fadermatrix]
+    firstfader  = 1
+    rowcolumn   = I1
+    startvalue1 = 0.1
+    startvalue2 = 0.2
+    startvalue3 = 0.3
+    startvalue4 = 0.4
+    output11    = O1
+    output44    = O8
+>>>
+@0 set I1 0
+@0 expect F1 0.1 tol 1e-4
+@0 expect F2 0.2 tol 1e-4
+@0 expect F3 0.3 tol 1e-4
+@0 expect F4 0.4 tol 1e-4
+@0 expect O1 0.1 tol 1e-4
+@1 set I1 4
+@1 expect F1 0.1 tol 1e-4
+@1 expect F2 0.1 tol 1e-4
+@1 expect F3 0.1 tol 1e-4
+@1 expect F4 0.1 tol 1e-4
+@2 set I1 5
+@2 expect F1 0.2 tol 1e-4
+@2 expect F4 0.2 tol 1e-4
+@3 set I1 7
+@3 expect F1 0.4 tol 1e-4
+@3 expect F4 0.4 tol 1e-4

@@ -1,0 +1,30 @@
+# encoquencer: fadermode switching + per-step repeats through the encoder skin.
+# In fadermode 3 (repeats) a +2-detent turn on step1's encoder sets repeats=3, so a
+# 2-step sequence lasts 1 + 3 = 4 clocks with step1 gating only on its first
+# repetition (default "once" pattern). Mirrors motoquencer/repeats.gold on the E4.
+tickrate 100
+patch <<<
+[e4]
+[encoquencer]
+    clock     = I1
+    fadermode = I2
+    numsteps  = 2
+    gate      = O2
+>>>
+@1 set I2 3
+@2 turn E1.2 2
+@3 set I2 0
+@4 set I1 1
+@5 set I1 0
+@6 set I1 1
+@6 expect O2 1 tol 1e-4
+@7 set I1 0
+@7 expect O2 0 tol 1e-4
+@8 set I1 1
+@8 expect O2 0 tol 1e-4
+@9 set I1 0
+@10 set I1 1
+@10 expect O2 0 tol 1e-4
+@11 set I1 0
+@12 set I1 1
+@12 expect O2 1 tol 1e-4

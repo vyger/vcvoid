@@ -1,0 +1,21 @@
+# midifileplayer: speed scaling (manual "Speed and Clocking"). File A: noteoff
+# at file tick 96 = engine tick 3000 at speed 1. speed = 2 halves that (1500);
+# speed = 0 freezes playback entirely — the tick-0 note-on has already fired,
+# so the gate stays high forever.
+midifile 1 4D546864000000060000000100604D54726B0000000C00903C6460803C0000FF2F00
+patch <<<
+[midifileplayer]
+    loop = 0
+    speed = 2
+    gate = O1
+
+[midifileplayer]
+    loop = 0
+    speed = 0
+    gate = O2
+>>>
+@0 expect O1 1
+@0 expect O2 1
+@1490 expect O1 1
+@1510 expect O1 0
+@4000 expect O2 1

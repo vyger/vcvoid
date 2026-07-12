@@ -1,0 +1,30 @@
+# harmonicshift negative: all 12 columns selected, then harmonicshift=-7 disables
+# all seven scale notes, leaving only the fills. C lydian fills = {C#,D#,F,G#,A#}
+# = pcs {1,3,5,8,10}. direction default up.
+patch <<<
+[minifonion]
+    input         = I1
+    output        = O2
+    select1       = 1
+    select3       = 1
+    select5       = 1
+    select7       = 1
+    select9       = 1
+    select11      = 1
+    select13      = 1
+    selectfill1   = 1
+    selectfill2   = 1
+    selectfill3   = 1
+    selectfill4   = 1
+    selectfill5   = 1
+    harmonicshift = -7
+>>>
+# C (pc0) is a scale note, now disabled; up -> C# (1 semi, a fill)
+@0 set I1 0
+@0 expect O2 0.0083333 tol 1e-5
+# D (2 semi): up -> D# (3 semi, a fill)
+@1 set I1 0.0166667
+@1 expect O2 0.025 tol 1e-5
+# F# (6 semi): up past 7 -> G# (8 semi, a fill)
+@2 set I1 0.05
+@2 expect O2 0.0666667 tol 1e-5

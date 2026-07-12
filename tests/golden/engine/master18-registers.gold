@@ -1,0 +1,15 @@
+# Master18 register set: a patch using only Master18-legal registers loads and
+# runs. The LABELS comment tells the Forge (crosscheck) this is a MASTER18 patch.
+master 18
+patch <<<
+# LABELS: master=18
+[copy]
+    input = I1
+    output = O1
+
+[lfo]
+    hz = 2
+    square = G4
+>>>
+@0 set I1 0.3
+@0 expect O1 0.3

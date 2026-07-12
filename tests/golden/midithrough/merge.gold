@@ -1,0 +1,18 @@
+# midithrough: both source ports set, merged into one target.
+# Manual midithrough.md lines 20-23 ("get events from one TRS and one USB port
+# and forward to multiple ... ports") and lines 90-93 (events sent to the same
+# port are merged). The manual does not specify the interleave order of the two
+# sources, so this engine uses the per-tick snapshot order TRS-then-USB (see the
+# midithrough ledger note in circuits-status.yaml).
+patch <<<
+[midithrough]
+    fromtrs = 1
+    fromusb = 1
+    totrs = 1
+>>>
+@0 midisend trs noteon 1 60 100
+@0 midisend usb noteon 2 62 90
+@0 expectmidi trs noteon 1 60 100
+@0 expectmidi trs noteon 2 62 90
+@0 expectmidi trs none
+@0 expectmidi usb none

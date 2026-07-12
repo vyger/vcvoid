@@ -1,0 +1,26 @@
+# triggerdelay: `repeats` outputs the delayed trigger multiple times, each
+# further repetition spaced by the same delay. delay = 0.1 s = 10 ticks,
+# repeats = 3, at tickrate 100. A single 1-tick input trigger at t0 produces
+# three output gates:
+#   repeat 1 at t0+10 = 10
+#   repeat 2 at t0+20 = 20
+#   repeat 3 at t0+30 = 30
+# each preserving the 1-tick input gate length.
+tickrate 100
+patch <<<
+[triggerdelay]
+    input   = I1
+    output  = O1
+    delay   = 0.1
+    repeats = 3
+>>>
+@0 set I1 1
+@1 set I1 0
+@9 expect O1 0 tol 1e-4
+@10 expect O1 1 tol 1e-4
+@11 expect O1 0 tol 1e-4
+@20 expect O1 1 tol 1e-4
+@21 expect O1 0 tol 1e-4
+@30 expect O1 1 tol 1e-4
+@31 expect O1 0 tol 1e-4
+@40 expect O1 0 tol 1e-4

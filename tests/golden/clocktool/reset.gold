@@ -1,0 +1,27 @@
+# reset restarts the internal counters. divide=2, period 10 (tickrate 100).
+# A reset at t5 (mid first cycle) makes the t10 input beat become beat 0 again,
+# so an output pulse appears at t10 (which would NOT happen without the reset --
+# without it the next pulse is at t20). Pulses: t0, t10, t30, t50.
+tickrate 100
+patch <<<
+[clocktool]
+    clock  = I1
+    reset  = I2
+    divide = 2
+    output = O1
+>>>
+@0 set I1 1
+@0 expect O1 1
+@1 set I1 0
+@5 set I2 1
+@6 set I2 0
+@10 set I1 1
+@10 expect O1 1
+@11 set I1 0
+@11 expect O1 0
+@20 set I1 1
+@20 expect O1 0
+@21 set I1 0
+@30 set I1 1
+@30 expect O1 1
+@31 set I1 0

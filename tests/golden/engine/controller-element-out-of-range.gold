@@ -1,0 +1,8 @@
+expect_load_error "no register P1.3 on the p2b8"
+patch <<<
+[p2b8]
+
+[copy]
+    input = P1.3
+    output = O1
+>>>

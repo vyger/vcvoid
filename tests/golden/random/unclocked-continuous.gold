@@ -1,0 +1,13 @@
+# random in unclocked mode (no clock patched) draws a new value EVERY tick.
+# steps default 0 -> continuous; minimum 0, maximum 1 -> output = randUniform().
+# Seed 1 (golden default) gives a fixed sequence (values are the engine's float
+# randUniform stream).
+patch <<<
+[random]
+    output = O1
+>>>
+@0 expect O1 0.00006294 tol 1e-6
+@1 expect O1 0.01574743 tol 1e-6
+@2 expect O1 0.61640406 tol 1e-6
+@3 expect O1 0.07161862 tol 1e-6
+@4 expect O1 0.55848831 tol 1e-6

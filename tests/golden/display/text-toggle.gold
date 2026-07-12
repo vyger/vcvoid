@@ -1,0 +1,31 @@
+# display: the manual's Started/Stopped worked example (display.md "Showing texts").
+# A button (default toggle: each rising edge flips its output) drives
+# _RUNNING / _NOT_RUNNING (inverted).  Two display circuits each gate a text by
+# one of the cables.  A display sends an update only when its text CHANGES and is
+# non-empty: when a text multiplies out to 0 (empty) that circuit stays quiet and
+# the OTHER circuit, whose text just returned from empty to its slot number, wins
+# the screen.  Default linger (0.01 s = 1 tick here) has expired by the time the
+# other circuit changes, so hand-off is clean.  Each toggle needs its own rising
+# edge, so the button is pressed (0->1), released (1->0), then pressed again.
+tickrate 100
+patch <<<
+[db8e]
+[p2b8]
+
+[button]
+    button   = B2.1
+    output   = _RUNNING
+    inverted = _NOT_RUNNING
+
+[display]
+    text = "Started" * _RUNNING
+
+[display]
+    text = "Stopped" * _NOT_RUNNING
+>>>
+@0 expectdisplay D1 text "Stopped"
+@2 set B2.1 1
+@2 expectdisplay D1 text "Started"
+@3 set B2.1 0
+@4 set B2.1 1
+@4 expectdisplay D1 text "Stopped"

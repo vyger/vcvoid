@@ -1,0 +1,34 @@
+# button: offvalue/onvalue remap the two output values (aliases for value1 /
+# value2). Here a clock divider switches between 2 (off) and 4 (on). led still
+# reports 0/1. output goes to a cable because 2/4 exceed +-10 V (=+-1.0) and
+# would clamp on an O register; the cable is read directly and has a downstream
+# reader (copy).
+#   t0: state 0 -> output = offvalue = 2, led 0
+#   t1: press   -> state 1 -> output = onvalue = 4, led 1
+#   t3: press   -> state 0 -> output = 2, led 0
+tickrate 100
+patch <<<
+[p2b8]
+
+[button]
+    button   = B1.1
+    led      = L1.1
+    offvalue = 2
+    onvalue  = 4
+    output   = _DIV
+
+[copy]
+    input  = _DIV
+    output = O2
+>>>
+@0 expect _DIV 2 tol 1e-4
+@0 expect L1.1 0 tol 1e-4
+@1 set B1.1 1
+@1 expect _DIV 4 tol 1e-4
+@1 expect L1.1 1 tol 1e-4
+@2 set B1.1 0
+@2 expect _DIV 4 tol 1e-4
+@3 set B1.1 1
+@3 expect _DIV 2 tol 1e-4
+@3 expect L1.1 0 tol 1e-4
+@4 set B1.1 0

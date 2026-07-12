@@ -1,0 +1,42 @@
+# math: single-input ops negation (-input1), reciprocal (1/input1, with the
+# documented divide-by-zero sign-preserving rule), amount (abs value).
+# I1=0.4, I2=-0.4. reciprocal results (2.5, -2.5, 1e9) exceed [-1,1], so all
+# seven probes uniformly use N registers.
+#
+# Note: the reciprocal-of-zero case OMITS the `input` line rather than
+# binding it to some other unset I register, to avoid a same-tick I<->N
+# read/write hazard (see product-quotient.gold's comment for the full
+# explanation).
+#
+#   negation(I1)  = -0.4        negation(I2)  = 0.4
+#   reciprocal(I1)= 1/0.4 = 2.5 reciprocal(I2)= 1/-0.4 = -2.5
+#   amount(I1)    = 0.4         amount(I2)    = 0.4
+# reciprocal of zero: sign kept via IEEE division (1/+0 -> +inf -> +1e9;
+# 1/-0 is unreachable from patch authoring since registers don't carry
+# signed zero in practice here, so only the +0 case is tested)
+patch <<<
+[math]
+    input      = I1
+    negation   = N1
+    reciprocal = N2
+    amount     = N3
+
+[math]
+    input      = I2
+    negation   = N4
+    reciprocal = N5
+    amount     = N6
+
+[math]
+    reciprocal = N7
+>>>
+
+@0 set I1 0.4
+@0 set I2 -0.4
+@0 expect N1 -0.4 tol 1e-6
+@0 expect N2 2.5 tol 1e-6
+@0 expect N3 0.4 tol 1e-6
+@0 expect N4 0.4 tol 1e-6
+@0 expect N5 -2.5 tol 1e-6
+@0 expect N6 0.4 tol 1e-6
+@0 expect N7 1e9 tol 1.0

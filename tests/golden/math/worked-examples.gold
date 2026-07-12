@@ -1,0 +1,19 @@
+# math: the two worked examples from manual/circuits/math.md verbatim.
+# Example 1: quotient I1/I2. I1=0.4, I2=0.8 -> 0.4/0.8 = 0.5.
+# Example 2: root of I1 (abbreviated `input`). I3=0.09 -> sqrt(0.09) = 0.3.
+patch <<<
+[math]
+    input1   = I1
+    input2   = I2
+    quotient = O1
+
+[math]
+    input = I3
+    root  = O2
+>>>
+
+@0 set I1 0.4
+@0 set I2 0.8
+@0 set I3 0.09
+@0 expect O1 0.5 tol 1e-6
+@0 expect O2 0.3 tol 1e-6

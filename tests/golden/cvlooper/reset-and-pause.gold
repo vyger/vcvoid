@@ -1,0 +1,49 @@
+# reset restarts playback at the window start; pause holds the current value.
+# Same setup as record-and-loop (period 5, length 2, window 10). The recorded
+# loop window (cvin held between the sparse sets) is:
+#   phase 0..9 -> 0.10, 0.11, 0.11, 0.11, 0.11, 0.15, 0.16, 0.16, 0.16, 0.19
+# Loop on at t20. reset at t25 jumps the playhead back to phase 0 (0.10).
+# pause t30..t32 freezes phase 5 (0.15) while the next value would be 0.16.
+tickrate 100
+patch <<<
+[cvlooper]
+    cvin       = I1
+    clock      = I2
+    loopswitch = I3
+    reset      = I4
+    pause      = I5
+    length     = 2
+    cvout      = O1
+>>>
+@0 set I2 1
+@1 set I2 0
+@1 set I1 0.01
+@5 set I2 1
+@5 set I1 0.05
+@6 set I2 0
+@10 set I2 1
+@10 set I1 0.1
+@11 set I2 0
+@11 set I1 0.11
+@15 set I2 1
+@15 set I1 0.15
+@16 set I2 0
+@16 set I1 0.16
+@19 set I1 0.19
+@20 set I1 0
+@20 set I3 1
+@20 expect O1 0.1 tol 1e-4
+@24 expect O1 0.11 tol 1e-4
+# reset -> playhead back to window start (phase 0 -> 0.10)
+@25 set I4 1
+@25 expect O1 0.1 tol 1e-4
+@26 set I4 0
+@26 expect O1 0.11 tol 1e-4
+# after reset: phase advances 0.11,0.11,0.11,0.11 then 0.15 at t30
+@30 set I5 1
+@30 expect O1 0.15 tol 1e-4
+@31 expect O1 0.15 tol 1e-4
+@32 expect O1 0.15 tol 1e-4
+@33 set I5 0
+@33 expect O1 0.15 tol 1e-4
+@34 expect O1 0.16 tol 1e-4

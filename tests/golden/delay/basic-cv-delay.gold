@@ -1,0 +1,30 @@
+# delay: manual worked example 1 -- cvin -> cvout delayed by 0.5 seconds.
+# tickrate 100 -> delay = 0.5 s = 50 ticks. The tape always records cvin each
+# tick; output at tick t reproduces the value recorded at tick (t - 50). Before
+# 50 ticks of history exist the tape reads its empty (0) initial contents.
+#
+# cvin (I1) held-register timeline:  t0..9 = 0.2, t10..19 = 0.5, t20+ = -0.3
+# cvout (O1) reads (t-50):
+#   t49 -> pos -1  -> 0      (still filling)
+#   t50 -> buf[0]  -> 0.2
+#   t59 -> buf[9]  -> 0.2
+#   t60 -> buf[10] -> 0.5
+#   t69 -> buf[19] -> 0.5
+#   t70 -> buf[20] -> -0.3
+tickrate 100
+patch <<<
+[delay]
+    cvin  = I1
+    cvout = O1
+    delay = 0.5
+>>>
+@0 set I1 0.2
+@0 expect O1 0 tol 1e-4
+@10 set I1 0.5
+@20 set I1 -0.3
+@49 expect O1 0 tol 1e-4
+@50 expect O1 0.2 tol 1e-4
+@59 expect O1 0.2 tol 1e-4
+@60 expect O1 0.5 tol 1e-4
+@69 expect O1 0.5 tol 1e-4
+@70 expect O1 -0.3 tol 1e-4

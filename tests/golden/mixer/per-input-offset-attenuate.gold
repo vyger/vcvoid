@@ -1,0 +1,19 @@
+# Each input goes through the standard A*B+C input math, so a mixer channel has
+# a (CV) level and offset. input1 = I1*0.5 + 0.1; input2 = I2.
+#   I1=0.4 -> input1 = 0.4*0.5+0.1 = 0.3 ; I2=0.2 -> input2 = 0.2
+#   sum=0.5, max=0.3, min=0.2, average=0.25
+patch <<<
+[mixer]
+    input1  = I1 * 0.5 + 0.1
+    input2  = I2
+    output  = O1
+    maximum = O2
+    minimum = O3
+    average = O4
+>>>
+@0 set I1 0.4
+@0 set I2 0.2
+@0 expect O1 0.5 tol 1e-6
+@0 expect O2 0.3 tol 1e-6
+@0 expect O3 0.2
+@0 expect O4 0.25 tol 1e-6

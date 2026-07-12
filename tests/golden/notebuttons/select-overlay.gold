@@ -1,0 +1,55 @@
+# notebuttons: `select` gates button processing, LED writing AND `gate` (which
+# reads the buttons), for overlays. output/semitone keep emitting the latched
+# note while deselected. A press made while deselected is not processed and
+# produces no phantom selection change on reselect (edges tracked every tick).
+# select = I7 (positive gate selects). `output` (0..11) is read through the
+# internal cable `_OUT` (physical O jacks clamp above 1.0); `[copy]` is its reader.
+#   t0 selected, startnote 0        -> output 0, L1.1 1, gate 0
+#   t1 press button3 (note 2)       -> output 2, L1.3 1, gate 1
+#   t3 deselect -> output still 2 (latched); LEDs untouched (L1.3 holds 1); gate 0
+#   t4 press button1 while DESELECTED -> not processed (output stays 2); gate 0
+#   t6 reselect -> no phantom edge -> output still 2, L1.3 1
+#   t7 press button1 (note 0)       -> output 0, L1.1 1, L1.3 0
+tickrate 100
+patch <<<
+[b32]
+
+[notebuttons]
+    select  = I7
+    button1 = B1.1
+    button3 = B1.3
+    led1    = L1.1
+    led3    = L1.3
+    output  = _OUT
+    gate    = O3
+
+[copy]
+    input = _OUT
+>>>
+@0 set I7 1
+@0 expect _OUT 0 tol 1e-4
+@0 expect L1.1 1 tol 1e-4
+@0 expect L1.3 0 tol 1e-4
+@0 expect O3 0 tol 1e-4
+@1 set B1.3 1
+@1 expect _OUT 2 tol 1e-4
+@1 expect L1.1 0 tol 1e-4
+@1 expect L1.3 1 tol 1e-4
+@1 expect O3 1 tol 1e-4
+@2 set B1.3 0
+@3 set I7 0
+@3 expect _OUT 2 tol 1e-4
+@3 expect L1.3 1 tol 1e-4
+@3 expect O3 0 tol 1e-4
+@4 set B1.1 1
+@4 expect _OUT 2 tol 1e-4
+@4 expect O3 0 tol 1e-4
+@5 set B1.1 0
+@6 set I7 1
+@6 expect _OUT 2 tol 1e-4
+@6 expect L1.3 1 tol 1e-4
+@7 set B1.1 1
+@7 expect _OUT 0 tol 1e-4
+@7 expect L1.1 1 tol 1e-4
+@7 expect L1.3 0 tol 1e-4
+@8 set B1.1 0

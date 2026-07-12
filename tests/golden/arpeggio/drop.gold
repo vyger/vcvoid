@@ -1,0 +1,42 @@
+# arpeggio drop: skip notes from the ascending pool before the pattern walks it.
+# C Lydian, pitch=0, range=1V -> pool semis {0,2,4,6,7,9,11,12}, indices 0..7.
+# drop=1 (skip every 2nd) keeps pool indices 0,2,4,6 -> semis {0,4,7,11} -> O1.
+# drop=3 (skip 2nd & 3rd of each group of 3) keeps indices 0,3,6 -> {0,6,11} -> O2.
+# Both pattern 0: step forward then wrap.
+#   O1: 0, 0.0333333, 0.0583333, 0.0916667, 0 (wrap)
+#   O2: 0, 0.05,      0.0916667, 0 (wrap),   0.05
+patch <<<
+[arpeggio]
+    clock  = I1
+    output = O1
+    pitch  = 0
+    range  = 1V
+    drop   = 1
+>>>
+patch <<<
+[arpeggio]
+    clock  = I1
+    output = O2
+    pitch  = 0
+    range  = 1V
+    drop   = 3
+>>>
+@1 set I1 1
+@1 expect O1 0 tol 1e-5
+@1 expect O2 0 tol 1e-5
+@2 set I1 0
+@3 set I1 1
+@3 expect O1 0.0333333 tol 1e-5
+@3 expect O2 0.05 tol 1e-5
+@4 set I1 0
+@5 set I1 1
+@5 expect O1 0.0583333 tol 1e-5
+@5 expect O2 0.0916667 tol 1e-5
+@6 set I1 0
+@7 set I1 1
+@7 expect O1 0.0916667 tol 1e-5
+@7 expect O2 0 tol 1e-5
+@8 set I1 0
+@9 set I1 1
+@9 expect O1 0 tol 1e-5
+@9 expect O2 0.05 tol 1e-5

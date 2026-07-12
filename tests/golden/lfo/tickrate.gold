@@ -1,0 +1,15 @@
+# lfo: proves the phase increment is derived from the ENGINE tick rate
+# (EngineState::tickRateHz), not a hardcoded 6000. Here tickrate=1000.
+# hz=4 -> one cycle = 1000/4 = 250 ticks. inc=1/250.
+# triangle sampled: tick 0 -> phase 0 -> 0 ; tick 125 -> phase 0.5 -> peak 1.0.
+tickrate 1000
+patch <<<
+[lfo]
+    hz       = 4
+    triangle = O1
+>>>
+
+@0   expect O1 0.0 tol 1e-3
+@62  expect O1 0.496 tol 3e-3   # phase 62/250=0.248 -> 2p
+@125 expect O1 1.0 tol 1e-3     # phase 0.5 -> triangle peak
+@187 expect O1 0.504 tol 3e-3   # phase 0.748 -> 2(1-p)

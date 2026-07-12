@@ -1,0 +1,52 @@
+# notebuttons: `clock` quantizes presses. A press stores a PENDING note; the
+# note (output) only changes on the next clock rising edge. `gate` still follows
+# the physical hold immediately. If several presses arrive before the clock, the
+# last one wins. A press and a clock in the SAME tick flush immediately. clock=I1.
+# `output` (0..11) is read through an internal cable `_OUT` (a physical O jack
+# clamps to +-1.0 and would mangle notes above 1); the `[copy]` sink is the
+# cable's required reader.
+#   t1 press button4 (note 3) held -> pending 3, output still 0, gate 1
+#   t2 release -> output still 0
+#   t3 clock rise -> apply pending -> output 3
+#   t5 press button2 (note 1)  -> pending 1
+#   t7 press button6 (note 5)  -> pending 5 (last press wins)
+#   t8 release -> output still 3 (not yet clocked)
+#   t9 clock rise -> apply -> output 5
+#   t11 press button8 (note 7) AND clock rise SAME tick -> flush -> output 7
+tickrate 100
+patch <<<
+[b32]
+
+[notebuttons]
+    clock   = I1
+    button2 = B1.2
+    button4 = B1.4
+    button6 = B1.6
+    button8 = B1.8
+    output  = _OUT
+    gate    = O3
+
+[copy]
+    input = _OUT
+>>>
+@1 set B1.4 1
+@1 expect _OUT 0 tol 1e-4
+@1 expect O3 1 tol 1e-4
+@2 set B1.4 0
+@2 expect _OUT 0 tol 1e-4
+@3 set I1 1
+@3 expect _OUT 3 tol 1e-4
+@4 set I1 0
+@5 set B1.2 1
+@6 set B1.2 0
+@7 set B1.6 1
+@8 set B1.6 0
+@8 expect _OUT 3 tol 1e-4
+@9 set I1 1
+@9 expect _OUT 5 tol 1e-4
+@10 set I1 0
+@11 set B1.8 1
+@11 set I1 1
+@11 expect _OUT 7 tol 1e-4
+@12 set B1.8 0
+@12 set I1 0

@@ -1,0 +1,13 @@
+# midithrough: with no X7 in the chain the circuit forwards nothing. The patch
+# still loads (the loader never gates on hardware presence); the circuit is a
+# runtime no-op when s.midi.x7 is false. See CLAUDE.md M5 constraints and the
+# early-return idiom the midiin/midiout tasks copy.
+x7 0
+patch <<<
+[midithrough]
+    fromtrs = 1
+    tousb = 1
+>>>
+@0 midisend trs noteon 1 60 100
+@0 expectmidi usb none
+@0 expectmidi trs none

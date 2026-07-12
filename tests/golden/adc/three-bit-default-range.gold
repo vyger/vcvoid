@@ -1,0 +1,81 @@
+# adc worked example 1 (manual/circuits/adc.md): 3 bits over the default
+# input range 0.0..1.0. bit1=MSB. Three bits encode 0..7 across the range;
+# value = floor((input-min)/(max-min) * 2^N), clamped to [0, 2^N-1].
+# We sample the MIDPOINT of each of the 8 equal bands (each midpoint lands on
+# an exact x.5 after *8, so floor is robust to float noise) plus the two clamp
+# rules: below-minimum -> all zeros, above-maximum -> all ones.
+#
+#   band  input(mid)  t*8   value  b1 b2 b3
+#   0     0.0625      0.5   0      0  0  0
+#   1     0.1875      1.5   1      0  0  1
+#   2     0.3125      2.5   2      0  1  0
+#   3     0.4375      3.5   3      0  1  1
+#   4     0.5625      4.5   4      1  0  0
+#   5     0.6875      5.5   5      1  0  1
+#   6     0.8125      6.5   6      1  1  0
+#   7     0.9375      7.5   7      1  1  1
+patch <<<
+[adc]
+    input = I1
+    bit1 = O1
+    bit2 = O2
+    bit3 = O3
+>>>
+
+# input at the minimum (0.0) -> value 0 -> all zeros
+@0 set I1 0.0
+@0 expect O1 0
+@0 expect O2 0
+@0 expect O3 0
+
+@1 set I1 0.0625
+@1 expect O1 0
+@1 expect O2 0
+@1 expect O3 0
+
+@2 set I1 0.1875
+@2 expect O1 0
+@2 expect O2 0
+@2 expect O3 1
+
+@3 set I1 0.3125
+@3 expect O1 0
+@3 expect O2 1
+@3 expect O3 0
+
+@4 set I1 0.4375
+@4 expect O1 0
+@4 expect O2 1
+@4 expect O3 1
+
+@5 set I1 0.5625
+@5 expect O1 1
+@5 expect O2 0
+@5 expect O3 0
+
+@6 set I1 0.6875
+@6 expect O1 1
+@6 expect O2 0
+@6 expect O3 1
+
+@7 set I1 0.8125
+@7 expect O1 1
+@7 expect O2 1
+@7 expect O3 0
+
+@8 set I1 0.9375
+@8 expect O1 1
+@8 expect O2 1
+@8 expect O3 1
+
+# above maximum (1.5 > 1.0) -> all ones
+@9 set I1 1.5
+@9 expect O1 1
+@9 expect O2 1
+@9 expect O3 1
+
+# below minimum (-0.5 < 0.0) -> all zeros
+@10 set I1 -0.5
+@10 expect O1 0
+@10 expect O2 0
+@10 expect O3 0

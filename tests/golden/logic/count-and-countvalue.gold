@@ -1,0 +1,36 @@
+# `count` = (#high inputs) * countvalue; `countlow` = (#low inputs) * countvalue.
+# Block A: countvalue default 0.1. Block B: countvalue 0.2. Both over inputs
+# I1,I2,I3 (3 patched).
+patch <<<
+[logic]
+    input1   = I1
+    input2   = I2
+    input3   = I3
+    count    = O1
+    countlow = O2
+>>>
+
+patch <<<
+[logic]
+    input1     = I1
+    input2     = I2
+    input3     = I3
+    countvalue = 0.2
+    count      = O3
+>>>
+
+# 000: 0 high, 3 low
+@0 expect O1 0
+@0 expect O2 0.3 tol 1e-6
+@0 expect O3 0
+# 101: 2 high, 1 low
+@1 set I1 1
+@1 set I3 1
+@1 expect O1 0.2 tol 1e-6
+@1 expect O2 0.1 tol 1e-6
+@1 expect O3 0.4 tol 1e-6
+# 111: 3 high, 0 low
+@2 set I2 1
+@2 expect O1 0.3 tol 1e-6
+@2 expect O2 0
+@2 expect O3 0.6 tol 1e-6

@@ -1,0 +1,37 @@
+# math: sine/cosine, "the input range of 0.0...1.0 goes exactly through one
+# wave cycle": sin(2*pi*input1), cos(2*pi*input1). Four quarter-cycle points.
+# sin/cos are intrinsically bounded to [-1,1], so plain O registers are used.
+patch <<<
+[math]
+    input  = I1
+    sine   = O1
+    cosine = O2
+
+[math]
+    input  = I2
+    sine   = O3
+    cosine = O4
+
+[math]
+    input  = I3
+    sine   = O5
+    cosine = O6
+
+[math]
+    input  = I4
+    sine   = O7
+    cosine = O8
+>>>
+
+@0 set I1 0.0
+@0 set I2 0.25
+@0 set I3 0.5
+@0 set I4 0.75
+@0 expect O1 0.0 tol 1e-5
+@0 expect O2 1.0 tol 1e-5
+@0 expect O3 1.0 tol 1e-5
+@0 expect O4 0.0 tol 1e-5
+@0 expect O5 0.0 tol 1e-5
+@0 expect O6 -1.0 tol 1e-5
+@0 expect O7 -1.0 tol 1e-5
+@0 expect O8 0.0 tol 1e-5

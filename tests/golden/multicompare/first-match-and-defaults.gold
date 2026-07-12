@@ -1,0 +1,31 @@
+# First match wins when two compare values are equal, and unpatched compare
+# slots never match (so an unmatched input goes to else). Block B: else defaults
+# to 0.0, and only compare1 patched.
+patch <<<
+[multicompare]
+    input    = I1
+    compare1 = 0.4
+    ifequal1 = 0.11
+    compare2 = 0.4
+    ifequal2 = 0.22
+    else     = 0.9
+    output   = O1
+>>>
+
+patch <<<
+[multicompare]
+    input    = I2
+    compare1 = 0.3
+    ifequal1 = 0.7
+    output   = O2
+>>>
+
+# A: input 0.4 matches compare1 first -> 0.11 (not 0.22)
+@0 set I1 0.4
+@0 set I2 0.5
+@0 expect O1 0.11
+# B: input 0.5 != 0.3, no other compare patched -> else default 0
+@0 expect O2 0
+# B: input 0.3 -> 0.7
+@1 set I2 0.3
+@1 expect O2 0.7

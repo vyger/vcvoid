@@ -1,0 +1,18 @@
+# math: average ((input1+input2)/2), maximum, minimum. I1=0.6, I2=-0.2.
+#   average = (0.6 + -0.2)/2 = 0.2
+#   maximum = 0.6
+#   minimum = -0.2
+patch <<<
+[math]
+    input1  = I1
+    input2  = I2
+    average = O1
+    maximum = O2
+    minimum = O3
+>>>
+
+@0 set I1 0.6
+@0 set I2 -0.2
+@0 expect O1 0.2 tol 1e-6
+@0 expect O2 0.6 tol 1e-6
+@0 expect O3 -0.2 tol 1e-6

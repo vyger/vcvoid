@@ -1,0 +1,27 @@
+# contour: loop=1 with NO gate or trigger patched. Manual (contour.md 146):
+# "when loop is on, the envelope will immediately start again once it has
+# finished. It also starts without triggering. This converts contour into a
+# kind of fancy LFO." With the gate permanently low, decay/sustain are never
+# entered (manual 141): the cycle is attack -> release -> restart.
+# tickrate 100. attack=1 -> 10 ticks; release=0.05 -> 10 ticks; decay patched
+# to prove it is skipped (buggy behavior would decay to sustain 0.5 and hang).
+# Cycle: attack t0..t10 (0 -> 1), release t10..t20 (1 -> 0), idle tick t20,
+# restart at t21.
+tickrate 100
+patch <<<
+[contour]
+    loop    = 1
+    attack  = 1
+    decay   = 0.05
+    release = 0.05
+    output  = O1
+>>>
+@0 expect O1 0 tol 1e-4
+@5 expect O1 0.5 tol 1e-4
+@10 expect O1 1.0 tol 1e-4
+@15 expect O1 0.5 tol 1e-4
+@20 expect O1 0 tol 1e-4
+@21 expect O1 0 tol 1e-4
+@26 expect O1 0.5 tol 1e-4
+@31 expect O1 1.0 tol 1e-4
+@41 expect O1 0 tol 1e-4

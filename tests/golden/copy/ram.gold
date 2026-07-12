@@ -1,0 +1,12 @@
+# hand-computed Forge accounting: x7 864 + copy base 24
+# + input "I1 * 0.5" (not simple: 16) + output (4)
+# constants: the Forge always seeds {0.0, 1.0} and counts +-n per source
+# constant, so {0, 1, 0.5, -0.5} = 4 constants x 4 bytes = 16 -> ALIGN_UP(16,16) = 16
+# 864 + 24 + 16 + 4 + 16 => 924   (see tests/unit/test_ram.cpp)
+expect_ram 924
+patch <<<
+[copy]
+    input = I1 * 0.5
+    output = O1
+>>>
+@0 expect O1 0.0

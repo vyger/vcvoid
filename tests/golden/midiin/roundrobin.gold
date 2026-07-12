@@ -1,0 +1,27 @@
+# midiin: roundrobin = 1 (line 339) scans the voices "like a rotating switch",
+# so consecutive monophonic notes cycle through the outputs even when earlier
+# voices are already free again. Play/release note 60 (voice 1), then note 64
+# lands on voice 2 (not back on the free voice 1), then note 67 on voice 3.
+patch <<<
+[midiin]
+    roundrobin = 1
+    pitch1 = O1
+    pitch2 = O2
+    pitch3 = O3
+    gate1  = O4
+    gate2  = O5
+    gate3  = O6
+>>>
+@0 midisend trs noteon 1 60 100
+@0 expect O4 1
+@0 expect O1 0.3
+@1 midisend trs noteoff 1 60 0
+@1 expect O4 0
+@2 midisend trs noteon 1 64 100
+@2 expect O5 1
+@2 expect O2 0.333333 tol 0.0001
+@2 expect O4 0
+@3 midisend trs noteoff 1 64 0
+@4 midisend trs noteon 1 67 100
+@4 expect O6 1
+@4 expect O3 0.358333 tol 0.0001

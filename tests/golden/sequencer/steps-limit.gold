@@ -1,0 +1,26 @@
+# `steps` forces a restart to the first stage after that many clock cycles, even
+# if more stages/repeats remain. steps=2 over three stages -> only the first two
+# ever play (0.10, 0.20, restart).
+patch <<<
+[sequencer]
+    clock       = I1
+    steps       = 2
+    pitchoutput = O1
+    pitch1      = 0.10
+    pitch2      = 0.20
+    pitch3      = 0.30
+>>>
+@0 set I1 1
+@0 expect O1 0.10 tol 1e-5
+@1 set I1 0
+@2 set I1 1
+@2 expect O1 0.20 tol 1e-5
+@3 set I1 0
+@4 set I1 1
+@4 expect O1 0.10 tol 1e-5
+@5 set I1 0
+@6 set I1 1
+@6 expect O1 0.20 tol 1e-5
+@7 set I1 0
+@8 set I1 1
+@8 expect O1 0.10 tol 1e-5

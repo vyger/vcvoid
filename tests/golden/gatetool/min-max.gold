@@ -1,0 +1,26 @@
+# gatetool: manual example -- mingatelength / maxgatelength bound the output gate
+# length (effective only when gatelength is not used). Seconds here (no taptempo).
+# tickrate 100: mingatelength 0.1 s = 10 ticks, maxgatelength 0.3 s = 30 ticks.
+#
+# Short input gate t0..t4 (D=5): extended UP to the 10-tick minimum -> high t0..t9,
+#   low from t10 (output stays high past the input fall at t5).
+# Long input gate t20..t79 (D=60): capped DOWN to the 30-tick maximum -> the output
+#   closes at t50 (20+30) even though the input is still high, and stays low.
+tickrate 100
+patch <<<
+[gatetool]
+    inputgate     = I1
+    outputgate    = O1
+    mingatelength = 0.1
+    maxgatelength = 0.3
+>>>
+@0 set I1 1
+@5 set I1 0
+@5 expect O1 1 tol 1e-4
+@9 expect O1 1 tol 1e-4
+@10 expect O1 0 tol 1e-4
+@20 set I1 1
+@49 expect O1 1 tol 1e-4
+@50 expect O1 0 tol 1e-4
+@70 expect O1 0 tol 1e-4
+@80 set I1 0

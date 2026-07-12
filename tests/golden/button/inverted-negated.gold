@@ -1,0 +1,35 @@
+# button: `inverted` mirrors the value order (value2 when off, value1 when on);
+# `negated` is 1 iff the button is in state 0, else 0. states = 2, default
+# values 0/1. output/inverted routed through cables (with readers) so they are
+# observed alongside negated on O1.
+#   state 0: output = value1 = 0, inverted = value2 = 1, negated = 1
+#   state 1: output = value2 = 1, inverted = value1 = 0, negated = 0
+tickrate 100
+patch <<<
+[p2b8]
+
+[button]
+    button   = B1.1
+    led      = L1.1
+    output   = _O
+    inverted = _INV
+    negated  = O1
+
+[copy]
+    input  = _O
+    output = O2
+
+[copy]
+    input  = _INV
+    output = O3
+>>>
+@0 expect _O 0 tol 1e-4
+@0 expect _INV 1 tol 1e-4
+@0 expect O1 1 tol 1e-4
+@1 set B1.1 1
+@1 expect _O 1 tol 1e-4
+@1 expect _INV 0 tol 1e-4
+@1 expect O1 0 tol 1e-4
+@2 set B1.1 0
+@2 expect _O 1 tol 1e-4
+@2 expect O1 0 tol 1e-4

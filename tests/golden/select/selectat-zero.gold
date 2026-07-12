@@ -1,0 +1,24 @@
+# select: the manual's highlighted `selectat` case -- selectat = 0 makes the
+# circuit active when `select` is EXACTLY 0 (not a positive gate). This proves
+# selectat overrides the default "positive gate = selected" rule.
+#
+#   t0: select 0, input 0.2 -> 0 == 0 -> selected     -> O1 = 0.2
+#   t2: select 1, input 0.5 -> 1 != 0 -> not selected -> O1 holds 0.2
+#   t4: select 0, input 0.5 -> selected               -> O1 = 0.5
+tickrate 100
+patch <<<
+[select]
+    input    = I1
+    select   = I2
+    selectat = 0
+    output   = O1
+>>>
+@0 set I1 0.2
+@0 set I2 0
+@0 expect O1 0.2 tol 1e-4
+@2 set I1 0.5
+@2 set I2 1
+@2 expect O1 0.2 tol 1e-4
+@3 expect O1 0.2 tol 1e-4
+@4 set I2 0
+@4 expect O1 0.5 tol 1e-4

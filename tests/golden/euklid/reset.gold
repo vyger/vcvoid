@@ -1,0 +1,31 @@
+# `reset`: a trigger resets the pattern to the start (the next clock is step 0).
+# length=4, beats=1 -> only step 0 is a beat, so step 0 is uniquely identifiable.
+# Advance to step 1, reset, then the next clock is step 0 again (a beat). Without
+# the reset that clock would be step 2 (a non-beat, output 0).
+patch <<<
+[euklid]
+    clock    = I1
+    reset    = I2
+    length   = 4
+    beats    = 1
+    output   = O1
+    offbeats = O2
+>>>
+# step0 (the sole beat)
+@1 set I1 0.7
+@1 expect O1 0.7
+@1 expect O2 0
+@2 set I1 0
+# step1 (off)
+@3 set I1 0.7
+@3 expect O1 0
+@3 expect O2 0.7
+@4 set I1 0
+# reset -> pattern restarts
+@5 set I2 1
+@6 set I2 0
+# next clock is step0 again -> beat (would be step2/off without the reset)
+@7 set I1 0.7
+@7 expect O1 0.7
+@7 expect O2 0
+@8 set I1 0

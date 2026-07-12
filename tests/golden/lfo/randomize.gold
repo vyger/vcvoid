@@ -1,0 +1,36 @@
+# lfo: `randomize` gives each "hill" of the waveform a fresh random attenuation.
+# randomize=0.0 -> no effect (identical to a plain waveform, no RNG consumed).
+# randomize=1.0 -> attenuation drawn in [0,1) via the engine RNG (seed-pinned).
+#
+# SPEC-GAP: the manual's randomization is only specified qualitatively (a "hill"
+# gets "a different height"). This implementation redraws ONE attenuation per
+# full waveform cycle (phase wrap) and multiplies the unipolar output by it.
+# Reference hardware behaviour that is NOT verified here:
+#  - bipolar mode subdivides each cycle into two hills (above/below zero);
+#  - each waveform output is meant to randomize independently (so cosine is no
+#    longer exactly the phase-shifted sine);
+#  - per-hill boundaries can be shifted by `skew`/`pulsewidth`;
+#  - the exact RNG/curve vs. the DROID firmware is unknown.
+# The value below is therefore implementation-defined (pins determinism, not
+# hardware parity): first-hill att = randUniform(seed=123456) = 0.708838.
+seed 123456
+tickrate 6000
+patch <<<
+[lfo]
+    hz        = 0.5
+    randomize = 0.0
+    sine      = O1
+
+[lfo]
+    hz        = 0.5
+    randomize = 1.0
+    sine      = O2
+>>>
+
+# hz=0.5 -> one cycle = 12000 ticks. Circuit A (r=0) == plain sine.
+@3000 expect O1 0.5 tol 1e-3    # phase 0.25 -> u=0.5
+@6000 expect O1 1.0 tol 1e-3    # phase 0.5  -> u=1.0 (peak)
+
+# Circuit B (r=1): first-cycle attenuation = 0.708838, applied to the same sine.
+@3000 expect O2 0.354419 tol 1e-4   # 0.5 * 0.708838
+@6000 expect O2 0.708838 tol 1e-4   # 1.0 * 0.708838 (attenuated peak)

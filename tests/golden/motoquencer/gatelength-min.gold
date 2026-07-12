@@ -1,0 +1,23 @@
+# motoquencer: gatelength = 0 (finding). "set this parameter to 0. This will output
+# a minimal gate length of about 10 ms (basically just a trigger)." Instead of the
+# degenerate 1-tick gate, a zero gate window is floored to ~10 ms. At tickrate 1000,
+# 10 ms = 10 ticks, so a played step's gate stays high for exactly 10 ticks.
+# A period-40 clock (edges at 40, 80) makes the period known by the 2nd step.
+tickrate 1000
+patch <<<
+[m4]
+[motoquencer]
+    clock      = I1
+    gatelength = 0
+    numsteps   = 2
+    gate       = O2
+>>>
+# step 0 on the 1st edge (period unknown -> gate follows clock level).
+@40 set I1 1
+@41 set I1 0
+# step 1 on the 2nd edge: period=40 known -> gatelength 0 -> floored 10 ms window.
+@80 set I1 1
+@80 expect O2 1 tol 1e-4
+@81 set I1 0
+@89 expect O2 1 tol 1e-4
+@90 expect O2 0 tol 1e-4

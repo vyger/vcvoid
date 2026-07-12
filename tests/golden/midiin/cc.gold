@@ -1,0 +1,28 @@
+# midiin: control changes (manual "Getting CCs", lines 164-178; outputs lines
+# 367-368, 375-376). `ccnumber1 = 74` routes CC#74 to `cc1` (0..127 -> 0.0..1.0)
+# and `cctrigger1` fires a trigger on every matching CC event. `modwheel` (CC#1)
+# and `volume` (CC#7) are fixed-CC outputs. cctrigger uses the engine's standard
+# 10 ms trigger; tickrate 1000 makes that 10 ticks. A non-matching CC (the
+# mod-wheel CC#1) must NOT fire cctrigger1.
+tickrate 1000
+patch <<<
+[midiin]
+    ccnumber1  = 74
+    cc1        = O1
+    cctrigger1 = O2
+    modwheel   = O3
+    volume     = O4
+>>>
+@0 midisend trs cc 1 74 127
+@0 expect O1 1
+@0 expect O2 1
+@15 expect O2 0
+@20 midisend trs cc 1 74 64
+@20 expect O1 0.503937 tol 0.0001
+@20 expect O2 1
+@35 expect O2 0
+@40 midisend trs cc 1 1 100
+@40 expect O3 0.787402 tol 0.0001
+@40 expect O2 0
+@50 midisend trs cc 1 7 127
+@50 expect O4 1

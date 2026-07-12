@@ -1,0 +1,19 @@
+# F0c: lowercase register names (p1.1, i1, o1, o2) must parse and behave
+# identically to their uppercase forms. A pot circuit reads a controller pot
+# and copies it straight out; a copy circuit relays an input jack to an
+# output jack. Every register below is written lowercase.
+patch <<<
+[p2b8]
+
+[pot]
+    pot    = p1.1
+    output = o1
+
+[copy]
+    input  = i1
+    output = o2
+>>>
+@0 set p1.1 0.6
+@0 set i1 0.35
+@0 expect o1 0.6 tol 1e-6
+@0 expect o2 0.35 tol 1e-6

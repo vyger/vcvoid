@@ -1,0 +1,38 @@
+# dac with 8 bits (bit1..bit8) over the default range -> 256 output levels.
+# output = value/255. bit1=MSB (I1), bit8=LSB (I8).
+#   value 128 = 10000000 -> 128/255 = 0.501961  (MSB only)
+#   value 1   = 00000001 ->   1/255 = 0.003922  (LSB only)
+#   value 170 = 10101010 -> 170/255 = 0.666667  (alternating)
+#   value 255 = 11111111 -> 1.0                 (all)
+patch <<<
+[dac]
+    bit1   = I1
+    bit2   = I2
+    bit3   = I3
+    bit4   = I4
+    bit5   = I5
+    bit6   = I6
+    bit7   = I7
+    bit8   = I8
+    output = O1
+>>>
+# MSB only
+@0 set I1 1
+@0 expect O1 0.501961 tol 1e-5
+# LSB only
+@1 set I1 0
+@1 set I8 1
+@1 expect O1 0.003922 tol 1e-5
+# alternating 10101010 -> bits 1,3,5,7
+@2 set I8 0
+@2 set I1 1
+@2 set I3 1
+@2 set I5 1
+@2 set I7 1
+@2 expect O1 0.666667 tol 1e-5
+# all ones
+@3 set I2 1
+@3 set I4 1
+@3 set I6 1
+@3 set I8 1
+@3 expect O1 1.0

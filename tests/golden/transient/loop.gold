@@ -1,0 +1,22 @@
+# loop=1: the transient restarts at start as soon as it reaches end. A short
+# endoftransient trigger (one tick) is sent at each restart. Reaches end at t10
+# -> restarts to 0 with eot pulse; again at t20.
+tickrate 10
+patch <<<
+[transient]
+    start          = 0
+    end            = 0.5
+    duration       = 1
+    loop           = 1
+    output         = O1
+    endoftransient = O2
+>>>
+@9 expect O1 0.45 tol 1e-4
+@9 expect O2 0
+@10 expect O1 0 tol 1e-4
+@10 expect O2 1
+@11 expect O1 0.05 tol 1e-4
+@11 expect O2 0
+@20 expect O1 0 tol 1e-4
+@20 expect O2 1
+@21 expect O2 0

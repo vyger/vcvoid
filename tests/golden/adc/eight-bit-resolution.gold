@@ -1,0 +1,79 @@
+# adc with the full-ish resolution the Master16 can show: 8 bits (bit1..bit8)
+# over the default range 0..1 -> 256 equal pieces. bit1=MSB (O1), bit8=LSB (O8).
+# value = floor(input*256), clamped to [0,255]. Each test input is the midpoint
+# of its target band (input = (value+0.5)/256), so input*256 = value+0.5 -> a
+# robust floor. Bit k carries (value >> (8-k)) & 1.
+#
+#   input          value  binary (b1..b8)
+#   0.0            0      0000 0000
+#   0.005859375    1      0000 0001   (=1.5/256, isolates the LSB)
+#   0.501953125    128    1000 0000   (=128.5/256, isolates the MSB)
+#   0.666015625    170    1010 1010   (=170.5/256, alternating pattern)
+#   1.0            255    1111 1111   (at maximum -> all ones)
+patch <<<
+[adc]
+    input = I1
+    bit1 = O1
+    bit2 = O2
+    bit3 = O3
+    bit4 = O4
+    bit5 = O5
+    bit6 = O6
+    bit7 = O7
+    bit8 = O8
+>>>
+
+# value 0 -> all zeros
+@0 set I1 0.0
+@0 expect O1 0
+@0 expect O2 0
+@0 expect O3 0
+@0 expect O4 0
+@0 expect O5 0
+@0 expect O6 0
+@0 expect O7 0
+@0 expect O8 0
+
+# value 1 = 00000001 -> only LSB (bit8/O8) high
+@1 set I1 0.005859375
+@1 expect O1 0
+@1 expect O2 0
+@1 expect O3 0
+@1 expect O4 0
+@1 expect O5 0
+@1 expect O6 0
+@1 expect O7 0
+@1 expect O8 1
+
+# value 128 = 10000000 -> only MSB (bit1/O1) high
+@2 set I1 0.501953125
+@2 expect O1 1
+@2 expect O2 0
+@2 expect O3 0
+@2 expect O4 0
+@2 expect O5 0
+@2 expect O6 0
+@2 expect O7 0
+@2 expect O8 0
+
+# value 170 = 10101010
+@3 set I1 0.666015625
+@3 expect O1 1
+@3 expect O2 0
+@3 expect O3 1
+@3 expect O4 0
+@3 expect O5 1
+@3 expect O6 0
+@3 expect O7 1
+@3 expect O8 0
+
+# at maximum -> value 255 = 11111111 -> all ones
+@4 set I1 1.0
+@4 expect O1 1
+@4 expect O2 1
+@4 expect O3 1
+@4 expect O4 1
+@4 expect O5 1
+@4 expect O6 1
+@4 expect O7 1
+@4 expect O8 1

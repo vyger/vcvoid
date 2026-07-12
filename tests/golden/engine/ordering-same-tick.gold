@@ -1,0 +1,12 @@
+# writer earlier in the file: reader sees the value in the SAME tick
+patch <<<
+[copy]
+    input = I1
+    output = _X
+
+[copy]
+    input = _X
+    output = O1
+>>>
+@0 set I1 0.5
+@0 expect O1 0.5

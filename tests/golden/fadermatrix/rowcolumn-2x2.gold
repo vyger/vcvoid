@@ -1,0 +1,53 @@
+# fadermatrix: 2x2 matrix, rowcolumn selects a row (0,1) or a column (2,3) onto
+# the two faders. Each cell keeps its own value; changing rowcolumn is a
+# pickup-free motorized takeover -- the faders jump to the newly mapped cells.
+#   rc 0 -> row 0: output11 on F1, output12 on F2
+#   rc 1 -> row 1: output21 on F1, output22 on F2
+#   rc 2 -> col 0: output11 on F1, output21 on F2
+#   rc 3 -> col 1: output12 on F1, output22 on F2
+tickrate 100
+patch <<<
+[m4]
+
+[fadermatrix]
+    firstfader = 1
+    rowcolumn  = I1
+    output11   = O1
+    output12   = O2
+    output21   = O3
+    output22   = O4
+>>>
+@0 set I1 0
+@0 expect O1 0 tol 1e-4
+# row 0: set cells (0,0)=0.3, (0,1)=0.7
+@1 move F1 0.3
+@1 move F2 0.7
+@1 expect O1 0.3 tol 1e-4
+@1 expect O2 0.7 tol 1e-4
+@1 expect O3 0 tol 1e-4
+@1 expect O4 0 tol 1e-4
+# switch to row 1: faders move to cells (1,0),(1,1) (still 0); row 0 frozen
+@2 set I1 1
+@2 expect F1 0 tol 1e-4
+@2 expect F2 0 tol 1e-4
+@2 expect O1 0.3 tol 1e-4
+@2 expect O2 0.7 tol 1e-4
+@3 move F1 0.5
+@3 move F2 0.9
+@3 expect O3 0.5 tol 1e-4
+@3 expect O4 0.9 tol 1e-4
+@3 expect O1 0.3 tol 1e-4
+# switch to column 0: F1 <- cell(0,0)=0.3, F2 <- cell(1,0)=0.5
+@4 set I1 2
+@4 expect F1 0.3 tol 1e-4
+@4 expect F2 0.5 tol 1e-4
+@5 move F1 0.1
+@5 move F2 0.2
+@5 expect O1 0.1 tol 1e-4
+@5 expect O3 0.2 tol 1e-4
+@5 expect O2 0.7 tol 1e-4
+@5 expect O4 0.9 tol 1e-4
+# switch to column 1: F1 <- cell(0,1)=0.7, F2 <- cell(1,1)=0.9
+@6 set I1 3
+@6 expect F1 0.7 tol 1e-4
+@6 expect F2 0.9 tol 1e-4

@@ -1,0 +1,29 @@
+# motoquencer "I Feel Lucky": luckygateprob with luckyamount=1 is the deterministic
+# extreme -- it sets every affected step's gate-probability to the maximum 7 ("7 =
+# always"), i.e. it disables randomization so the gates always play. We observe the
+# result through the motor-fader readback: with fadermode=2 the faders show the
+# gate-probability lane (position = gateprob/7). We first pull all four to 0, then a
+# luckygateprob trigger snaps them (and the motors) to the top, position 1.0.
+tickrate 100
+patch <<<
+[m4]
+[motoquencer]
+    numfaders     = 4
+    fadermode     = 2
+    clock         = I1
+    luckygateprob = I2
+>>>
+# tick1: dial the gate-probability lane down to 0 on every fader.
+@1 move F1 0.0
+@1 move F2 0.0
+@1 move F3 0.0
+@1 move F4 0.0
+@1 expect F1 0.0 tol 1e-4
+@1 expect F2 0.0 tol 1e-4
+# tick2: fire luckygateprob (luckyamount defaults to 1) -> gateprob = 7 for every
+# affected step; the lucky reroll re-commands the motors to the top notch (1.0).
+@2 set I2 1
+@2 expect F1 1.0 tol 1e-4
+@2 expect F2 1.0 tol 1e-4
+@2 expect F3 1.0 tol 1e-4
+@2 expect F4 1.0 tol 1e-4

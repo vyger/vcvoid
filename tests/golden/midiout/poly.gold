@@ -1,0 +1,35 @@
+# midiout polyphony (manual lines 137-167, 346-347). Up to eight pitch/gate
+# pairs play up to eight simultaneous notes. Three gates rising on the same tick
+# emit three note-ons in voice order (1,2,3). Gates fall independently, each
+# emitting its own note-off. pitches: 0 -> 24, 0.1 -> 36, 0.2 -> 48.
+# pitchstabilization=0 for immediate emission.
+tickrate 1000
+x7 1
+patch <<<
+[midiout]
+    pitch1 = I1
+    pitch2 = I2
+    pitch3 = I3
+    gate1  = I4
+    gate2  = I5
+    gate3  = I6
+    pitchstabilization = 0
+    activesensing = 0
+>>>
+@0 set I1 0
+@0 set I2 0.1
+@0 set I3 0.2
+@1 set I4 1
+@1 set I5 1
+@1 set I6 1
+@1 expectmidi trs noteon 1 24 127
+@1 expectmidi trs noteon 1 36 127
+@1 expectmidi trs noteon 1 48 127
+@1 expectmidi trs none
+@5 set I5 0
+@5 expectmidi trs noteoff 1 36 127
+@5 expectmidi trs none
+@6 set I4 0
+@6 expectmidi trs noteoff 1 24 127
+@7 set I6 0
+@7 expectmidi trs noteoff 1 48 127

@@ -1,0 +1,16 @@
+# math: sum (input1+input2) and difference (input1-input2) with both
+# positive and negative operands. I1=0.6, I2=-0.25.
+#   sum        = 0.6 + (-0.25) = 0.35
+#   difference = 0.6 - (-0.25) = 0.85
+patch <<<
+[math]
+    input1     = I1
+    input2     = I2
+    sum        = O1
+    difference = O2
+>>>
+
+@0 set I1 0.6
+@0 set I2 -0.25
+@0 expect O1 0.35 tol 1e-6
+@0 expect O2 0.85 tol 1e-6

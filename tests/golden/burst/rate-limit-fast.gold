@@ -1,0 +1,30 @@
+# "Burst makes sure that the actual output rate is limited to the maximum the
+# DROID hardware can do, so not one single burst can get lost." At a very high
+# hz the requested period is far below one tick; the hardware limits the rate so
+# every one of the `count` pulses is still emitted.
+#
+# SPEC-GAP: the manual gives no exact maximum output rate. We clamp the period
+# to a minimum of 2 ticks (1 tick high + 1 tick low = max rate tickRate/2), which
+# guarantees no pulse is dropped. Hardware reference data on the true maximum
+# would close this gap. Here hz=100 at tickrate 8 requests P=0.08 ticks; clamped
+# to P=2. count=3 -> pulses at k=0,2,4 (each 1 tick high, 1 low), none lost.
+#   trigger t1: HIGH at t1,t3,t5; LOW between; done after 3 pulses.
+tickrate 8
+patch <<<
+[burst]
+    trigger = I1
+    hz      = 100
+    count   = 3
+    output  = O1
+>>>
+@0 expect O1 0
+@1 set I1 1
+@1 expect O1 1
+@2 set I1 0
+@2 expect O1 0
+@3 expect O1 1
+@4 expect O1 0
+@5 expect O1 1
+@6 expect O1 0
+@7 expect O1 0
+@8 expect O1 0

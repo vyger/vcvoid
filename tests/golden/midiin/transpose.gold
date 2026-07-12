@@ -1,0 +1,17 @@
+# midiin: transpose (line 335) adds a 1V/oct offset to every pitch output, and
+# "Changes in the transposition are immediately reflected, even for currently
+# already active notes." transpose is wired to I1 so it can change while a note
+# is held: +0.1 (one octave up) then -0.1 (one octave down) shift the held
+# note's pitch immediately.
+patch <<<
+[midiin]
+    transpose = I1
+    pitch     = O1
+    gate      = O2
+>>>
+@0 set I1 0.1
+@0 midisend trs noteon 1 60 100
+@0 expect O1 0.4
+@0 expect O2 1
+@1 set I1 -0.1
+@1 expect O1 0.2

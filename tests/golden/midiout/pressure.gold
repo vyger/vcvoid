@@ -1,0 +1,27 @@
+# midiout key/channel pressure (manual lines 350-351). pressure1 sends polyphonic
+# key pressure (0xA0) for the note held by voice 1, updated while the note plays
+# (on change, not at note-on). channelpressure sends channel aftertouch (0xD0).
+# Both are continuous (rate-limited by updaterate, here 1000/s). No value is sent
+# at note-on itself (pressure starts at 0, unchanged). 0.5 -> 64, 0.25 -> 32.
+tickrate 1000
+x7 1
+patch <<<
+[midiout]
+    pitch = I1
+    gate  = I2
+    pressure = I3
+    channelpressure = I4
+    pitchstabilization = 0
+    activesensing = 0
+    delayinitialccs = 0
+    updaterate = 1000
+>>>
+@0 set I1 0.3
+@1 set I2 1
+@1 expectmidi trs noteon 1 60 127
+@1 expectmidi trs none
+@2 set I3 0.5
+@2 expectmidi trs polyaftertouch 1 60 64
+@3 set I4 0.25
+@3 expectmidi trs aftertouch 1 32
+@4 expectmidi trs none

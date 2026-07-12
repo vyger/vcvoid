@@ -1,0 +1,43 @@
+# cvlooper: while the loop plays, the input is IGNORED and must not overwrite
+# the tape (manual cvlooper.md: "the input CV and gate are now ignored").
+# Regression for the always-writing tape head: with the head advancing during
+# playback it wraps the tape capacity and overwrites the playing loop with
+# live input. Setup mirrors record-and-loop.gold: clock period 5, length=2 ->
+# 10-sample window, ramp 0.10..0.19 recorded t10..t19, loop on at t20. The
+# live input is then parked at 0.77; the loop must still replay the original
+# ramp far beyond any tape-capacity horizon (tickrate 100 -> 8 s tape = 800
+# samples; the old 20000-sample head wrapped at t20010).
+tickrate 100
+patch <<<
+[cvlooper]
+    cvin       = I1
+    clock      = I2
+    loopswitch = I3
+    length     = 2
+    cvout      = O1
+>>>
+@0 set I2 1
+@0 set I1 0
+@1 set I2 0
+@1 set I1 0.01
+@5 set I2 1
+@5 set I1 0.05
+@6 set I2 0
+@6 set I1 0.06
+@10 set I2 1
+@10 set I1 0.1
+@11 set I2 0
+@11 set I1 0.11
+@15 set I2 1
+@15 set I1 0.15
+@16 set I2 0
+@16 set I1 0.16
+@19 set I1 0.19
+# loop on from t20; live input parked at 0.77 must never reach the tape
+@20 set I3 1
+@20 expect O1 0.1 tol 1e-4
+@21 set I1 0.77
+@25 expect O1 0.15 tol 1e-4
+@100 expect O1 0.1 tol 1e-4
+@20100 expect O1 0.1 tol 1e-4
+@20105 expect O1 0.15 tol 1e-4

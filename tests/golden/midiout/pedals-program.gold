@@ -1,0 +1,55 @@
+# midiout pedals + program/bank (manual lines 369-382). Pedal gates send their CC
+# on each edge (127 high, 0 low): damper CC#64, sostenuto CC#66, soft CC#67,
+# portamento CC#65, legato CC#68. program (1..128) and bank (1..16384) drive
+# Program Change (0xC0, data = program-1) with Bank Select MSB (CC#0) + LSB
+# (CC#32, value = bank-1) sent before the PC when the bank changes. programchange
+# forces a PC even when nothing changed. An initial PC is sent once at start.
+tickrate 1000
+x7 1
+patch <<<
+[midiout]
+    damper     = I1
+    sostenuto  = I2
+    soft       = I3
+    portamento = I4
+    legato     = I5
+    program    = I6
+    bank       = I7
+    programchange = I8
+    activesensing = 0
+>>>
+@0 set I6 1
+@0 set I7 1
+@0 expectmidi trs cc 1 0 0
+@0 expectmidi trs cc 1 32 0
+@0 expectmidi trs program 1 0
+@1 set I1 1
+@1 expectmidi trs cc 1 64 127
+@2 set I1 0
+@2 expectmidi trs cc 1 64 0
+@3 set I2 1
+@3 expectmidi trs cc 1 66 127
+@4 set I2 0
+@4 expectmidi trs cc 1 66 0
+@5 set I3 1
+@5 expectmidi trs cc 1 67 127
+@6 set I3 0
+@6 expectmidi trs cc 1 67 0
+@7 set I4 1
+@7 expectmidi trs cc 1 65 127
+@8 set I4 0
+@8 expectmidi trs cc 1 65 0
+@9 set I5 1
+@9 expectmidi trs cc 1 68 127
+@10 set I5 0
+@10 expectmidi trs cc 1 68 0
+@11 set I6 5
+@11 expectmidi trs program 1 4
+@12 set I7 2
+@12 expectmidi trs cc 1 0 0
+@12 expectmidi trs cc 1 32 1
+@12 expectmidi trs program 1 4
+@13 set I8 1
+@13 expectmidi trs program 1 4
+@14 set I8 0
+@14 expectmidi trs none

@@ -1,0 +1,18 @@
+# inputpitch/outputpitch: 1V/oct with 60 BPM (1 Hz) = 0 V. period 25 ticks at
+# tickrate 100 = 4 Hz -> inputpitch = log2(4)*0.1 = 0.2. With divide=2 the output
+# is 2 Hz -> outputpitch = log2(2)*0.1 = 0.1. (Valid once the period is learned,
+# i.e. after the 2nd input edge at t25.)
+tickrate 100
+patch <<<
+[clocktool]
+    clock       = I1
+    divide      = 2
+    inputpitch  = O2
+    outputpitch = O3
+>>>
+@0 set I1 1
+@1 set I1 0
+@25 set I1 1
+@26 set I1 0
+@30 expect O2 0.2 tol 1e-4
+@30 expect O3 0.1 tol 1e-4

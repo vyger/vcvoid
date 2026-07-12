@@ -1,0 +1,17 @@
+# A zero (or negative) duration makes the output always sit at the `end` level,
+# with phase 1 and endoftransient high immediately.
+tickrate 10
+patch <<<
+[transient]
+    start          = 0
+    end            = 0.5
+    duration       = 0
+    output         = O1
+    phase          = O2
+    endoftransient = O3
+>>>
+@0 expect O1 0.5 tol 1e-4
+@0 expect O2 1.0 tol 1e-4
+@0 expect O3 1
+@1 expect O1 0.5 tol 1e-4
+@2 expect O1 0.5 tol 1e-4

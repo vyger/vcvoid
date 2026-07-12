@@ -1,0 +1,13 @@
+# manual example: attenuated signal into an internal patch cable
+patch <<<
+[copy]
+    input = I1 * 0.5
+    output = _INPUT_CV
+
+[copy]
+    input = _INPUT_CV
+    output = O1
+>>>
+@0 set I1 0.8
+@0 expect _INPUT_CV 0.4
+@0 expect O1 0.4

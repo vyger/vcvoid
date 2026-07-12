@@ -1,0 +1,27 @@
+# motoquencer: startstep/endstep restrict the played range. With startstep=2,
+# endstep=3 only steps 2 and 3 (1-based) = steps 1 and 2 (0-based) play, looping.
+# Steps edited to distinct pitches so cv reveals the range: 0.05, 0.1, 0.05, 0.1.
+tickrate 100
+patch <<<
+[m4]
+[motoquencer]
+    clock     = I1
+    startstep = 2
+    endstep   = 3
+    cv        = O1
+>>>
+@1 move F1 0.0
+@1 move F2 0.2142857
+@1 move F3 0.5
+@1 move F4 0.7142857
+@2 set I1 1
+@2 expect O1 0.05 tol 1e-4
+@3 set I1 0
+@4 set I1 1
+@4 expect O1 0.1 tol 1e-4
+@5 set I1 0
+@6 set I1 1
+@6 expect O1 0.05 tol 1e-4
+@7 set I1 0
+@8 set I1 1
+@8 expect O1 0.1 tol 1e-4

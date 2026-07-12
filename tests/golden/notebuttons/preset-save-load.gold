@@ -1,0 +1,44 @@
+# notebuttons: 16 presets store the selected note. Value-carrying trigger mode
+# (`preset` unpatched): the trigger value selects the slot. `clearall` reseeds
+# the start state AND wipes every preset. startnote 0. savepreset=I7, loadpreset=
+# I8, clearall=I3. `output` is read through the internal cable `_OUT` (physical O
+# jacks clamp above 1.0); `[copy]` is its required reader.
+#   t1 press button7 (note 6)          -> output 6
+#   t3 savepreset (0.2 -> slot 0)      -> preset0 = 6
+#   t5 press button2 (note 1)          -> output 1
+#   t7 loadpreset (0.2 -> slot 0)      -> output 6
+#   t9 clearall -> reseed 0 AND wipe every preset (preset0 = 0)
+#   t11 loadpreset (0.2 -> slot 0)     -> output 0 (preset0 was wiped)
+tickrate 100
+patch <<<
+[b32]
+
+[notebuttons]
+    button2    = B1.2
+    button7    = B1.7
+    savepreset = I7
+    loadpreset = I8
+    clearall   = I3
+    output     = _OUT
+
+[copy]
+    input = _OUT
+>>>
+@1 set B1.7 1
+@1 expect _OUT 6 tol 1e-4
+@2 set B1.7 0
+@3 set I7 0.2
+@3 expect _OUT 6 tol 1e-4
+@4 set I7 0
+@5 set B1.2 1
+@5 expect _OUT 1 tol 1e-4
+@6 set B1.2 0
+@7 set I8 0.2
+@7 expect _OUT 6 tol 1e-4
+@8 set I8 0
+@9 set I3 1
+@9 expect _OUT 0 tol 1e-4
+@10 set I3 0
+@11 set I8 0.2
+@11 expect _OUT 0 tol 1e-4
+@12 set I8 0

@@ -1,0 +1,54 @@
+# notebuttons: radio selection. button<i> selects note i-1 (button1 = C = 0 ...
+# button12 = B = 11). The selection PERSISTS after release. `output` is the note
+# number; `semitone` is note/120 (a 1 V/oct semitone); `gate` is high only while
+# a button is held. b32 controller gives B1.1..B1.12 / L1.1..L1.12.
+# `output` (0..11) is read through an internal cable `_OUT` because a physical O
+# jack clamps to +-10 V (+-1.0 engine units) and would mangle notes above 1; the
+# `[copy]` sink is only there to give the cable its required reader. `semitone`
+# stays small so it is read straight off O2.
+#   t0: startnote default 0 -> output 0, semitone 0, gate 0
+#   t1 press button1 (note 0) held -> output 0, gate 1
+#   t2 release           -> output 0 (latched), gate 0
+#   t3 press button4 (note 3) -> output 3, semitone 3/120 = 0.025, gate 1
+#   t4 release           -> output 3 (latched), semitone 0.025, gate 0
+#   t5 press button12 (note 11) -> output 11, semitone 11/120 = 0.091667, gate 1
+#   t6 release           -> output 11 (latched), gate 0
+tickrate 100
+patch <<<
+[b32]
+
+[notebuttons]
+    button1  = B1.1
+    button4  = B1.4
+    button12 = B1.12
+    output   = _OUT
+    semitone = O2
+    gate     = O3
+
+[copy]
+    input = _OUT
+>>>
+@0 expect _OUT 0 tol 1e-4
+@0 expect O2 0 tol 1e-4
+@0 expect O3 0 tol 1e-4
+@1 set B1.1 1
+@1 expect _OUT 0 tol 1e-4
+@1 expect O3 1 tol 1e-4
+@2 set B1.1 0
+@2 expect _OUT 0 tol 1e-4
+@2 expect O3 0 tol 1e-4
+@3 set B1.4 1
+@3 expect _OUT 3 tol 1e-4
+@3 expect O2 0.025 tol 1e-4
+@3 expect O3 1 tol 1e-4
+@4 set B1.4 0
+@4 expect _OUT 3 tol 1e-4
+@4 expect O2 0.025 tol 1e-4
+@4 expect O3 0 tol 1e-4
+@5 set B1.12 1
+@5 expect _OUT 11 tol 1e-4
+@5 expect O2 0.0916667 tol 1e-4
+@5 expect O3 1 tol 1e-4
+@6 set B1.12 0
+@6 expect _OUT 11 tol 1e-4
+@6 expect O3 0 tol 1e-4

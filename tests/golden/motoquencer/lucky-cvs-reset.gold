@@ -1,0 +1,41 @@
+# motoquencer "I Feel Lucky": luckycvs with luckyamount=0 and luckychance=1 is the
+# documented reset gesture -- it brings every affected step's CV back to cvbase
+# (manual: "A trigger at luckycvs with luckyamount = 0 and luckychance = 1 will
+# bring all steps back to the CV set by cvbase"). luckycvbase defaults to 0, so the
+# random window collapses to the single position cvbase. Deterministic despite
+# being a "random" op because amount 0 leaves no spread.
+tickrate 100
+patch <<<
+[m4]
+[motoquencer]
+    numfaders   = 4
+    quantize    = 0
+    cvbase      = 0
+    cvrange     = 1
+    holdcv      = 0
+    clock       = I1
+    cv          = O1
+    luckycvs    = I2
+    luckyamount = I3
+>>>
+@0 expect O1 0 tol 1e-4
+# dial four distinct pitches...
+@1 move F1 0.1
+@1 move F2 0.3
+@1 move F3 0.6
+@1 move F4 0.9
+# ...then reset: luckyamount = 0, fire luckycvs -> all steps go to cvbase (0).
+@2 set I3 0
+@3 set I2 1
+@4 set I2 0
+@5 set I1 1
+@5 expect O1 0 tol 1e-4
+@6 set I1 0
+@7 set I1 1
+@7 expect O1 0 tol 1e-4
+@8 set I1 0
+@9 set I1 1
+@9 expect O1 0 tol 1e-4
+@10 set I1 0
+@11 set I1 1
+@11 expect O1 0 tol 1e-4

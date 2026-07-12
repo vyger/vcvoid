@@ -1,0 +1,37 @@
+# midifileplayer: pressure, per-note trigger, bank select, pedal states,
+# holdvelocity. File F (div 96): @0 noteon 60 vel 100 + channel pressure 80;
+# @24 bank MSB 2 (CC0) + LSB 3 (CC32) + portamento pedal on (CC65) + soft
+# pedal on (CC67); @48 noteoff; EOT @96. Engine ticks: 0 / 750 / 1500.
+# trigger1 = 5 ms = 30 engine ticks (high @10, low @40).
+# pressure 80/127 = 0.62992. bank = 2*128 + 3 = 259 (via cable — exceeds the
+# +-1 O-register clamp). holdvelocity = 1 keeps velocity 100/127 = 0.7874
+# after the noteoff.
+midifile 1 4D546864000000060000000100604D54726B0000001F00903C6400D05018B0000200B0200300B0417F00B0437F18803C0030FF2F00
+patch <<<
+[midifileplayer]
+    loop = 0
+    holdvelocity = 1
+    gate1 = O1
+    trigger1 = O2
+    pressure1 = O3
+    velocity1 = O4
+    bank = _BANK
+    portamento = O5
+    soft = O6
+
+[copy]
+    input = _BANK * 0.001
+    output = O7
+>>>
+@0 expect O1 1
+@0 expect O3 0.62992 tol 0.001
+@0 expect O4 0.7874 tol 0.001
+@10 expect O2 1
+@40 expect O2 0
+@740 expect O5 0
+@740 expect O6 0
+@760 expect _BANK 259
+@760 expect O5 1
+@760 expect O6 1
+@1510 expect O1 0
+@1510 expect O4 0.7874 tol 0.001

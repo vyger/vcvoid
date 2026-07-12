@@ -1,0 +1,37 @@
+# midiin: pitch bend (lines 337-338, 371). 14-bit bend value 0..16383, centre
+# 8192 -> 0. `pitchbendrange` default 2/12 V = 0.016667 engine units (one whole
+# tone). Chosen reading (manual is explicit that the MAXIMUM value outputs the
+# range and the MINIMUM outputs its negative counterpart, line 337): the bend is
+# normalized asymmetrically -- up side (value-8192)/8191, down side
+# (value-8192)/8192 -- so 16383 -> +range, 0 -> -range, and 4096 -> -0.5*range.
+# `pitchbend` output always follows the bend; with bendpitch = 1 (default) the
+# bend is also folded into every pitch output. The second circuit sets
+# bendpitch = 0, so its pitch stays put and only its `pitchbend` output moves.
+patch <<<
+[midiin]
+    pitch     = O1
+    pitchbend = O2
+
+[midiin]
+    bendpitch = 0
+    pitch     = O3
+    pitchbend = O4
+>>>
+@0 midisend trs noteon 1 60 100
+@0 expect O1 0.3
+@0 expect O2 0
+@0 expect O3 0.3
+@1 midisend trs bend 1 16383
+@1 expect O2 0.016667 tol 0.0001
+@1 expect O1 0.316667 tol 0.0001
+@1 expect O4 0.016667 tol 0.0001
+@1 expect O3 0.3
+@2 midisend trs bend 1 0
+@2 expect O2 -0.016667 tol 0.0001
+@2 expect O1 0.283333 tol 0.0001
+@3 midisend trs bend 1 4096
+@3 expect O2 -0.008333 tol 0.0001
+@3 expect O1 0.291667 tol 0.0001
+@4 midisend trs bend 1 8192
+@4 expect O2 0
+@4 expect O1 0.3

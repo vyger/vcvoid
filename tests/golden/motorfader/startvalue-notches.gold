@@ -1,0 +1,31 @@
+# motorfader: `startvalue` is the initial OUTPUT value, not a raw 0..1 position.
+# For a notched fader it names the dent INDEX (matching `output`, which emits
+# 0..notches-1). So `notches = 10, startvalue = 2` seeds dent 2 -> outputs 2
+# (here * outputscale 0.1 = 0.2, so it fits the O register's -1..1 clamp).
+# The old code treated sv as a raw position and clamped it: sv 2 -> 1.0 -> dent
+# 9 -> 0.9 (this is exactly what made every MFPS BPM digit / menu fader boot at
+# the top). A DESELECTED motorfader (select != selectat) keeps EMITTING its
+# stored value while detached from the physical fader; on (re)selection the motor
+# recalls that value (pickup-free). The MFPS BPM digits rely on both to boot at
+# 120 BPM without ever opening the clock menu.
+tickrate 100
+patch <<<
+[m4]
+
+[motorfader]
+    fader       = 1
+    notches     = 10
+    startvalue  = 2
+    outputscale = 0.1
+    select      = I1
+    selectat    = 99     # I1 defaults to 0 != 99 -> deselected at boot
+    output      = O1
+>>>
+# deselected from tick 0: output holds seeded dent 2 (bug: dent 9 -> 0.9)
+@0 expect O1 0.2 tol 1e-4
+@0 expect F1 0 tol 1e-4       # detached: the motor is not commanded
+@5 expect O1 0.2 tol 1e-4     # still emitting the stored value while deselected
+# select it (I1 == 99): it takes the fader; the motor recalls dent 2's rest
+@6 set I1 99
+@6 expect O1 0.2 tol 1e-4
+@6 expect F1 0.222222 tol 1e-3

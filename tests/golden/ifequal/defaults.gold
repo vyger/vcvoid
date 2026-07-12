@@ -1,0 +1,16 @@
+# Defaults from the Inputs table: input1=0.0, input2=1.0, ifequal=1.0, else=0.0.
+# Block A: all defaults -> input1(0) != input2(1) -> else default (0).
+# Block B: input2=0 patched -> input1 default (0) == 0 -> ifequal default (1).
+patch <<<
+[ifequal]
+    output = O1
+>>>
+
+patch <<<
+[ifequal]
+    input2 = 0
+    output = O2
+>>>
+
+@0 expect O1 0
+@0 expect O2 1

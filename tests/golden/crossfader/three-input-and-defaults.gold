@@ -1,0 +1,48 @@
+# Three inputs (N=3, N-1=2): fade 0.5 lands exactly on the middle input (p=1.0).
+# Block B: fade defaults to 0.5 when unpatched -> 0.5*input1+0.5*input2.
+# Block C: only input1 patched (N=1) -> output is input1 regardless of fade.
+# inputs A: 0.1/0.5/0.9.
+patch <<<
+[crossfader]
+    input1 = I1
+    input2 = I2
+    input3 = I3
+    fade   = I4
+    output = O1
+>>>
+
+patch <<<
+[crossfader]
+    input1 = I5
+    input2 = I6
+    output = O2
+>>>
+
+patch <<<
+[crossfader]
+    input1 = I7
+    output = O3
+>>>
+
+@0 set I1 0.1
+@0 set I2 0.5
+@0 set I3 0.9
+@0 set I4 0
+@0 set I5 0.4
+@0 set I6 0.6
+@0 set I7 0.7
+@0 expect O1 0.1
+@0 expect O2 0.5
+@0 expect O3 0.7
+# fade 0.25 -> p=0.5 -> 0.5*0.1+0.5*0.5 = 0.3
+@1 set I4 0.25
+@1 expect O1 0.3
+# fade 0.5 -> p=1.0 -> input2 (0.5)
+@2 set I4 0.5
+@2 expect O1 0.5
+# fade 0.75 -> p=1.5 -> 0.5*0.5+0.5*0.9 = 0.7
+@3 set I4 0.75
+@3 expect O1 0.7
+# fade 1.0 -> p=2.0 -> input3 (0.9)
+@4 set I4 1
+@4 expect O1 0.9

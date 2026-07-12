@@ -1,0 +1,51 @@
+# Manual example (timing.md:48): reverse swing -- every second pulse EARLY by
+# 30% (timing2 = -0.3). Early beats require prediction from the measured
+# period, so they only take effect once the period is known: beats 3,5,7 fire
+# 6 ticks BEFORE their clock edge (54<60, 94<100, 134<140). SPEC-GAP: beat 1
+# is a startup transient -- the period isn't known until its own edge, so it
+# cannot be shifted early and fires on time at 20 (would-be 14). The manual
+# advises a steady clock + reset for a synchronized start.
+tickrate 100
+patch <<<
+[timing]
+    clock  = I1
+    output = O1
+    timing1 = 0
+    timing2 = -0.3
+>>>
+@0 set I1 1
+@0 expect O1 1
+@1 set I1 0
+@1 expect O1 0
+@14 expect O1 0
+@20 set I1 1
+@20 expect O1 1
+@21 set I1 0
+@21 expect O1 0
+@40 set I1 1
+@40 expect O1 1
+@41 set I1 0
+@41 expect O1 0
+@54 expect O1 1
+@55 expect O1 0
+@60 set I1 1
+@60 expect O1 0
+@61 set I1 0
+@80 set I1 1
+@80 expect O1 1
+@81 set I1 0
+@81 expect O1 0
+@94 expect O1 1
+@95 expect O1 0
+@100 set I1 1
+@100 expect O1 0
+@101 set I1 0
+@120 set I1 1
+@120 expect O1 1
+@121 set I1 0
+@121 expect O1 0
+@134 expect O1 1
+@135 expect O1 0
+@140 set I1 1
+@140 expect O1 0
+@141 set I1 0

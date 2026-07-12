@@ -1,0 +1,32 @@
+# motoquencer: `ratchets` subdivide a step's clock cycle into equal gated slices
+# (without changing the step's duration). Step 1 is set to 2 ratchets (fadermode 5,
+# notch 1 -> ratchets 2). With a period-4 clock the ratchet interval is 2 ticks and
+# each ratchet gate is gatelength(0.5)*interval = 1 tick, so step 1 gates on/off/on/
+# off across its four ticks.
+#
+# A period-4 clock is used (edges at ticks 4, 8, 12) so the two ratchet gates are
+# visibly separated in time. Step 1 (2nd step) is tested so the period is known.
+tickrate 100
+patch <<<
+[m4]
+[motoquencer]
+    clock     = I1
+    fadermode = I2
+    numsteps  = 2
+    gate      = O2
+>>>
+@1 set I2 5
+@2 move F2 0.1428571
+@2 expect F2 0.1428571 tol 1e-4
+@3 set I2 0
+# period-4 clock; step0 on the 1st edge (period unknown), step1 on the 2nd.
+@4 set I1 1
+@5 set I1 0
+@8 set I1 1
+# step1 ratchets: gate high at tick8, low tick9, high tick10, low tick11.
+@8 expect O2 1 tol 1e-4
+@9 set I1 0
+@9 expect O2 0 tol 1e-4
+@10 expect O2 1 tol 1e-4
+@11 expect O2 0 tol 1e-4
+@12 set I1 1

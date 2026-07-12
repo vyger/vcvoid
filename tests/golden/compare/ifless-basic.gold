@@ -1,0 +1,18 @@
+# compare worked example 1: output 1 if input < 0.5, else 0. Only ifless is
+# patched; ifequal/ifgreater/else are omitted so those relations fall back to
+# else's default (0). (else IS effectively present via default here because one
+# of the four -- ifless -- is patched, so the all-omitted->ifequal=1 rule does
+# NOT apply; equal falls back to else=0.)
+patch <<<
+[compare]
+    input   = I1
+    compare = 0.5
+    ifless  = 1
+    output  = O1
+>>>
+@0 set I1 0.3
+@0 expect O1 1
+@1 set I1 0.7
+@1 expect O1 0
+@2 set I1 0.5
+@2 expect O1 0

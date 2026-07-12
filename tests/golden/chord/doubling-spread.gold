@@ -1,0 +1,23 @@
+# chord `spread` separating doubled notes into octaves. Two notes (select1/3 =
+# C,E) in 4-voice mode duplicate to C,E,C,E. spread=1V (0.1) makes the allowed
+# lowest->highest span 2 octaves (12 + 12 = 24 semitones), so the doubled C and E
+# move up an octave instead of collapsing to unisons.
+# SPEC-GAP: only octave-separation of doubled voices is modelled here; the
+# manual's "distribute the remaining notes with the most equal spacing possible"
+# across a >1-octave spread is NOT modelled (needs hardware reference). Non-
+# doubled voices stay in the base octave.
+#   O1=C(0), O2=E(4), O3=C+oct(12), O4=E+oct(16)
+patch <<<
+[chord]
+    output1 = O1
+    output2 = O2
+    output3 = O3
+    output4 = O4
+    select1 = 1
+    select3 = 1
+    spread  = 1V
+>>>
+@0 expect O1 0 tol 1e-5
+@0 expect O2 0.0333333 tol 1e-5
+@0 expect O3 0.1 tol 1e-5
+@0 expect O4 0.1333333 tol 1e-5

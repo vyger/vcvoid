@@ -1,0 +1,20 @@
+# midiin on a MASTER18 without X7: native MIDI works (no-X7 gating is now
+# "any MIDI hardware present"). trs numbering: 1 = MIDI1, 2 = MIDI2
+# (manual/circuits/midiin.md "MASTER18" table).
+master 18
+x7 0
+patch <<<
+# LABELS: master=18
+[midiin]
+    trs  = 2
+    gate = O1
+
+[midiin]
+    trs  = 1
+    gate = O2
+>>>
+@0 midisend m18trs1 noteon 1 60 100
+@0 expect O1 0
+@0 expect O2 1
+@1 midisend m18trs2 noteon 1 64 100
+@1 expect O1 1

@@ -1,0 +1,19 @@
+# encoder: the handle may be a bare global number instead of an E register.
+# `encoder = 2` on a single E4 means the 2nd encoder of the setup = E1.2. Only
+# that physical encoder drives the value; turning E1.1 does nothing here.
+#   @1 turn E1.2 +48 -> pos 0.5
+#   @2 turn E1.1 +48 -> ignored (wrong encoder) -> still 0.5
+tickrate 100
+patch <<<
+[e4]
+
+[encoder]
+    encoder = 2
+    output  = O1
+    smooth  = 0
+>>>
+@0 expect O1 0 tol 1e-4
+@1 turn E1.2 48
+@1 expect O1 0.5 tol 1e-4
+@2 turn E1.1 48
+@2 expect O1 0.5 tol 1e-4

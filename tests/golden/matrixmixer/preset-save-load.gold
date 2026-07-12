@@ -1,0 +1,30 @@
+# matrixmixer: triggered presets. Save the current matrix to preset 0, change
+# it, then load preset 0 back. preset = I6 (=0), savepreset = I7, loadpreset = I8.
+#   t1: press button11 -> input1->output1 -> O1 = 0.6
+#   t3: savepreset -> preset 0 = current (node on)
+#   t5: press button11 again (toggle off) -> O1 = 0
+#   t7: loadpreset -> current = preset 0 (node on) -> O1 = 0.6
+tickrate 100
+patch <<<
+[matrixmixer]
+    startvalue = 0
+    input1     = I1
+    output1    = O1
+    button11   = I5
+    preset     = I6
+    savepreset = I7
+    loadpreset = I8
+>>>
+@0 set I1 0.6
+@0 expect O1 0 tol 1e-4
+@1 set I5 1
+@2 set I5 0
+@2 expect O1 0.6 tol 1e-4
+@3 set I7 1
+@4 set I7 0
+@5 set I5 1
+@6 set I5 0
+@6 expect O1 0 tol 1e-4
+@7 set I8 1
+@7 expect O1 0.6 tol 1e-4
+@8 set I8 0

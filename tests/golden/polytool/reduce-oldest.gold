@@ -1,0 +1,43 @@
+# voiceallocation = 0 (oldest, default): when all outputs are busy the OLDEST
+# sounding note is cancelled and its output taken by the new note. Three input
+# voices -> two outputs. Stealing is by age, independent of roundrobin.
+patch <<<
+[polytool]
+    pitchinput1     = I1
+    gateinput1      = I2
+    pitchinput2     = I3
+    gateinput2      = I4
+    pitchinput3     = I5
+    gateinput3      = I6
+    voiceallocation = 0
+    pitchoutput1    = O1
+    pitchoutput2    = O2
+    gateoutput1     = O3
+    gateoutput2     = O4
+>>>
+# v1 on -> lowest free output (out1)
+@0 set I1 0.1
+@0 set I2 1
+@0 expect O1 0.1 tol 1e-5
+@0 expect O3 1
+@0 expect O4 0
+# v2 on -> next free output (out2)
+@1 set I3 0.2
+@1 set I4 1
+@1 expect O2 0.2 tol 1e-5
+@1 expect O4 1
+@1 expect O1 0.1 tol 1e-5
+@1 expect O3 1
+# v3 on -> all busy; oldest is v1 (out1) -> stolen by v3
+@2 set I5 0.3
+@2 set I6 1
+@2 expect O1 0.3 tol 1e-5
+@2 expect O3 1
+@2 expect O2 0.2 tol 1e-5
+@2 expect O4 1
+# v3 off -> out1 frees (gate low, holds 0.3); out2/v2 still sounding
+@3 set I6 0
+@3 expect O1 0.3 tol 1e-5
+@3 expect O3 0
+@3 expect O2 0.2 tol 1e-5
+@3 expect O4 1

@@ -1,0 +1,22 @@
+# `histeresis`: the input must change by more than this amount (from the value at
+# the last requantization) to be requantized; otherwise the previous output is
+# held. steps=10 (step 0.01), histeresis=0.005.
+#   t0: 0.05  -> 0.05  (reference input 0.05)
+#   t1: 0.058 -> |0.008|>0.005 -> requantize -> 0.06 (reference now 0.058)
+#   t2: 0.054 -> |0.004|<=0.005 -> HELD at 0.06 (without histeresis it'd be 0.05)
+#   t3: 0.05  -> |0.008|>0.005 -> requantize -> 0.05
+patch <<<
+[quantizer]
+    input      = I1
+    steps      = 10
+    histeresis = 0.005
+    output     = O1
+>>>
+@0 set I1 0.05
+@0 expect O1 0.05 tol 1e-5
+@1 set I1 0.058
+@1 expect O1 0.06 tol 1e-5
+@2 set I1 0.054
+@2 expect O1 0.06 tol 1e-5
+@3 set I1 0.05
+@3 expect O1 0.05 tol 1e-5
