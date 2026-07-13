@@ -4,6 +4,7 @@
 #include "ChainModule.hpp"  // droid::chain protocol + ChainModule::isChain{Left,Right}Neighbor
 #include "Layout.hpp"
 #include "uatbridge/Bridge.hpp"   // forward-declares Rack types only; safe here
+#include "AdaptiveRate.hpp"
 #include <osdialog.h>
 #include <sys/stat.h>
 #include <fstream>
@@ -45,6 +46,13 @@ struct DroidMasterBase : Module {
     // thread paths that also hold it.
     droid::StateSnapshot lastSnapshot;
     float targetHz = 6000.f;
+    // Timing mode (issue #3). Adaptive (default for new masters) derives
+    // targetHz from the loaded patch's RAM footprint (AdaptiveRate.hpp) on
+    // every load; Fixed behaves as before. Old saves carry no timingMode key
+    // and load as Fixed at their saved targetHz (see dataFromJson).
+    enum class TimingMode { Adaptive, Fixed };
+    TimingMode timingMode = TimingMode::Adaptive;
+    float adaptiveHz = vcvoid::kMaxAdaptiveHz;   // last computed; UI thread
     int divider = 8;
     float effectiveRate = 6000.f;   // sampleRate / divider; the rate the engine runs at
     int frameCounter = 0;
@@ -278,6 +286,20 @@ public:
         auto fresh = std::make_unique<droid::Engine>(
             masterType_, effectiveRate);
         droid::LoadResult r = fresh->load(text);
+        if (r.ok) {
+            adaptiveHz = vcvoid::adaptiveTickHz(r.ramUsed);
+            if (timingMode == TimingMode::Adaptive) {
+                targetHz = adaptiveHz;
+                updateDivider(APP->engine->getSampleRate());
+                // The engine derives all timing from its constructor rate, so
+                // if the adaptive rate moved the divider, rebuild at the true
+                // effective rate (load cost only; patch loads are rare).
+                if (effectiveRate != fresh->tickRateHz()) {
+                    fresh = std::make_unique<droid::Engine>(masterType_, effectiveRate);
+                    r = fresh->load(text);
+                }
+            }
+        }
         std::lock_guard<std::mutex> lock(engineMutex);
         lastResult = r;
         patchPath = path;
@@ -784,6 +806,8 @@ public:
         }
         json_object_set_new(root, "patchPath", json_string(path.c_str()));
         json_object_set_new(root, "targetHz", json_real(targetHz));
+        json_object_set_new(root, "timingMode",
+            json_string(timingMode == TimingMode::Adaptive ? "adaptive" : "fixed"));
         json_object_set_new(root, "circuitState", snapshotToJson(lastSnapshot));
         return root;
     }
@@ -793,6 +817,14 @@ public:
         if (json_t* j = json_object_get(root, "targetHz"))
             targetHz = std::fmax(1.f, (float)json_number_value(j));
         updateDivider(APP->engine->getSampleRate());
+        // Saves written before timingMode existed carry only targetHz: honor
+        // them as Fixed rather than silently switching to Adaptive, so old
+        // racks keep byte-for-byte their old timing.
+        timingMode = TimingMode::Fixed;
+        if (json_t* j = json_object_get(root, "timingMode"))
+            if (const char* s = json_string_value(j))
+                if (std::strcmp(s, "adaptive") == 0)
+                    timingMode = TimingMode::Adaptive;
         // Load the saved circuit state BEFORE the patch load below, so that
         // loadPatchFile (with no live engine yet) restores it into the fresh
         // engine — the Rack-reopen mirror of the hot-reload transfer.
@@ -935,10 +967,20 @@ struct DroidMasterBaseWidget : ModuleWidget {
             if (!patchPath.empty()) m->loadPatchFile(patchPath);
         }, patchPath.empty()));
         menu->addChild(createIndexSubmenuItem("Tick rate",
-            {"2 kHz", "4 kHz", "6 kHz (hardware-typical)", "8 kHz"},
-            [m]() { return m->tickRateIndex(); },
+            {string::f("Adaptive (currently %.1f kHz)", m->adaptiveHz / 1000.f),
+             "2 kHz", "4 kHz", "6 kHz (hardware-typical)", "8 kHz"},
+            [m]() {
+                return m->timingMode == DroidMasterBase::TimingMode::Adaptive
+                    ? (size_t)0 : m->tickRateIndex() + 1;
+            },
             [m](size_t i) {
-                m->targetHz = DroidMasterBase::kTickRates[i];
+                if (i == 0) {
+                    m->timingMode = DroidMasterBase::TimingMode::Adaptive;
+                    m->targetHz = m->adaptiveHz;
+                } else {
+                    m->timingMode = DroidMasterBase::TimingMode::Fixed;
+                    m->targetHz = DroidMasterBase::kTickRates[i - 1];
+                }
                 m->applyTiming(APP->engine->getSampleRate());
             }));
     }
