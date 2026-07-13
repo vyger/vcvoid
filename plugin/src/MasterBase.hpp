@@ -305,6 +305,10 @@ public:
                 // The engine derives all timing from its constructor rate, so
                 // if the adaptive rate moved the divider, rebuild at the true
                 // effective rate (load cost only; patch loads are rare).
+                // This makes loadPatchFile another writer of divider/effectiveRate,
+                // from whatever thread loads the patch — including the UAT
+                // bridge's HTTP-thread POST /master/patch path — covered by the
+                // same plan-acknowledged torn-read tolerance as onSampleRateChange.
                 // Invariant: this reload is of the IDENTICAL text, and load
                 // success is tick-rate-independent by construction, so r stays
                 // ok here. The failure branch below is belt-and-braces should
