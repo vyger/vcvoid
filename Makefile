@@ -80,3 +80,14 @@ $(BUILD)/eqcheck: $(ENGINE_SRC) tests/tools/eqcheck.cpp $(wildcard engine/src/*.
 eqcheck: $(BUILD)/eqcheck
 
 .PHONY: eqcheck
+
+# bench: headless per-circuit CPU profiler (issue #5). -O2 overrides the
+# global -O1 for this target only — perf measurement wants an optimized
+# build; the rest of the tree stays at -O1 for fast edit/test cycles.
+$(BUILD)/bench: $(ENGINE_SRC) tools/bench/bench.cpp $(wildcard engine/src/*.hpp) $(wildcard engine/gen/*.hpp)
+	@mkdir -p $(BUILD)
+	$(CXX) $(CXXFLAGS) -O2 $(ENGINE_SRC) tools/bench/bench.cpp -o $@
+
+bench: $(BUILD)/bench
+
+.PHONY: bench
