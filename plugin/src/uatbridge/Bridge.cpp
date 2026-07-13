@@ -1460,6 +1460,104 @@ std::string Bridge::handleMasterCpuProfiling(DroidMasterBase* m, const Request& 
     return handleMasterCpu(m, code);
 }
 
+// POST /master/{id}/watch {"ids":["_T1_P1_SAVE","B2.1",...]} — arm a signal
+// watch: from the next engine tick, every named engine signal (register,
+// "F<n>" fader handle, or "_CABLE" internal cable) is sampled once per tick
+// in process() (MasterBase.hpp watch block). Names are validated against the
+// LIVE engine here so a typo'd cable 400s instead of silently reading 0
+// (Engine::getValue's documented unknown-name behavior). Re-arming replaces
+// the previous watch. Split from collection so gestures can be driven while
+// the watch runs — the whole point: catching 1-tick trigger pulses that
+// HTTP-side register polling misses.
+std::string Bridge::handleWatchArm(DroidMasterBase* m, const Request& req, int* code) {
+    json_error_t parseErr;
+    json_t* root = json_loads(req.body.c_str(), 0, &parseErr);
+    if (!root) {
+        *code = 400;
+        return "{\"error\":\"invalid JSON body\"}";
+    }
+    json_t* jIds = json_object_get(root, "ids");
+    if (!jIds || !json_is_array(jIds) || json_array_size(jIds) == 0) {
+        json_decref(root);
+        *code = 400;
+        return "{\"error\":\"missing or empty ids array\"}";
+    }
+    if (json_array_size(jIds) > DroidMasterBase::kWatchMaxSignals) {
+        json_decref(root);
+        *code = 400;
+        return "{\"error\":\"too many ids (max 16)\"}";
+    }
+    std::vector<std::string> names;
+    for (size_t i = 0; i < json_array_size(jIds); i++) {
+        const char* s = json_string_value(json_array_get(jIds, i));
+        if (!s || !*s) {
+            json_decref(root);
+            *code = 400;
+            return "{\"error\":\"ids must be non-empty strings\"}";
+        }
+        names.push_back(s);
+    }
+    json_decref(root);
+
+    {
+        std::lock_guard<std::mutex> lk(m->engineMutex);
+        if (!m->engine) {
+            *code = 400;
+            return "{\"error\":\"no patch loaded\"}";
+        }
+        for (const auto& n : names) {
+            if (!m->engine->hasSignal(n)) {
+                *code = 400;
+                json_t* e = json_object();
+                json_object_set_new(e, "error", json_string("unknown signal"));
+                json_object_set_new(e, "name", json_string(n.c_str()));
+                return dumpAndFree(e);
+            }
+        }
+    }
+    m->armWatch(names);
+    *code = 200;
+    json_t* o = json_object();
+    json_object_set_new(o, "armed", json_boolean(true));
+    json_t* arr = json_array();
+    for (const auto& n : names) json_array_append_new(arr, json_string(n.c_str()));
+    json_object_set_new(o, "ids", arr);
+    return dumpAndFree(o);
+}
+
+// GET /master/{id}/watch — disarm and return per-signal stats accumulated
+// since arm: min/max/avg/last (engine units), edges (rising 0.1 crossings,
+// 0.05 re-arm, starts disarmed), highMs (time spent >= 0.1, from tick count
+// x tick rate), ticks. ticks == 0 means the engine never ticked while armed
+// (no patch running) — callers must treat that as "no data", not "all low".
+// 409 if no watch is armed.
+std::string Bridge::handleWatchCollect(DroidMasterBase* m, int* code) {
+    if (!m->watchArmed()) {
+        *code = 409;
+        return "{\"error\":\"no watch armed\"}";
+    }
+    float tickRate = 0.f;
+    std::vector<DroidMasterBase::WatchStat> stats = m->collectWatch(&tickRate);
+    *code = 200;
+    json_t* o = json_object();
+    json_object_set_new(o, "tickRateHz", json_real(tickRate));
+    json_t* sigs = json_object();
+    for (const auto& w : stats) {
+        json_t* s = json_object();
+        json_object_set_new(s, "min", json_real(w.min));
+        json_object_set_new(s, "max", json_real(w.max));
+        json_object_set_new(s, "avg", json_real(w.ticks ? (float)(w.sum / w.ticks) : 0.f));
+        json_object_set_new(s, "last", json_real(w.last));
+        json_object_set_new(s, "edges", json_integer(w.edges));
+        json_object_set_new(s, "highMs",
+            json_real(tickRate > 0.f ? 1000.0 * w.highTicks / tickRate : 0.0));
+        json_object_set_new(s, "ticks", json_integer((json_int_t)w.ticks));
+        json_object_set_new(sigs, w.name.c_str(), s);
+    }
+    json_object_set_new(o, "signals", sigs);
+    return dumpAndFree(o);
+}
+
 void Bridge::expireHolds() {
     // Sample-time expiry (see Hold in Bridge.hpp): compare against the
     // engine's frame counter, so a hold lasts exactly holdMs of ENGINE time
@@ -1529,6 +1627,10 @@ std::string Bridge::dispatch(const Request& req) {
             body = handleMasterTickRate(m, req, &code);
         else if (req.method == "GET" && parts[2] == "cpu")
             body = handleMasterCpu(m, &code);
+        else if (req.method == "POST" && parts[2] == "watch")
+            body = handleWatchArm(m, req, &code);
+        else if (req.method == "GET" && parts[2] == "watch")
+            body = handleWatchCollect(m, &code);
     }
     // 4-segment master route gets its own condition (like /modules/<id>/move
     // below) so the 3-segment block above keeps its exact matching behavior.

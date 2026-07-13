@@ -53,6 +53,12 @@ public:
     // name: register ("I1", "P1.2", ...) or cable ("_X")
     bool setValue(const std::string& name, float v);   // marks I<n> patched
     float getValue(const std::string& name) const;
+    // True iff `name` currently resolves to something readable: an internal
+    // cable of the LOADED patch, a valid fader handle, or a parseable
+    // register. getValue returns 0.0 for unknown names by design; callers
+    // that must distinguish "reads 0" from "typo" (the UAT bridge's signal
+    // watch validates names at arm time) check this first.
+    bool hasSignal(const std::string& name) const;
     void setInputPatched(int n, bool p) { state_.regs.setInputPatched(uint8_t(n), p); }
 
     // Controller mutation seam (golden harness + future Rack adapter). `name`
