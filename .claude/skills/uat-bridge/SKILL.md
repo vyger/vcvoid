@@ -75,16 +75,48 @@ listed here 404 with `{"error":"no such route"}`.
 ### Master — patch & status
 | Route | Request | Response 200 | Other codes |
 |---|---|---|---|
-| `GET /master/{id}/status` | — | `{patchPath, statusLine, chain:[...names, "x7" prefixed if present], x7Present:bool, chainError, midiWarning:bool}` (`midiWarning` true when the loaded patch uses MIDI but no MIDI hardware is reachable — same diagnostic as the panel context menu) | 404 unknown master |
+| `GET /master/{id}/status` | — | `{patchPath, statusLine, chain:[...names, "x7" prefixed if present], x7Present:bool, chainError, midiWarning:bool, timingMode:"adaptive"|"fixed", targetHz, effectiveRate, adaptiveHz}` (`midiWarning` true when the loaded patch uses MIDI but no MIDI hardware is reachable — same diagnostic as the panel context menu) | 404 unknown master |
 | `POST /master/{id}/patch` | `{path}` (must be absolute) | same shape as `/status` | 400 invalid JSON / missing path / non-absolute path; 404 unknown master |
 | `POST /master/{id}/reload` | — | same shape as `/status` | 400 `{"error":"no patch loaded"}`; 404 unknown master |
 | `POST /master/{id}/reset-state` | — | same shape as `/status` (fresh-boot: all stateful circuits re-seed from startvalues) | 400 no patch loaded; 404 unknown master |
-| `POST /master/{id}/tick-rate` | `{hz}` | same shape as `/status` | 400 missing/non-numeric hz, or hz not in {2000,4000,6000,8000}; 503 ui-not-attached; 404 unknown master |
+| `POST /master/{id}/tick-rate` | `{hz}` (one of `2000\|4000\|6000\|8000`, implies Fixed) **or** `{mode:"adaptive"}` (implies Adaptive at the master's current `adaptiveHz`) | same shape as `/status` | 400 invalid JSON, or neither a valid `hz` nor `mode:"adaptive"` (if both `mode` and `hz` are present, `mode` wins — `hz` is not even inspected); 503 ui-not-attached; 404 unknown master |
+| `GET /master/{id}/cpu` | — | `{timingMode, targetHz, effectiveRate, adaptiveHz, tick:{valid, avgUs, maxUs, estCpuShare, windowSeconds}, rack:{meterEnabled, cpuShare?}, profiling:{enabled, circuits:[{index, circuit, totalUs, ticks, avgUs}, ...]}}` — see the CPU/profiling notes below | 404 unknown master |
+| `POST /master/{id}/cpu/profiling` | `{enabled}` (bool) | same shape as `/cpu` | 400 missing/invalid `enabled`; 409 `{"error":"no patch loaded"}`; 404 unknown master |
 
 Note: `statusLine` carries both the success message (`"ok, N bytes RAM"`) and
 load errors (`"LOAD ERROR line N: ..."`) — there is no separate `ok`/
 `errorLine`/`errorText`/`ramBytes` field despite the design doc's sketch;
 parse `statusLine` with a regex/`test()`.
+
+### Timing mode, adaptive rate, and CPU/profiling (issue #3)
+
+- `timingMode` is `"adaptive"` (the default for a newly placed master) or
+  `"fixed"`. In Adaptive mode `targetHz` tracks `adaptiveHz`, which the
+  master recomputes from the loaded patch's RAM footprint every load
+  (`cycleUs = 180 + 0.0029 × ramUsed; hz = clamp(1e6/cycleUs, 2000, 5555)`,
+  `plugin/src/AdaptiveRate.hpp`). `effectiveRate` is the actual rate the
+  engine runs at after the sample-rate/`targetHz` divider rounds (never
+  exactly `targetHz` unless it divides the sample rate evenly).
+- `POST /master/{id}/tick-rate {"hz":N}` always implies Fixed at that rate;
+  `{"mode":"adaptive"}` always implies Adaptive — there is no way to set a
+  fixed rate and stay in Adaptive mode, or vice versa, in one call.
+- `GET /master/{id}/cpu`'s `tick.valid` is false for the first ~1 s epoch
+  after a patch (re)load — the previous patch's numbers are cleared, not
+  carried over, so an immediate read after loading reads `avgUs`/`maxUs` as
+  stale/zero until a full epoch completes at the current `effectiveRate`.
+  `tick.estCpuShare` is `avgUs × effectiveRate / 1e6`, an estimate derived
+  from the same atomics, not Rack's own meter.
+- `rack.cpuShare` is present only in clang builds (it uses a private Rack
+  API that GCC poisons at compile time) and only once Rack's own CPU meter
+  is turned on (Engine menu) and has collected at least one sample;
+  otherwise only `rack.meterEnabled` is reported.
+- `profiling.enabled`/`profiling.circuits` reflect per-circuit wall-time
+  profiling (`Engine::setProfiling`), off by default and **reset to off on
+  every patch (re)load** — including a hot-reload and Adaptive's own
+  rate-driven engine rebuild, since each load constructs a fresh `Engine`.
+  Re-enable via `POST /master/{id}/cpu/profiling {"enabled":true}` after any
+  reload. `POST .../cpu/profiling` 409s with `{"error":"no patch loaded"}`
+  if no engine exists yet.
 
 ### Master — state read-back
 | Route | Request | Response 200 | Other codes |

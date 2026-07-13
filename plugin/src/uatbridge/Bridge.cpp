@@ -146,6 +146,15 @@ std::string Bridge::handleMasterStatus(DroidMasterBase* m, int* code) {
         // same lock the menu takes.
         midiWarn = m->engine && m->engine->patchUsesMidi() && !m->engine->midiAvailable();
     }
+    // timingMode/targetHz/effectiveRate/adaptiveHz are UI-thread fields
+    // written without engineMutex elsewhere (menu callback, dataFromJson,
+    // applyTiming's divider computation) -- same torn-read tolerance the
+    // divider already accepts (see onSampleRateChange comment). Read them
+    // outside the lock above.
+    DroidMasterBase::TimingMode timingMode = m->timingMode;
+    float targetHz = m->targetHz;
+    float effectiveRate = m->effectiveRate;
+    float adaptiveHz = m->adaptiveHz;
     json_t* o = json_object();
     json_object_set_new(o, "patchPath", json_string(patchPath.c_str()));
     json_object_set_new(o, "statusLine", json_string(patchStatus.c_str()));
@@ -156,6 +165,12 @@ std::string Bridge::handleMasterStatus(DroidMasterBase* m, int* code) {
     json_object_set_new(o, "x7Present", json_boolean(x7));
     json_object_set_new(o, "chainError", json_string(chainError.c_str()));
     json_object_set_new(o, "midiWarning", json_boolean(midiWarn));
+    json_object_set_new(o, "timingMode",
+        json_string(timingMode == DroidMasterBase::TimingMode::Adaptive
+                        ? "adaptive" : "fixed"));
+    json_object_set_new(o, "targetHz", json_real(targetHz));
+    json_object_set_new(o, "effectiveRate", json_real(effectiveRate));
+    json_object_set_new(o, "adaptiveHz", json_real(adaptiveHz));
     return dumpAndFree(o);
 }
 
@@ -1197,60 +1212,92 @@ std::string Bridge::handleRackSampleRate(const Request& req, int* code) {
     }, code);
 }
 
-// POST /master/{id}/tick-rate {hz} -- same setter as the master's own
-// "Tick rate" context-menu item (MasterBase.hpp createIndexSubmenuItem,
-// ~line 911): `m->targetHz = DroidMasterBase::kTickRates[i];
-// m->applyTiming(APP->engine->getSampleRate());`. targetHz is a plain float
-// written unlocked by that menu callback (UI thread) and by
-// dataToJson/dataFromJson (also UI thread, MasterBase.hpp ~line 760/768) --
-// never under engineMutex -- so this handler matches that precedent exactly
-// rather than inventing new locking. applyTiming() itself takes engineMutex
-// internally (to snapshot patchPath) before calling loadPatchFile(), which is
-// the same "engine-only, HTTP-thread-safe" call already used bare by
-// handleMasterReload/handleMasterResetState -- but since the outer set of
-// targetHz must run on the UI thread (matching the menu item, not merely for
-// engineMutex reasons), the whole sequence goes through uiCall. hz must be
-// exactly one of the four hardware tick rates (2000/4000/6000/8000); anything
-// else is 400 (unlike the menu's index-based picker, an arbitrary HTTP hz
-// value has no "nearest" fallback to silently round to). Returns the updated
-// status JSON, matching the convention already used by reload/reset-state.
+// POST /master/{id}/tick-rate {hz} | {mode:"adaptive"} -- mode-aware
+// counterpart of the master's own "Tick rate" context-menu item
+// (MasterBase.hpp createIndexSubmenuItem, ~line 998-1010), which offers both
+// an "Adaptive" entry (timingMode = Adaptive; targetHz = adaptiveHz) and the
+// four fixed-hz entries (timingMode = Fixed; targetHz = kTickRates[i]),
+// always followed by applyTiming(). This handler mirrors both branches rather
+// than only the fixed one: {"hz":...} implies Fixed at that hz; {"mode":
+// "adaptive"} implies Adaptive at the master's current adaptiveHz. Getting
+// this right matters because loadPatchFile() (MasterBase.hpp) overwrites
+// targetHz from adaptiveHz whenever timingMode == Adaptive -- a handler that
+// only set targetHz without also setting timingMode to Fixed would be a
+// silent no-op on an Adaptive master (the very bug this handler fixes).
+// timingMode/targetHz are plain fields written unlocked by that menu callback
+// (UI thread) and by dataToJson/dataFromJson (also UI thread, MasterBase.hpp
+// ~line 760/768) -- never under engineMutex -- so this handler matches that
+// precedent exactly rather than inventing new locking. applyTiming() itself
+// takes engineMutex internally (to snapshot patchPath) before calling
+// loadPatchFile(), which is the same "engine-only, HTTP-thread-safe" call
+// already used bare by handleMasterReload/handleMasterResetState -- but since
+// the outer set of timingMode/targetHz must run on the UI thread (matching
+// the menu item, not merely for engineMutex reasons), the whole sequence goes
+// through uiCall. hz must be exactly one of the four hardware tick rates
+// (2000/4000/6000/8000); anything else -- and any mode other than the literal
+// string "adaptive" -- is 400 (unlike the menu's index-based picker, an
+// arbitrary HTTP hz value has no "nearest" fallback to silently round to).
+// Returns the updated status JSON, matching the convention already used by
+// reload/reset-state.
 std::string Bridge::handleMasterTickRate(DroidMasterBase* m, const Request& req, int* code) {
     json_t* root = parseJsonBody(req.body, code);
     if (!root) return "{\"error\":\"invalid JSON body\"}";
-    json_t* jHz = json_object_get(root, "hz");
-    if (!jHz || !json_is_number(jHz)) {
-        json_decref(root);
-        *code = 400;
-        return "{\"error\":\"missing/invalid hz\"}";
+    static const char* kBadRequest =
+        "{\"error\":\"hz must be one of 2000, 4000, 6000, 8000, or mode must be \\\"adaptive\\\"\"}";
+    json_t* jMode = json_object_get(root, "mode");
+    bool adaptive = false;
+    double hz = 0.0;
+    if (jMode) {
+        if (!json_is_string(jMode) || std::string(json_string_value(jMode)) != "adaptive") {
+            json_decref(root);
+            *code = 400;
+            return kBadRequest;
+        }
+        adaptive = true;
+    } else {
+        json_t* jHz = json_object_get(root, "hz");
+        if (!jHz || !json_is_number(jHz)) {
+            json_decref(root);
+            *code = 400;
+            return kBadRequest;
+        }
+        hz = json_number_value(jHz);
+        bool valid = false;
+        for (float v : DroidMasterBase::kTickRates) if (hz == (double)v) { valid = true; break; }
+        if (!valid) {
+            json_decref(root);
+            *code = 400;
+            return kBadRequest;
+        }
     }
-    double hz = json_number_value(jHz);
     json_decref(root);
-    bool valid = false;
-    for (float v : DroidMasterBase::kTickRates) if (hz == (double)v) { valid = true; break; }
-    if (!valid) {
-        *code = 400;
-        return "{\"error\":\"hz must be one of 2000, 4000, 6000, 8000\"}";
-    }
 
-    // The targetHz write + applyTiming() call must happen on the UI thread
-    // (matching the menu item), but handleMasterStatus() itself is the
-    // ordinary engineMutex-guarded, HTTP-thread-safe read already used bare
-    // by handleMasterPatch/handleMasterReload/handleMasterResetState above --
-    // so only the mutation goes through uiCall, and the status snapshot is
-    // taken afterward on the HTTP thread, same two-step shape as those three
-    // handlers (loadPatchFile(); return handleMasterStatus(m, code);).
-    // Capture the id, not the raw pointer: uiCall() blocks up to 5s during
-    // which the master can be deleted. Re-resolve inside the closure (and again
-    // before the status read below, which also dereferences the master).
+    // The timingMode/targetHz write + applyTiming() call must happen on the
+    // UI thread (matching the menu item), but handleMasterStatus() itself is
+    // the ordinary engineMutex-guarded, HTTP-thread-safe read already used
+    // bare by handleMasterPatch/handleMasterReload/handleMasterResetState
+    // above -- so only the mutation goes through uiCall, and the status
+    // snapshot is taken afterward on the HTTP thread, same two-step shape as
+    // those three handlers (loadPatchFile(); return
+    // handleMasterStatus(m, code);). Capture the id, not the raw pointer:
+    // uiCall() blocks up to 5s during which the master can be deleted.
+    // Re-resolve inside the closure (and again before the status read below,
+    // which also dereferences the master).
     int64_t id = m->id;
     int uiCode = 200;
-    std::string uiBody = uiCall([this, id, hz](int* c) -> json_t* {
+    std::string uiBody = uiCall([this, id, hz, adaptive](int* c) -> json_t* {
         DroidMasterBase* m = findMaster(id);
         if (!m) {
             *c = 404;
             return jerr("master removed");
         }
-        m->targetHz = (float)hz;
+        if (adaptive) {
+            m->timingMode = DroidMasterBase::TimingMode::Adaptive;
+            m->targetHz = m->adaptiveHz;
+        } else {
+            m->timingMode = DroidMasterBase::TimingMode::Fixed;
+            m->targetHz = (float)hz;
+        }
         m->applyTiming(APP->engine->getSampleRate());
         *c = 200;
         return json_pack("{s:b}", "ok", 1);
@@ -1265,6 +1312,108 @@ std::string Bridge::handleMasterTickRate(DroidMasterBase* m, const Request& req,
         return "{\"error\":\"master removed\"}";
     }
     return handleMasterStatus(m2, code);
+}
+
+// Issue #3: CPU cost query -- timing-mode/rate fields (Task 3), the whole-tick
+// avg/max atomics published per ~1 s epoch by process() (Task 4), Rack's own
+// meter as its UI reports it, and the per-circuit profiler snapshot (Task 2).
+// All reads are the same "engineMutex, HTTP thread, no uiCall" pattern already
+// used by handleMasterRegisters -- no reload/menu-thread state is touched.
+std::string Bridge::handleMasterCpu(DroidMasterBase* m, int* code) {
+    *code = 200;
+    json_t* o = json_object();
+    bool adaptive = m->timingMode == DroidMasterBase::TimingMode::Adaptive;
+    float effRate = m->effectiveRate;
+    json_object_set_new(o, "timingMode", json_string(adaptive ? "adaptive" : "fixed"));
+    json_object_set_new(o, "targetHz", json_real(m->targetHz));
+    json_object_set_new(o, "effectiveRate", json_real(effRate));
+    json_object_set_new(o, "adaptiveHz", json_real(m->adaptiveHz));
+
+    // Whole-tick stats: lock-free atomics published per ~1 s epoch by process().
+    json_t* tick = json_object();
+    bool valid = m->statValid.load();
+    float avg = m->statAvgTickUs.load();
+    json_object_set_new(tick, "valid", json_boolean(valid));
+    json_object_set_new(tick, "avgUs", json_real(avg));
+    json_object_set_new(tick, "maxUs", json_real(m->statMaxTickUs.load()));
+    json_object_set_new(tick, "estCpuShare", json_real(avg * effRate / 1e6));
+    json_object_set_new(tick, "windowSeconds", json_real(1.0));
+    json_object_set_new(o, "tick", tick);
+
+    // Rack's own meter, as its UI shows it (fraction of realtime). Uses the
+    // PRIVATE Module::meterBuffer API -- acceptable in this env-gated dev
+    // bridge; reads of the ring are torn-read tolerable diagnostics. Only
+    // meaningful while settings::cpuMeter is on.
+    json_t* rk = json_object();
+    bool meterOn = rack::settings::cpuMeter;
+    json_object_set_new(rk, "meterEnabled", json_boolean(meterOn));
+#ifdef __clang__
+    // PRIVATE is only a deprecation warning under clang; on GCC it expands to
+    // __attribute__((error(...))) and these calls would hard-fail, so non-clang
+    // builds report only meterEnabled and omit cpuShare.
+    int mlen = m->meterLength();
+    if (meterOn && mlen > 0) {
+        const float* buf = m->meterBuffer();
+        double sum = 0.0;
+        for (int i = 0; i < mlen; i++) sum += buf[i];
+        double sr = APP->engine->getSampleRate();
+        json_object_set_new(rk, "cpuShare", json_real(sum / mlen * sr));
+    }
+#endif
+    json_object_set_new(o, "rack", rk);
+
+    // Per-circuit profile: engine call under engineMutex, the documented
+    // pattern for HTTP-thread engine reads (handleMasterRegisters et al).
+    json_t* prof = json_object();
+    json_t* arr = json_array();
+    bool enabled = false;
+    {
+        std::lock_guard<std::mutex> lk(m->engineMutex);
+        if (m->engine && m->engine->profilingEnabled()) {
+            enabled = true;
+            for (const auto& c : m->engine->profileSnapshot()) {
+                json_t* e = json_object();
+                json_object_set_new(e, "index", json_integer(c.index));
+                json_object_set_new(e, "circuit", json_string(c.name));
+                json_object_set_new(e, "totalUs", json_real(c.totalUs));
+                json_object_set_new(e, "ticks", json_integer((json_int_t)c.ticks));
+                json_object_set_new(e, "avgUs",
+                    json_real(c.ticks ? c.totalUs / (double)c.ticks : 0.0));
+                json_array_append_new(arr, e);
+            }
+        }
+    }
+    json_object_set_new(prof, "enabled", json_boolean(enabled));
+    json_object_set_new(prof, "circuits", arr);
+    json_object_set_new(o, "profiling", prof);
+    return dumpAndFree(o);
+}
+
+// Issue #3: profiling on/off toggle. setProfiling() only flips a flag and
+// clears accumulators (no reload, no uiCall needed) -- safe under the plain
+// engineMutex lock from the HTTP thread, same as handleMasterCpu's read
+// above. The mutex is released before recursing into handleMasterCpu (which
+// re-acquires it itself), so there is no self-deadlock.
+std::string Bridge::handleMasterCpuProfiling(DroidMasterBase* m, const Request& req, int* code) {
+    json_t* root = parseJsonBody(req.body, code);
+    if (!root) return "{\"error\":\"invalid JSON body\"}";
+    json_t* jEn = json_object_get(root, "enabled");
+    if (!jEn || !json_is_boolean(jEn)) {
+        json_decref(root);
+        *code = 400;
+        return "{\"error\":\"missing/invalid enabled\"}";
+    }
+    bool enabled = json_boolean_value(jEn);
+    json_decref(root);
+    {
+        std::lock_guard<std::mutex> lk(m->engineMutex);
+        if (!m->engine) {
+            *code = 409;
+            return "{\"error\":\"no patch loaded\"}";
+        }
+        m->engine->setProfiling(enabled);
+    }
+    return handleMasterCpu(m, code);
 }
 
 void Bridge::expireHolds() {
@@ -1330,6 +1479,17 @@ std::string Bridge::dispatch(const Request& req) {
             body = handleLeds(m, &code);
         else if (req.method == "POST" && parts[2] == "tick-rate")
             body = handleMasterTickRate(m, req, &code);
+        else if (req.method == "GET" && parts[2] == "cpu")
+            body = handleMasterCpu(m, &code);
+    }
+    // 4-segment master route gets its own condition (like /modules/<id>/move
+    // below) so the 3-segment block above keeps its exact matching behavior.
+    else if (req.method == "POST" && parts.size() == 4 && parts[0] == "master" &&
+             parts[2] == "cpu" && parts[3] == "profiling") {
+        int64_t id = std::strtoll(parts[1].c_str(), nullptr, 10);
+        DroidMasterBase* m = findMaster(id);
+        if (!m) { code = 404; body = "{\"error\":\"no such master\"}"; }
+        else body = handleMasterCpuProfiling(m, req, &code);
     }
     else if (req.method == "POST" && req.path == "/rack/save")
         body = handleRackSave(&code);

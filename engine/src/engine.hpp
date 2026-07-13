@@ -171,6 +171,19 @@ public:
         state_.fileProvider = fileProvider_;
     }
 
+    // Opt-in per-circuit tick profiling (issue #3). Purely passive: records
+    // wall time per circuit, never feeds back into results — goldens hold
+    // with it on. Off by default; setProfiling clears the accumulators.
+    void setProfiling(bool on);
+    bool profilingEnabled() const { return profiling_; }
+    struct CircuitProfile {
+        int index;          // patch order
+        const char* name;   // circuit type (def->name; static string)
+        double totalUs;     // accumulated wall time in this circuit's tick()
+        uint64_t ticks;     // ticks profiled since enable / patch load
+    };
+    std::vector<CircuitProfile> profileSnapshot() const;
+
 private:
     Operand makeOperand(const Atom& a) const;
     MasterType master_;
@@ -192,6 +205,9 @@ private:
     float smooth_[8] = {};
     bool haveSmooth_[8] = {};
     std::vector<Input*> pokedClears_;
+    bool profiling_ = false;
+    std::vector<double> profileUs_;   // parallel to circuits_
+    uint64_t profileTicks_ = 0;
 };
 
 } // namespace droid

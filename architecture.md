@@ -93,18 +93,34 @@ Mirrors the hardware master's loop (manual, hardware.md §11.2 — ~180 µs/cycl
 
 - Golden tests declare the tick rate per test — results are independent of
   any host sample rate.
-- In Rack, the tick rate is a **master context-menu setting** with four
-  discrete choices — 2 / 4 / 6 / 8 kHz, default 6 kHz (`kTickRates` in
-  `plugin/src/MasterBase.hpp`) — implemented as an integer divider of Rack's
-  sample rate (`divider = round(sampleRate / targetHz)`; e.g. 48 000 / 8) so
-  timing stays exactly deterministic — no fractional resampling. The engine
-  takes its tick rate only in its constructor, so a tick-rate or sample-rate
-  change rebuilds the engine at the new *effective* rate (`applyTiming`).
-  Lower rates let users match a heavily-loaded hardware master, whose real
+- In Rack, the tick rate is a **master context-menu setting** — `Adaptive`
+  (the **default** for newly placed masters) plus four fixed discrete
+  choices — 2 / 4 / 6 / 8 kHz (`kTickRates` in `plugin/src/MasterBase.hpp`)
+  — implemented as an integer divider of Rack's sample rate
+  (`divider = round(sampleRate / targetHz)`; e.g. 48 000 / 8) so timing stays
+  exactly deterministic — no fractional resampling. The engine takes its
+  tick rate only in its constructor, so a tick-rate or sample-rate change
+  rebuilds the engine at the new *effective* rate (`applyTiming`). Lower
+  fixed rates let users match a heavily-loaded hardware master, whose real
   cycle time stretches (180 → ~500 µs).
-- *Deferred (opt-in, later):* "authentic timing" mode that derives cycle time
-  from patch size/circuit count to simulate load-dependent slowdown
-  automatically.
+- **Adaptive** mode derives that stretch automatically from the loaded
+  patch's RAM footprint instead of a manually-picked fixed rate:
+  `cycleUs = 180 + 0.0029 × ramUsed; hz = clamp(1e6 / cycleUs, 2000, 5555)`.
+  The constants live **only** in `plugin/src/AdaptiveRate.hpp` — a Rack-free
+  header the headless unit suite compiles directly
+  (`tests/unit/test_adaptiverate.cpp`) — and are expected to be recalibrated
+  from sampled hardware measurements over time; nothing outside that file
+  should hardcode the curve. It's applied at patch-load time through the
+  same `applyTiming()` path used by the fixed rates: `loadPatchFile()`
+  recomputes `adaptiveHz` from the just-loaded patch's RAM usage and, in
+  Adaptive mode, retargets `targetHz` to it before the divider/effective-rate
+  math runs. The engine itself still only ever takes one explicit rate at
+  construction — Adaptive is a Rack-side policy for picking that rate, not a
+  new engine capability, so determinism and the golden-test contract are
+  unaffected. Saves written before this feature existed carry no
+  `timingMode` key and load as **Fixed** at their saved `targetHz`, so
+  existing racks keep their old timing byte-for-byte rather than silently
+  switching to Adaptive.
 
 ### Input math and circuit authoring surface
 

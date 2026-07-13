@@ -4,6 +4,7 @@
 #include "ChainModule.hpp"  // droid::chain protocol + ChainModule::isChain{Left,Right}Neighbor
 #include "Layout.hpp"
 #include "uatbridge/Bridge.hpp"   // forward-declares Rack types only; safe here
+#include "AdaptiveRate.hpp"
 #include <osdialog.h>
 #include <sys/stat.h>
 #include <fstream>
@@ -13,6 +14,7 @@
 #include <cmath>
 #include <cstring>
 #include <algorithm>
+#include <chrono>
 
 // Copy a symbolic display string into a fixed NUL-terminated field, truncating
 // to fit (the buffer's last byte always stays NUL). Used for the DB8E screen's
@@ -45,6 +47,13 @@ struct DroidMasterBase : Module {
     // thread paths that also hold it.
     droid::StateSnapshot lastSnapshot;
     float targetHz = 6000.f;
+    // Timing mode (issue #3). Adaptive (default for new masters) derives
+    // targetHz from the loaded patch's RAM footprint (AdaptiveRate.hpp) on
+    // every load; Fixed behaves as before. Old saves carry no timingMode key
+    // and load as Fixed at their saved targetHz (see dataFromJson).
+    enum class TimingMode { Adaptive, Fixed };
+    TimingMode timingMode = TimingMode::Adaptive;
+    float adaptiveHz = vcvoid::kMaxAdaptiveHz;   // last computed; UI thread
     int divider = 8;
     float effectiveRate = 6000.f;   // sampleRate / divider; the rate the engine runs at
     int frameCounter = 0;
@@ -157,6 +166,16 @@ struct DroidMasterBase : Module {
         probeBuf_.shrink_to_fit();
         return out;
     }
+
+    // --- tick-cost stats (issue #3 CPU query) ---
+    // Audio-thread accumulation over ~1 s epochs, published as atomics the
+    // bridge HTTP thread reads lock-free. Epoch counters are audio-thread
+    // only; statValid is dropped on patch load so a fresh engine never shows
+    // the previous patch's numbers.
+    double epochSumUs_ = 0.0, epochMaxUs_ = 0.0;
+    int epochTicks_ = 0;
+    std::atomic<float> statAvgTickUs{0.f}, statMaxTickUs{0.f};
+    std::atomic<bool> statValid{false};
 
     // UAT bridge (M10): this master's own native MIDI ports (MASTER18's
     // usb/trs1/trs2 in+out). Base (MASTER16) has none. Not engineMutex-guarded
@@ -278,6 +297,28 @@ public:
         auto fresh = std::make_unique<droid::Engine>(
             masterType_, effectiveRate);
         droid::LoadResult r = fresh->load(text);
+        if (r.ok) {
+            adaptiveHz = vcvoid::adaptiveTickHz(r.ramUsed);
+            if (timingMode == TimingMode::Adaptive) {
+                targetHz = adaptiveHz;
+                updateDivider(APP->engine->getSampleRate());
+                // The engine derives all timing from its constructor rate, so
+                // if the adaptive rate moved the divider, rebuild at the true
+                // effective rate (load cost only; patch loads are rare).
+                // This makes loadPatchFile another writer of divider/effectiveRate,
+                // from whatever thread loads the patch — including the UAT
+                // bridge's HTTP-thread POST /master/patch path — covered by the
+                // same plan-acknowledged torn-read tolerance as onSampleRateChange.
+                // Invariant: this reload is of the IDENTICAL text, and load
+                // success is tick-rate-independent by construction, so r stays
+                // ok here. The failure branch below is belt-and-braces should
+                // that invariant ever break.
+                if (effectiveRate != fresh->tickRateHz()) {
+                    fresh = std::make_unique<droid::Engine>(masterType_, effectiveRate);
+                    r = fresh->load(text);
+                }
+            }
+        }
         std::lock_guard<std::mutex> lock(engineMutex);
         lastResult = r;
         patchPath = path;
@@ -292,6 +333,7 @@ public:
             if (!lastSnapshot.empty())
                 fresh->restoreState(lastSnapshot);
             engine = std::move(fresh);
+            statValid.store(false);   // stale epoch: previous patch's cost
             // A reload builds a FRESH Engine whose state_.midi.x7 defaults false;
             // the engine's own keepX7 preserve only covers an in-place load() on
             // the same engine, so it can't carry presence across this swap. X7
@@ -573,7 +615,19 @@ public:
                 engine->setRegister({'I', 0, uint8_t(i + 1)},
                                     inputRegisterValue(i));
         }
+        auto tickT0 = std::chrono::steady_clock::now();
         engine->tick();
+        double tickUs = std::chrono::duration<double, std::micro>(
+            std::chrono::steady_clock::now() - tickT0).count();
+        epochSumUs_ += tickUs;
+        if (tickUs > epochMaxUs_) epochMaxUs_ = tickUs;
+        if (++epochTicks_ >= std::max(1, (int)effectiveRate)) {
+            statAvgTickUs.store((float)(epochSumUs_ / epochTicks_));
+            statMaxTickUs.store((float)epochMaxUs_);
+            statValid.store(true);
+            epochSumUs_ = epochMaxUs_ = 0.0;
+            epochTicks_ = 0;
+        }
 
         // ---- chain downstream: LED states to the expander chain -----------
         // Only written on tick frames — that is the sampling contract. One block
@@ -784,6 +838,8 @@ public:
         }
         json_object_set_new(root, "patchPath", json_string(path.c_str()));
         json_object_set_new(root, "targetHz", json_real(targetHz));
+        json_object_set_new(root, "timingMode",
+            json_string(timingMode == TimingMode::Adaptive ? "adaptive" : "fixed"));
         json_object_set_new(root, "circuitState", snapshotToJson(lastSnapshot));
         return root;
     }
@@ -793,6 +849,14 @@ public:
         if (json_t* j = json_object_get(root, "targetHz"))
             targetHz = std::fmax(1.f, (float)json_number_value(j));
         updateDivider(APP->engine->getSampleRate());
+        // Saves written before timingMode existed carry only targetHz: honor
+        // them as Fixed rather than silently switching to Adaptive, so old
+        // racks keep byte-for-byte their old timing.
+        timingMode = TimingMode::Fixed;
+        if (json_t* j = json_object_get(root, "timingMode"))
+            if (const char* s = json_string_value(j))
+                if (std::strcmp(s, "adaptive") == 0)
+                    timingMode = TimingMode::Adaptive;
         // Load the saved circuit state BEFORE the patch load below, so that
         // loadPatchFile (with no live engine yet) restores it into the fresh
         // engine — the Rack-reopen mirror of the hot-reload transfer.
@@ -935,10 +999,20 @@ struct DroidMasterBaseWidget : ModuleWidget {
             if (!patchPath.empty()) m->loadPatchFile(patchPath);
         }, patchPath.empty()));
         menu->addChild(createIndexSubmenuItem("Tick rate",
-            {"2 kHz", "4 kHz", "6 kHz (hardware-typical)", "8 kHz"},
-            [m]() { return m->tickRateIndex(); },
+            {string::f("Adaptive (currently %.1f kHz)", m->adaptiveHz / 1000.f),
+             "2 kHz", "4 kHz", "6 kHz (hardware-typical)", "8 kHz"},
+            [m]() {
+                return m->timingMode == DroidMasterBase::TimingMode::Adaptive
+                    ? (size_t)0 : m->tickRateIndex() + 1;
+            },
             [m](size_t i) {
-                m->targetHz = DroidMasterBase::kTickRates[i];
+                if (i == 0) {
+                    m->timingMode = DroidMasterBase::TimingMode::Adaptive;
+                    m->targetHz = m->adaptiveHz;
+                } else {
+                    m->timingMode = DroidMasterBase::TimingMode::Fixed;
+                    m->targetHz = DroidMasterBase::kTickRates[i - 1];
+                }
                 m->applyTiming(APP->engine->getSampleRate());
             }));
     }

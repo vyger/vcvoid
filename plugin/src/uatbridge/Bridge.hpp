@@ -72,6 +72,10 @@ private:
     std::string handleRackSampleRate(const Request& req, int* code);
     std::string handleMasterTickRate(DroidMasterBase* m, const Request& req, int* code);
 
+    // Issue #3: CPU cost query + per-circuit profiling toggle.
+    std::string handleMasterCpu(DroidMasterBase* m, int* code);
+    std::string handleMasterCpuProfiling(DroidMasterBase* m, const Request& req, int* code);
+
     // Generic rack ops (Task 8): module/cable list/add/delete/move. All six
     // route through the uiCall() helper in Bridge.cpp (RackWidget/ModuleWidget/
     // CableWidget are UI-thread widgets, not Share-locked like Engine).

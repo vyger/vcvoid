@@ -1,4 +1,6 @@
 #include "engine.hpp"
+#include <algorithm>
+#include <chrono>
 #include <cmath>
 #include <cstring>
 
@@ -109,6 +111,8 @@ LoadResult Engine::load(const std::string& patchText) {
     }
     ramUsed_ = cp.ramUsed;
     loaded_ = true;
+    profileUs_.assign(circuits_.size(), 0.0);
+    profileTicks_ = 0;
     return res;
 }
 
@@ -123,8 +127,18 @@ void Engine::tick() {
         while (state_.midi.in[p].pop(e) && state_.midi.tickCount[p] < kMidiQueueCap)
             state_.midi.tickEv[p][state_.midi.tickCount[p]++] = e;
     }
-    for (auto& c : circuits_)
-        c->tick(state_);
+    if (!profiling_) {
+        for (auto& c : circuits_) c->tick(state_);
+    } else {
+        using pclock = std::chrono::steady_clock;
+        for (size_t i = 0; i < circuits_.size(); i++) {
+            auto t0 = pclock::now();
+            circuits_[i]->tick(state_);
+            profileUs_[i] +=
+                std::chrono::duration<double, std::micro>(pclock::now() - t0).count();
+        }
+        profileTicks_++;
+    }
     state_.controllers.endTick();   // drain per-tick encoder movement
 
     // --- [droid] output conditioning (engine/circuits/droid.cpp) -----------
@@ -271,6 +285,20 @@ float Engine::getValue(const std::string& name) const {
     auto r = parseRegisterName(name);
     if (!r) return 0.0f;
     return state_.regs.get(canonicalize(*r, master_));
+}
+
+void Engine::setProfiling(bool on) {
+    profiling_ = on;
+    std::fill(profileUs_.begin(), profileUs_.end(), 0.0);
+    profileTicks_ = 0;
+}
+
+std::vector<Engine::CircuitProfile> Engine::profileSnapshot() const {
+    std::vector<CircuitProfile> out;
+    out.reserve(circuits_.size());
+    for (size_t i = 0; i < circuits_.size(); i++)
+        out.push_back({(int)i, circuits_[i]->def->name, profileUs_[i], profileTicks_});
+    return out;
 }
 
 } // namespace droid
