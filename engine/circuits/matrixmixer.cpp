@@ -30,12 +30,18 @@
 #include "../src/gatereader.hpp"
 #include <cmath>
 #include <cstdint>
-#include <cstdio>
 
 namespace droid {
 
 class MatrixMixer : public Circuit {
     static constexpr int N = 4;
+
+    // Stable per-row jack names (N is a compile-time constant, so these are
+    // fixed literal tables, not per-instance state) — see fadermatrix.cpp /
+    // circuit.hpp for why a name freshly snprintf'd into a stack buffer every
+    // call defeats the memo's pointer-identity fast path.
+    static constexpr const char* kLedName[N] = {"led1", "led2", "led3", "led4"};
+    static constexpr const char* kButtonName[N] = {"button1", "button2", "button3", "button4"};
 
 public:
     void tick(EngineState& s) override {
@@ -109,11 +115,9 @@ public:
 
         // --- LEDs (only while selected) -------------------------------------
         if (selected)
-            for (int i = 0; i < N; i++) {
-                char ln[12]; std::snprintf(ln, sizeof ln, "led%d", i + 1);
+            for (int i = 0; i < N; i++)
                 for (int j = 0; j < N; j++)
-                    out(ln, j + 1).set(s, node_[i][j] ? 1.0f : 0.0f);
-            }
+                    out(kLedName[i], j + 1).set(s, node_[i][j] ? 1.0f : 0.0f);
     }
 
     // Persisted: the 4x4 matrix + all 16 presets (each a 16-bit mask) + slot.
@@ -155,8 +159,7 @@ private:
     }
 
     float button(EngineState& s, int i, int j) {
-        char bn[12]; std::snprintf(bn, sizeof bn, "button%d", i + 1);
-        return in(bn, j + 1).value(s);
+        return in(kButtonName[i], j + 1).value(s);
     }
 
     int startValue(EngineState& s) {

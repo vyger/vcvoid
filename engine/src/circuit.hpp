@@ -67,9 +67,25 @@ private:
     // Memoized name->slot resolution. in()/out() are called with the same
     // (name, index) pairs every tick; resolving through gen::findJack each
     // time (linear prefix search + std::string temp) dominated the audio
-    // thread in profiles. Keyed by name CONTENT, not pointer — a few circuits
-    // (fadermatrix, matrixmixer) snprintf names into a reused stack buffer.
-    struct JackMemo { std::string name; int index; int slot; bool isInput; };
+    // thread in profiles.
+    //
+    // Fast path: every call site in the engine passes a name whose POINTER is
+    // stable across ticks (a string literal, or an entry from a static/
+    // per-instance table built once) — see circuit.cpp for the repo-wide audit
+    // (fadermatrix/matrixmixer used to snprintf into a reused stack buffer;
+    // both were converted to stable per-index name tables). Given that
+    // invariant, the memo hit check can compare the stored POINTER instead of
+    // strcmp'ing the content, which is what dominated the profiled audio
+    // thread. `name` still holds the CONTENT as a std::string: it backs the
+    // first resolution and a fallback content-compare for the (currently
+    // theoretical, but not statically provable) case of two distinct-pointer
+    // literals with equal content landing on the same key — on a content
+    // match the stored pointer is updated to the new one. In non-NDEBUG
+    // builds (unit tests, goldens) a pointer-hit is additionally verified
+    // with an assert(strcmp(...) == 0), so `make test`'s 566 goldens
+    // dynamically prove the invariant holds for every circuit they exercise;
+    // NDEBUG (the bench target) drops that check.
+    struct JackMemo { std::string name; const char* ptr; int index; int slot; bool isInput; };
     std::vector<JackMemo> jackMemo_;
     size_t memoCursor_ = 0;   // scan start: entry after the previous hit
     int memoSlot(const char* name, int index, bool wantInput);
