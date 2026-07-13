@@ -287,6 +287,14 @@ float Engine::getValue(const std::string& name) const {
     return state_.regs.get(canonicalize(*r, master_));
 }
 
+bool Engine::hasSignal(const std::string& name) const {
+    if (!name.empty() && name[0] == '_')
+        return cableIndex_.count(name) != 0;
+    if (auto fn = parseFaderName(name))
+        return state_.controllers.validateFader(*fn);
+    return parseRegisterName(name).has_value();
+}
+
 void Engine::setProfiling(bool on) {
     profiling_ = on;
     std::fill(profileUs_.begin(), profileUs_.end(), 0.0);

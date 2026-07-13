@@ -34,7 +34,6 @@
 #include "../src/uihelpers.hpp"
 #include "../src/fadercore.hpp"
 #include <cmath>
-#include <cstdio>
 
 namespace droid {
 
@@ -43,6 +42,16 @@ namespace fc = fadercore;
 class FaderMatrix : public Circuit {
     static constexpr int kMax = 4;
     static constexpr int kPresets = 6;
+
+    // Stable per-index jack names (kMax is a compile-time constant, so these
+    // are fixed literal tables, not per-instance state). The memo's fast path
+    // keys on POINTER identity, so a name built fresh into a stack buffer
+    // every call (the old std::snprintf(nm, ...) here) would defeat it —
+    // these tables give every call site for a given r/c the SAME pointer on
+    // every tick.
+    static constexpr const char* kOutputName[kMax] = {"output1", "output2", "output3", "output4"};
+    static constexpr const char* kButtonName[kMax] = {"button1", "button2", "button3", "button4"};
+    static constexpr const char* kLedValueName[kMax] = {"ledvalue1", "ledvalue2", "ledvalue3", "ledvalue4"};
 
 public:
     void tick(EngineState& s) override {
@@ -82,11 +91,8 @@ public:
                 }
                 wasFader_[r][c] = onFader ? faderI : -1;
 
-                char nm[12];
-                std::snprintf(nm, sizeof nm, "output%d", r + 1);
-                out(nm, c + 1).set(s, fc::outputOf(value_[r][c], notches));
-                std::snprintf(nm, sizeof nm, "button%d", r + 1);
-                out(nm, c + 1).set(s, button ? 1.0f : 0.0f);
+                out(kOutputName[r], c + 1).set(s, fc::outputOf(value_[r][c], notches));
+                out(kButtonName[r], c + 1).set(s, button ? 1.0f : 0.0f);
             }
     }
 
@@ -136,12 +142,9 @@ private:
     int matrixDim() {
         int n = 0;
         for (int r = 1; r <= kMax; r++) {
-            char nm[12];
             for (int c = 1; c <= kMax; c++) {
-                std::snprintf(nm, sizeof nm, "output%d", r);
-                bool used = out(nm, c).connected();
-                std::snprintf(nm, sizeof nm, "button%d", r);
-                used = used || out(nm, c).connected();
+                bool used = out(kOutputName[r - 1], c).connected();
+                used = used || out(kButtonName[r - 1], c).connected();
                 if (used) { if (r > n) n = r; if (c > n) n = c; }
             }
         }
@@ -166,8 +169,7 @@ private:
     }
 
     float ledBrightness(EngineState& s, int r, int c, int notches) {
-        char nm[12];
-        std::snprintf(nm, sizeof nm, "ledvalue%d", r + 1);
+        const char* nm = kLedValueName[r];
         if (in(nm, c + 1).connected()) return in(nm, c + 1).value(s);
         return fc::outputOf(value_[r][c], notches);
     }

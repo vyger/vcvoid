@@ -59,7 +59,14 @@ struct Operand {
     float constant = 0.0f;
     RegId reg;
     uint16_t cableIndex = 0;
-    float value(const EngineState& s) const;
+    float value(const EngineState& s) const {
+        switch (kind) {
+            case Kind::Const:    return constant;
+            case Kind::Register: return s.regs.get(reg);
+            case Kind::Cable:    return s.cables[cableIndex];
+        }
+        return 0.0f;
+    }
 };
 
 class Input {
@@ -86,7 +93,11 @@ private:
 class Output {
 public:
     bool connected() const { return present_; }
-    void set(EngineState& s, float v) const;
+    void set(EngineState& s, float v) const {
+        if (!present_) return;
+        if (target_.kind == Operand::Kind::Register) s.regs.set(target_.reg, v);
+        else if (target_.kind == Operand::Kind::Cable) s.cables[target_.cableIndex] = v;
+    }
     void bind(Operand target) { target_ = target; present_ = true; }
 private:
     Operand target_;

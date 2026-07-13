@@ -21,13 +21,20 @@ endif
 
 all: test
 
+# -DVCVOID_VERIFY_MEMO=1 is test-build-only: it turns on the dynamic
+# pointer=>content invariant check in Circuit::memoSlot (engine/src/circuit.cpp).
+# Golden runs + unit tests are the dynamic proof that the stable-pointer
+# invariant actually holds across every circuit; the shipped Rack plugin
+# builds with the Rack SDK's own flags (-O3, no -DNDEBUG — see compile.mk),
+# so it must NOT carry this check onto the audio thread, where a mismatch
+# would abort() a running Rack session instead of failing a test.
 $(BUILD)/unittests: $(ENGINE_SRC) $(UNIT_SRC) $(wildcard engine/src/*.hpp) $(wildcard engine/gen/*.hpp) $(wildcard tests/unit/*.hpp)
 	@mkdir -p $(BUILD)
-	$(CXX) $(CXXFLAGS) $(ENGINE_SRC) $(UNIT_SRC) -o $@
+	$(CXX) $(CXXFLAGS) -DVCVOID_VERIFY_MEMO=1 $(ENGINE_SRC) $(UNIT_SRC) -o $@
 
 $(BUILD)/droidtest: $(ENGINE_SRC) $(RUNNER_SRC) $(wildcard engine/src/*.hpp) $(wildcard engine/gen/*.hpp)
 	@mkdir -p $(BUILD)
-	$(CXX) $(CXXFLAGS) $(ENGINE_SRC) $(RUNNER_SRC) -o $@
+	$(CXX) $(CXXFLAGS) -DVCVOID_VERIFY_MEMO=1 $(ENGINE_SRC) $(RUNNER_SRC) -o $@
 
 unittests: $(BUILD)/unittests
 	$(BUILD)/unittests
@@ -80,3 +87,20 @@ $(BUILD)/eqcheck: $(ENGINE_SRC) tests/tools/eqcheck.cpp $(wildcard engine/src/*.
 eqcheck: $(BUILD)/eqcheck
 
 .PHONY: eqcheck
+
+# bench: headless per-circuit CPU profiler (issue #5). -O2 overrides the
+# global -O1 for this target only — perf measurement wants an optimized
+# build; the rest of the tree stays at -O1 for fast edit/test cycles. -DNDEBUG
+# is bench-only (drops any plain assert()s elsewhere in the tree) and, unlike
+# unittests/droidtest above, this rule deliberately does NOT define
+# VCVOID_VERIFY_MEMO: the bench should measure the same fast path the shipped
+# Rack plugin runs (no pointer-invariant check on the hit path in
+# Circuit::memoSlot, circuit.cpp), while unittests/droidtest keep the check
+# active to prove the invariant on every golden.
+$(BUILD)/bench: $(ENGINE_SRC) tools/bench/bench.cpp $(wildcard engine/src/*.hpp) $(wildcard engine/gen/*.hpp)
+	@mkdir -p $(BUILD)
+	$(CXX) $(CXXFLAGS) -O2 -DNDEBUG $(ENGINE_SRC) tools/bench/bench.cpp -o $@
+
+bench: $(BUILD)/bench
+
+.PHONY: bench
