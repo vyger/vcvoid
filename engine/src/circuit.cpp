@@ -1,6 +1,5 @@
 #include "circuit.hpp"
 #include "gatereader.hpp"   // kGateHighThreshold
-#include <cassert>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -110,13 +109,24 @@ int Circuit::memoSlot(const char* name, int index, bool wantInput) {
             JackMemo& e = jackTable_[pos];
             if (!e.ptr) break;   // insert-only table: empty slot ends the probe
             if (e.ptr == name && e.index == index && e.isInput == wantInput) {
+#if VCVOID_VERIFY_MEMO
                 // Pointer-identity hit. Dynamically verify the repo-wide
-                // invariant (same pointer => same content) in non-NDEBUG
-                // builds; unit tests + all 566 goldens run with asserts
-                // active, so this proves the invariant across every circuit
-                // they exercise. The bench target defines NDEBUG and skips
-                // the check.
-                assert(std::strcmp(e.name.c_str(), name) == 0);
+                // invariant (same pointer => same content). Compiled only
+                // when VCVOID_VERIFY_MEMO is defined (unittests/droidtest —
+                // see root Makefile): the Rack SDK builds this plugin with
+                // -O3 and no -DNDEBUG, so a plain assert() here would still
+                // run (and could abort the audio thread) in the shipped
+                // plugin. Gating on an explicit macro instead of NDEBUG
+                // keeps the check out of every build except the ones that
+                // exist to prove the invariant.
+                if (std::strcmp(e.name.c_str(), name) != 0) {
+                    std::fprintf(stderr,
+                        "VCVOID_VERIFY_MEMO: memo pointer/content mismatch in circuit '%s': "
+                        "pointer matched but name changed from '%s' to '%s'\n",
+                        def ? def->name : "?", e.name.c_str(), name);
+                    std::abort();
+                }
+#endif
                 return e.slot;
             }
             if (e.index == index && e.isInput == wantInput &&
@@ -125,7 +135,15 @@ int Circuit::memoSlot(const char* name, int index, bool wantInput) {
                 // literal/table entry with equal content landed on this
                 // key. Resolve via the content path (already done — we just
                 // compared it) and adopt the new pointer so subsequent ticks
-                // from this call site take the fast path.
+                // from this call site take the fast path. This strcmp is
+                // functional (probe resolution), not a debug-only check, so
+                // it stays compiled in all builds. If this branch is never
+                // taken, the loop below simply keeps probing and — per the
+                // repo-wide stable-pointer invariant — may insert a second,
+                // functionally-equivalent entry for the same logical jack at
+                // a later slot; that's benign (a few wasted table slots), not
+                // a correctness bug, so this adopt path is an optimization,
+                // not a requirement.
                 e.ptr = name;
                 return e.slot;
             }
