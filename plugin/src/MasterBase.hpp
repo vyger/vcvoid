@@ -437,10 +437,16 @@ public:
             }
         }
 
-        if (++frameCounter < divider) return;
-        frameCounter = 0;
+        // Saturating increment: while a tick is overdue (contended below) the
+        // counter parks at `divider` instead of growing without bound, so a
+        // pathological contention streak can't overflow it.
+        frameCounter = std::min(frameCounter + 1, divider);
+        if (frameCounter < divider) return;
         std::unique_lock<std::mutex> lock(engineMutex, std::try_to_lock);
-        if (!lock.owns_lock()) return;   // contended: retry next tick frame
+        if (!lock.owns_lock()) return;   // overdue: retry the try-lock next frame
+        // Reset only once the lock is held: a contended frame delays the tick
+        // by ≤1 audio frame instead of dropping a whole divider cycle (#7).
+        frameCounter = 0;
 
         using namespace droid::chain;
         // ---- chain upstream: controls from the expander chain -------------
