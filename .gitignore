@@ -15,4 +15,5 @@ plugin/engine/
 .claude/scheduled_tasks.lock
 docs/todo-uat.md
 docs/superpowers/
+docs/uat/results/
 manual/images/
