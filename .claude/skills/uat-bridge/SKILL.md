@@ -152,11 +152,25 @@ parse `statusLine` with a regex/`test()`.
 | `POST /master/{id}/midi-port` | `{port, direction:"in"|"out", deviceName}` (substring match, first hit by driverId then deviceId order) | `{ok:true, driverId, deviceId, name}` | 400 invalid body / bad direction; 404 `{"error":"no such midi port on this master","port":...}` or `{"error":"no device name matched","candidates":[...]}`; 503 ui-not-attached; 404 unknown master |
 | `GET /master/{id}/faders` | — | `[{global, motorTarget, notches, led, ledColor}, ...]` in chain order; `[]` with no patch or no M4 | 404 unknown master |
 | `GET /master/{id}/leds` | — | `{matrix:[16 x {r,g,b}]}` present **only** on masters with an LED matrix (MASTER16; omitted entirely on MASTER18 — check for key presence, not an empty array), plus `buttons:{"L<ctrl>.<n>": 0..1}` always present | 404 unknown master |
+| `POST /master/{id}/watch` | `{ids:["_CABLE","B2.1","F1",...]}` (max 16) — arm a signal watch; each id is sampled once per ENGINE TICK in the master's `process()` from the next tick on, so 1-tick trigger pulses are caught by construction (register polling can't). Names ARE existence-checked here (cables against the loaded patch — the one place a typo'd `_CABLE` 400s instead of reading 0). Re-arming replaces the previous watch. | `{armed:true, ids:[...]}` | 400 invalid body / empty or oversized ids / `{"error":"unknown signal","name":...}` / no patch loaded; 404 unknown master |
+| `GET /master/{id}/watch` | — (disarms + collects) | `{tickRateHz, signals:{"<id>":{min,max,avg,last,edges,highMs,ticks}}}` — engine units (−1…+1); `edges` = rising 0.1 crossings with 0.05 re-arm, starting DISARMED (a window opening mid-pulse doesn't count the in-progress pulse); `highMs` = time spent ≥ 0.1; `ticks == 0` means the engine never ticked while armed (no data, not "all low") | 409 no watch armed; 404 unknown master |
 
 Register-id kinds: plain registers (`O1`, `L1.1`, `R3`, ...) go through the
 same `parseRegisterName` the engine uses and 400 if unrecognized. Cable
-(`_NAME`) and fader (`F<n>`) handles have **no existence check** — an
-unresolvable one silently reads back `0.0` rather than 400ing (see Caveats).
+(`_NAME`) and fader (`F<n>`) handles have **no existence check** on
+`/registers` — an unresolvable one silently reads back `0.0` rather than
+400ing (see Caveats). `POST /master/{id}/watch` DOES validate them, so
+arming a watch is also the cheap way to confirm a cable name exists.
+
+**Gesture-fired check (closed-loop driving):** to verify a longpress/chord
+actually registered engine-side, arm a watch on the internal cable the
+gesture must pulse (e.g. the fixture's `_SAVEP`, MFPS's `_T1_P1_SAVE`)
+*plus* the button's `B` register as evidence, drive the gesture, collect:
+`edges >= 1` on the cable = it fired; the `B` register's `highMs` is the
+engine-perceived press duration. If it didn't fire, retry the gesture
+(read-before-act, same as toggle taps) — an 1800 ms hold sits only ~300 ms
+above the 1.5 s longpress threshold and transient stalls can eat that.
+`tools/uat_run.py` wraps this as `gesture_fired()`.
 
 **Units — two different scales, don't mix them up.** `/master/{id}/registers`
 returns values in DROID's normalized **−1…+1** engine domain (the project's
@@ -181,7 +195,7 @@ square feeds) read back as **0/1**, not 0/10 — only the Rack-port voltage
 | `GET /cables` | — | `[{id, outputModuleId, outputId, inputModuleId, inputId}]` | 503 ui-not-attached |
 | `POST /cables` | `{outputModuleId, outputId, inputModuleId, inputId}` | `{id}` | 400 invalid body / portId out of range; 404 no such module; 503 ui-not-attached |
 | `DELETE /cables/{id}` | — | `{ok:true}` | 404 no such cable; 503 ui-not-attached |
-| `POST /params` | `{moduleId, paramId, value, holdMs}` — `holdMs` omitted/0 = plain set; `>0` = set now, auto-reset to `0` after `holdMs` ms | `{ok:true, holdMs?}` (holdMs echoed only if >0) | 400 missing/non-numeric moduleId/paramId, negative paramId, or paramId out of range for the module; 404 no such module; 503 ui-not-attached |
+| `POST /params` | `{moduleId, paramId, value, holdMs}` — `holdMs` omitted/0 = plain set; `>0` = set now, auto-reset to `0` after `holdMs` ms **of ENGINE SAMPLE TIME** (frame-deadline, anchored when the set lands on the UI thread). Equals wall time when a real audio device drives the engine; with no Audio module, Rack's CPU-clocked fallback engine thread can run up to ~26% slower than wall (observed), so the release can take proportionally longer in wall terms — but the gesture's duration as the DROID engine measures it (longpress thresholds!) is always exactly `holdMs`. | `{ok:true, holdMs?}` (holdMs echoed only if >0) | 400 missing/non-numeric moduleId/paramId, negative paramId, or paramId out of range for the module; 404 no such module; 503 ui-not-attached |
 | `GET /probe?moduleId=&portId=&kind=out\|in&ms=500` | query only | `{min, max, avg, edges, periodStddevMs, sampleRateHz}` | 400 missing/invalid moduleId, portId, kind, or ms; 400 portId out of range; 404 no such module (or module removed mid-probe) |
 
 `503 {"error":"ui bridge not attached; add any vcvoid module or launch from
