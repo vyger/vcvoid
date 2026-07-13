@@ -20,11 +20,16 @@ itself permission to launch Rack.
 
 ```sh
 cd plugin && make install                 # rebuilds & installs; bakes VCVOID_GIT_HASH
-cp tests/smoketest_default.vcv /tmp/uat-session.vcv   # scratch copy: /rack/save
-                                          # writes to the loaded patch's path
+SESSION=$(mktemp -t uat-session-XXXXXX).vcv   # UNIQUE per run — /rack/save writes
+cp tests/smoketest_default.vcv "$SESSION"     # back to this path, so a fixed name
+                                              # gets dirtied by one run and silently
+                                              # reused by the next (seen 2026-07-12)
 VCVOID_UAT_BRIDGE=1 "/Applications/VCV Rack 2 Free.app/Contents/MacOS/Rack" \
-  /tmp/uat-session.vcv &
+  "$SESSION" &
 ```
+
+Within one run, relaunches (persistence checks) reuse the same `$SESSION`
+path deliberately; a NEW run always mints a new name.
 
 Rack takes the patch as a positional argument; the repo template
 `tests/smoketest_default.vcv` is the canonical deterministic starting rack
