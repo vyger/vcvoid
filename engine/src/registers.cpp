@@ -65,13 +65,14 @@ RegId canonicalize(RegId r, MasterType master) {
 }
 
 float RegisterFile::get(const RegId& r) const {
+    RegId eff = r;
     if (r.type == 'I' && r.ctrl == 0 && r.num >= 1 && r.num <= 8 && !inputPatched(r.num)) {
-        RegId n{'N', 0, r.num};
-        auto it = values_.find(pack(n));
-        return it == values_.end() ? 0.0f : it->second;
+        eff = RegId{'N', 0, r.num};
     }
-    auto it = values_.find(pack(r));
-    return it == values_.end() ? 0.0f : it->second;
+    int slot = denseRegSlot(eff);
+    if (slot >= 0) return dense_[size_t(slot)];
+    auto it = overflow_.find(pack(eff));
+    return it == overflow_.end() ? 0.0f : it->second;
 }
 
 void RegisterFile::set(const RegId& r, float v) {
@@ -79,7 +80,12 @@ void RegisterFile::set(const RegId& r, float v) {
         if (v > 1.0f) v = 1.0f;
         if (v < -1.0f) v = -1.0f;
     }
-    values_[pack(r)] = v;
+    int slot = denseRegSlot(r);
+    if (slot >= 0) {
+        dense_[size_t(slot)] = v;
+        return;
+    }
+    overflow_[pack(r)] = v;
 }
 
 void RegisterFile::setInputPatched(uint8_t n, bool p) {
