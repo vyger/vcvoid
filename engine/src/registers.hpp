@@ -1,5 +1,6 @@
 #pragma once
 #include "types.hpp"
+#include <array>
 #include <cstdint>
 #include <optional>
 #include <string>
@@ -26,6 +27,44 @@ inline uint32_t pack(const RegId& r) {
     return (uint32_t(uint8_t(r.type)) << 16) | (uint32_t(r.ctrl) << 8) | r.num;
 }
 
+// Dense-storage bounds for RegisterFile's fast path. Chosen from real DROID
+// limits (manual/basics.md): up to 16 controllers on the chain, and the
+// widest per-controller register count is B32's 32 buttons. Anything outside
+// these bounds (exotic/malformed ids) falls back to an unordered_map so
+// behavior is unchanged, just slower.
+inline constexpr int kRegTypeCount = 11;      // "IONGPBLSRXE"
+inline constexpr int kRegCtrlCount = 17;      // ctrl 0..16 (0 = plain form)
+inline constexpr int kRegNumCount = 33;       // num 0..32 (0 unused, 1-indexed)
+
+// Returns the type's index into the dense table, or -1 if not one of the
+// known register type letters.
+inline int regTypeIndex(char type) {
+    switch (type) {
+        case 'I': return 0;
+        case 'O': return 1;
+        case 'N': return 2;
+        case 'G': return 3;
+        case 'P': return 4;
+        case 'B': return 5;
+        case 'L': return 6;
+        case 'S': return 7;
+        case 'R': return 8;
+        case 'X': return 9;
+        case 'E': return 10;
+        default: return -1;
+    }
+}
+
+// Computes the dense slot for r, or -1 if r falls outside the dense bounds
+// (caller must then use the overflow map).
+inline int denseRegSlot(const RegId& r) {
+    int t = regTypeIndex(r.type);
+    if (t < 0) return -1;
+    if (r.ctrl >= kRegCtrlCount) return -1;
+    if (r.num >= kRegNumCount) return -1;
+    return (t * kRegCtrlCount + r.ctrl) * kRegNumCount + r.num;
+}
+
 class RegisterFile {
 public:
     float get(const RegId& r) const;
@@ -33,7 +72,8 @@ public:
     void setInputPatched(uint8_t n, bool p);
     bool inputPatched(uint8_t n) const;
 private:
-    std::unordered_map<uint32_t, float> values_;
+    std::array<float, kRegTypeCount * kRegCtrlCount * kRegNumCount> dense_{};
+    std::unordered_map<uint32_t, float> overflow_;
     uint16_t patchedMask_ = 0;           // bit n-1 = I<n> has a "cable"
 };
 
