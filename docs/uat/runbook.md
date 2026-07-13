@@ -397,16 +397,21 @@ CLAUDE.md) — same bytes as would ship to hardware.
    under patch control).
 5. ☐ Preset save/load round-trip. Baseline: `GET /master/{id}/faders`
    (record melody state). Save to preset A: `POST /params` longpress B2.1
-   (`paramId:0`, `holdMs:1800`, per the ≥1.5 s longpress convention).
-   Mangle the melody (change several fader values via touch+move as in
-   step 3). Re-read `GET /master/{id}/faders` to confirm the mangle landed
-   (rules out a false read). Load preset A (longpress the MFPS's load
-   control — confirm its actual load paramId from the patch's generated
-   button map before scripting). `GET /master/{id}/faders` → matches the
-   saved baseline. If it does not, `POST /master/{id}/reset-state`
-   (fresh-boot re-seed from startvalues) and repeat save→mangle→load once
-   from a known-clean state to isolate save-vs-load — the assertion is that
-   a clean-state round-trip restores the saved faders exactly.
+   (b32 `paramId:0`, `holdMs:1800`, per the ≥1.5 s longpress convention) —
+   save needs no modifier. **Load is a CTRL chord, not a tap**: the MFPS
+   load button is wired `b = B2.1 * _CONTROL` with `_CONTROL = B1.8` (the
+   p2b8 CTRL button), so a bare tap on B2.1 computes `B2.1 × 0 = 0` and
+   silently does nothing (exactly the 2026-07-12 run's false FAIL). Drive
+   the chord as two overlapping holds: `POST /params` B1.8 (p2b8
+   `paramId:9`, `value:1`, `holdMs:1500`), then immediately `POST /params`
+   B2.1 (b32 `paramId:0`, `value:1`, `holdMs:300`) inside that window.
+   `GET /master/{id}/faders` → matches the saved baseline. If it does not,
+   `POST /master/{id}/reset-state` (fresh-boot re-seed from startvalues)
+   and repeat save→mangle→load once from a known-clean state to isolate
+   save-vs-load — the assertion is that a clean-state round-trip restores
+   the saved faders exactly. Mangle between save and load via touch+move
+   as in step 3, and re-read `GET /master/{id}/faders` to confirm the
+   mangle landed (rules out a false read).
 6. ☐ LUCK (B2.10) randomize: `POST /params` tap; RATC (B2.17)
    ratchets: `POST /params` tap. `GET /probe` on the gate outputs (O2 /
    O4 / O6 / O8, portIds 1/3/5/7) before/after each → edges count/pattern
