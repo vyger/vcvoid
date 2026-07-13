@@ -36,13 +36,22 @@ locators.
 - Launch from the **rack template** `tests/smoketest_default.vcv` — a
   single BLANK master, nothing else, and it stays pristine that way; every
   run builds its rack up from that one master via `POST /modules`. Rack
-  takes the patch as a positional argument. Always launch a scratch COPY —
-  `POST /rack/save` writes back to the loaded patch's own path and would
-  mutate the repo template:
-  1. `cp tests/smoketest_default.vcv /tmp/uat-session.vcv`
-     `VCVOID_UAT_BRIDGE=1 "/Applications/VCV Rack 2 Free.app/Contents/MacOS/Rack" /tmp/uat-session.vcv &`
-     (or just run `tools/uatbridge-smoke.sh` — launch mode does exactly this
-     and doubles as the fast regression gate before the phases below).
+  takes the patch as a positional argument. Always launch a scratch COPY
+  with a **unique, per-run filename** — `POST /rack/save` writes back to the
+  loaded patch's own path, so a fixed name like `/tmp/uat-session.vcv` is a
+  trap: the persistence phases save the full end-of-run rack into it, and
+  the next launch that forgets the `cp` silently starts from that dirty
+  rack instead of the template (observed 2026-07-12: a follow-up launch
+  inherited a previous run's controller row). A fresh `mktemp` name makes a
+  stale reuse impossible rather than merely unlikely:
+  1. `SESSION=$(mktemp -t uat-session-XXXXXX).vcv`
+     `cp tests/smoketest_default.vcv "$SESSION"`
+     `VCVOID_UAT_BRIDGE=1 "/Applications/VCV Rack 2 Free.app/Contents/MacOS/Rack" "$SESSION" &`
+     (or just run `tools/uatbridge-smoke.sh` — launch mode handles the
+     scratch copy and doubles as the fast regression gate before the
+     phases below). Relaunches *within* one run's persistence phases reuse
+     that same `$SESSION` path on purpose — surviving state is what those
+     phases assert — but a NEW run always mints a new name.
   2. Poll `GET /ping` until it answers; compare `.gitHash` to
      `git rev-parse --short HEAD` — mismatch means rebuild/reinstall, don't
      proceed (`SKIP_HASH`-style overrides are for docs-only HEAD drift only).
