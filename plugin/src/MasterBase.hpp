@@ -14,6 +14,7 @@
 #include <cmath>
 #include <cstring>
 #include <algorithm>
+#include <chrono>
 
 // Copy a symbolic display string into a fixed NUL-terminated field, truncating
 // to fit (the buffer's last byte always stays NUL). Used for the DB8E screen's
@@ -165,6 +166,16 @@ struct DroidMasterBase : Module {
         probeBuf_.shrink_to_fit();
         return out;
     }
+
+    // --- tick-cost stats (issue #3 CPU query) ---
+    // Audio-thread accumulation over ~1 s epochs, published as atomics the
+    // bridge HTTP thread reads lock-free. Epoch counters are audio-thread
+    // only; statValid is dropped on patch load so a fresh engine never shows
+    // the previous patch's numbers.
+    double epochSumUs_ = 0.0, epochMaxUs_ = 0.0;
+    int epochTicks_ = 0;
+    std::atomic<float> statAvgTickUs{0.f}, statMaxTickUs{0.f};
+    std::atomic<bool> statValid{false};
 
     // UAT bridge (M10): this master's own native MIDI ports (MASTER18's
     // usb/trs1/trs2 in+out). Base (MASTER16) has none. Not engineMutex-guarded
@@ -318,6 +329,7 @@ public:
             if (!lastSnapshot.empty())
                 fresh->restoreState(lastSnapshot);
             engine = std::move(fresh);
+            statValid.store(false);   // stale epoch: previous patch's cost
             // A reload builds a FRESH Engine whose state_.midi.x7 defaults false;
             // the engine's own keepX7 preserve only covers an in-place load() on
             // the same engine, so it can't carry presence across this swap. X7
@@ -599,7 +611,19 @@ public:
                 engine->setRegister({'I', 0, uint8_t(i + 1)},
                                     inputRegisterValue(i));
         }
+        auto tickT0 = std::chrono::steady_clock::now();
         engine->tick();
+        double tickUs = std::chrono::duration<double, std::micro>(
+            std::chrono::steady_clock::now() - tickT0).count();
+        epochSumUs_ += tickUs;
+        if (tickUs > epochMaxUs_) epochMaxUs_ = tickUs;
+        if (++epochTicks_ >= std::max(1, (int)effectiveRate)) {
+            statAvgTickUs.store((float)(epochSumUs_ / epochTicks_));
+            statMaxTickUs.store((float)epochMaxUs_);
+            statValid.store(true);
+            epochSumUs_ = epochMaxUs_ = 0.0;
+            epochTicks_ = 0;
+        }
 
         // ---- chain downstream: LED states to the expander chain -----------
         // Only written on tick frames — that is the sampling contract. One block
