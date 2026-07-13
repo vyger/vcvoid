@@ -1,0 +1,108 @@
+{
+  "_comment": "Per-module Rack paramId layout for UAT scripting. paramId is a raw Rack Module::paramId int (POST /params body field), NOT a P/B/S label -- see .claude/skills/uat-bridge/SKILL.md 'paramId lookup tables'. Each module cites its _source (plugin/src/<Module>.cpp ParamId enum) so this file can be regenerated/checked by hand against the code.",
+  "master": {
+    "_source": "plugin/src/DroidMaster.cpp",
+    "slug": "master",
+    "params": {},
+    "note": "enum ParamId { PARAMS_LEN } -- no scriptable params; 8 CV inputs (IN_INPUTS 0-7), 8 CV outputs (OUT_OUTPUTS 0-7) are ports, not params."
+  },
+  "master18": {
+    "_source": "plugin/src/Master18.cpp",
+    "slug": "master18",
+    "params": {},
+    "note": "no scriptable params; gate I1/I2 + 4 gate in/out + 8 CV outputs are ports."
+  },
+  "p2b8": {
+    "_source": "plugin/src/P2B8.cpp",
+    "slug": "p2b8",
+    "params": {
+      "pots": {"paramId_base": 0, "count": 2, "labels": ["P<c>.1", "P<c>.2"]},
+      "buttons": {"paramId_base": 2, "count": 8, "labels": ["B<c>.1", "B<c>.2", "B<c>.3", "B<c>.4", "B<c>.5", "B<c>.6", "B<c>.7", "B<c>.8"]}
+    },
+    "note": "enum ParamId { ENUMS(POT_PARAMS, 2), ENUMS(BUTTON_PARAMS, 8) }: paramId 0-1 = P<c>.1-2, paramId 2-9 = B<c>.1-8."
+  },
+  "p4b2": {
+    "_source": "plugin/src/P4B2.cpp",
+    "slug": "p4b2",
+    "params": {
+      "pots": {"paramId_base": 0, "count": 4, "labels": ["P<c>.1", "P<c>.2", "P<c>.3", "P<c>.4"]},
+      "buttons": {"paramId_base": 4, "count": 2, "labels": ["B<c>.1", "B<c>.2"]}
+    },
+    "note": "enum ParamId { ENUMS(POT_PARAMS, 4), ENUMS(BUTTON_PARAMS, 2) }: paramId 0-3 = P<c>.1-4, paramId 4-5 = B<c>.1-2."
+  },
+  "p10": {
+    "_source": "plugin/src/P10.cpp",
+    "slug": "p10",
+    "params": {
+      "pots": {"paramId_base": 0, "count": 10, "labels": ["P<c>.1", "...", "P<c>.10"]}
+    },
+    "note": "enum ParamId { ENUMS(POT_PARAMS, 10) }: paramId 0-9 = P<c>.1-10. No buttons/LEDs/switches."
+  },
+  "s10": {
+    "_source": "plugin/src/S10.cpp",
+    "slug": "s10",
+    "params": {
+      "rotaries": {"paramId_base": 0, "count": 2, "labels": ["S<c>.1", "S<c>.2"], "range": "0-7 (8-position rotary)"},
+      "toggles": {"paramId_base": 2, "count": 8, "labels": ["S<c>.3", "...", "S<c>.10"], "range": "0/1/2 (down/center/up)"}
+    },
+    "note": "enum ParamId { ENUMS(ROTARY_PARAMS, 2), ENUMS(TOGGLE_PARAMS, 8) }: paramId 0-1 = S<c>.1-2 (rotary, 0-7), paramId 2-9 = S<c>.3-10 (3-way toggle, 0/1/2)."
+  },
+  "p8s8": {
+    "_source": "plugin/src/P8S8.cpp",
+    "slug": "p8s8",
+    "params": {
+      "sliders": {"paramId_base": 0, "count": 8, "labels": ["P<c>.1", "...", "P<c>.8"]},
+      "toggles": {"paramId_base": 8, "count": 8, "labels": ["S<c>.1", "...", "S<c>.8"], "range": "0/1/2 (down/center/up)"}
+    },
+    "note": "enum ParamId { ENUMS(SLIDER_PARAMS, 8), ENUMS(TOGGLE_PARAMS, 8) }: paramId 0-7 = P<c>.1-8 (sliders), paramId 8-15 = S<c>.1-8 (3-way toggles)."
+  },
+  "b32": {
+    "_source": "plugin/src/B32.cpp",
+    "slug": "b32",
+    "params": {
+      "buttons": {"paramId_base": 0, "count": 32, "labels": ["B<c>.1", "...", "B<c>.32"]}
+    },
+    "note": "enum ParamId { ENUMS(BUTTON_PARAMS, 32) }: paramId 0-31 = B<c>.1-32 (paramId = n-1)."
+  },
+  "e4": {
+    "_source": "plugin/src/E4.cpp",
+    "slug": "e4",
+    "params": {},
+    "note": "enum ParamId { PARAMS_LEN } -- no scriptable params. 4 endless encoders are internal monotonic detent counters driven by the widget, not params; push is likewise internal state. Bridge cannot drive turn or push."
+  },
+  "m4": {
+    "_source": "plugin/src/M4.cpp",
+    "slug": "m4",
+    "params": {
+      "faders": {"paramId_base": 0, "count": 4, "labels": ["P<c>.1", "P<c>.2", "P<c>.3", "P<c>.4"], "note": "set directly -- moving the value"},
+      "touch_plates": {"paramId_base": 4, "count": 4, "labels": ["plate for fader 1", "...", "plate for fader 4"], "note": "set 1 to simulate a grab/touch (matches hardware touch-plate-as-sensor); the plate press is ALSO the step/B-button surface (motoquencer step gate/skip/pattern toggle) -- see SKILL.md 'M4 touch plate != fader grab'. Each plate press toggles the step once; pair presses to keep gates unchanged."}
+    },
+    "note": "enum ParamId { ENUMS(FADER_PARAMS, 4), ENUMS(TOUCH_PARAMS, 4) }: paramId 0-3 = faders, paramId 4-7 = touch plates."
+  },
+  "g8": {
+    "_source": "plugin/src/G8.cpp",
+    "slug": "g8",
+    "params": {},
+    "note": "enum ParamId { PARAMS_LEN } -- no controls at all; 8 bidirectional gate jacks exposed as an input port + output port pair per jack (GATE_INPUTS 0-7, GATE_OUTPUTS 0-7). Use /cables and /probe, not /params."
+  },
+  "db8e": {
+    "_source": "plugin/src/DB8E.cpp",
+    "slug": "db8e",
+    "params": {
+      "buttons": {"paramId_base": 0, "count": 8, "labels": ["B<c>.1", "...", "B<c>.8"]}
+    },
+    "note": "enum ParamId (per file header/comment): 8 face buttons are paramId 0-7 = B<c>.1-8. The encoder E<c>.1 (push B<c>.9, ring L<c>.9) has NO param -- same reasoning as e4, bridge cannot drive it."
+  },
+  "x7": {
+    "_source": "plugin/src/X7.cpp",
+    "slug": "x7",
+    "params": {},
+    "note": "no controls; USB + TRS MIDI ports plus 4 gate outputs (G9-G12). Use /master/{id}/midi-port(s) for MIDI routing, /cables and /probe for gate I/O."
+  },
+  "bling": {
+    "_source": "plugin/src/Bling.cpp",
+    "slug": "bling",
+    "params": {},
+    "note": "config(0,0,0,0) -- 1 HP decorative blind panel, pure pass-through in the expander chain. No params, inputs, outputs, or lights."
+  }
+}

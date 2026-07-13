@@ -45,6 +45,17 @@ user's session up).
 then `/Applications/Rack.app` in that order if `$RACK` isn't set; `-u`
 pins the autosave dir the script later parses.)
 
+**Scripted full UAT**: `tools/uat_run.py` is the canonical executor for the
+whole runbook (`docs/uat/runbook.md`) — it owns this entire lifecycle
+(mktemp session copy, launch, `/ping` hash gate, readiness polls, graceful
+quits and persistence relaunches, crash detection with evidence collection)
+and drives every machine-checkable step from the driving maps in
+`docs/uat/driving/*.json`, writing per-step results to `docs/uat/results/`.
+Example: `python3 tools/uat_run.py` (all phases), `--phases 10` for a
+subset, `--list` to print steps, `--allow-hash-mismatch` after docs-only
+HEAD drift. Exit code = FAIL count. Prefer it over hand-driving the phases;
+the endpoint reference below is for triage and ad-hoc checks.
+
 1. **Poll `/ping` until it answers** (bridge HTTP thread comes up quickly,
    but don't assume instant — poll, don't sleep-once):
    `curl -sf http://127.0.0.1:2601/ping`
