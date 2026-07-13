@@ -1083,12 +1083,15 @@ std::string Bridge::handleCablesAdd(const Request& req, int* code) {
 
 // DELETE /cables/{id}. RackWidget::removeCable(cw) (RackWidget.hpp: "Removes
 // cable and releases ownership to caller") detaches the widget from the rack
-// and hands the CableWidget (and its owned engine::Cable) back to us; unlike
-// ModuleWidget::removeAction() there is no single "delete this" convenience
-// on CableWidget, so the Engine-side detach is made explicit and defensive
-// (hasCable() guard) rather than assumed to have already happened via some
-// undocumented onRemove side effect, then the widget (which owns and frees
-// the Cable in its destructor) is deleted.
+// and hands the CableWidget (and its owned engine::Cable) back to us. The
+// Engine-side detach must NOT be done here: ~CableWidget -> setCable(NULL)
+// (Rack 2.6.x app/CableWidget.cpp) removes cw->cable from the engine
+// UNCONDITIONALLY, so an explicit removeCable() first double-removes and
+// trips Engine::removeCable_NoLock's `assert(it != cables.end())` -> SIGABRT
+// on the UI thread (UAT crash, 2026-07-12). The destructor owns the engine
+// removal and frees the Cable; like handleModulesDelete's zombie guard
+// above, refuse a widget whose cable never entered the engine (the
+// destructor's unconditional removeCable would assert on that too).
 std::string Bridge::handleCablesDelete(int64_t id, int* code) {
     return uiCall([id](int* c) -> json_t* {
         rack::app::CableWidget* cw = APP->scene->rack->getCable(id);
@@ -1096,10 +1099,11 @@ std::string Bridge::handleCablesDelete(int64_t id, int* code) {
             *c = 404;
             return jerr("no such cable");
         }
+        if (cw->cable && !APP->engine->hasCable(cw->cable)) {
+            *c = 500;
+            return jerr("cable not engine-added (zombie widget); restart Rack to clear it");
+        }
         APP->scene->rack->removeCable(cw);
-        rack::engine::Cable* cable = cw->cable;
-        if (cable && APP->engine->hasCable(cable))
-            APP->engine->removeCable(cable);
         delete cw;
         *c = 200;
         return json_pack("{s:b}", "ok", 1);
