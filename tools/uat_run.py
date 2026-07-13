@@ -176,13 +176,19 @@ class Bridge:
         margin, otherwise the next scripted action fires while the button
         is still held (observed live: a longpress-save bled into the next
         tap). Pass settle=False only for deliberate overlapping holds
-        (chords)."""
+        (chords).
+
+        The 1.5x factor: holdMs is measured in ENGINE SAMPLE TIME (bridge
+        frame-deadline holds), and with no Audio module in the rack Rack's
+        fallback engine thread can pace sample time up to ~26% slower than
+        wall clock (observed live) — so a holdMs hold can take ~1.35x holdMs
+        of wall time to release. 1.5x + margin covers that without polling."""
         body = {"moduleId": module_id, "paramId": param_id, "value": value}
         if hold_ms:
             body["holdMs"] = hold_ms
         result = self.post("/params", body)
         if hold_ms and settle:
-            time.sleep(hold_ms / 1000.0 + 0.35)
+            time.sleep(hold_ms / 1000.0 * 1.5 + 0.35)
         return result
 
     def cables(self):
@@ -198,6 +204,21 @@ class Bridge:
     def probe(self, module_id, port_id, kind, ms):
         return self.get(f"/probe?moduleId={module_id}&portId={port_id}&kind={kind}&ms={ms}",
                          timeout=(ms / 1000.0) + 10)
+
+    def watch_arm(self, mid, ids):
+        """POST /master/{id}/watch — arm an engine-signal watch (registers,
+        F<n> fader handles, _CABLE internal cables). Sampled once per ENGINE
+        TICK inside the master's process(), so 1-tick trigger pulses are
+        caught by construction (register polling from here cannot do that).
+        Arm, drive gestures, then watch_collect."""
+        return self.post(f"/master/{mid}/watch", {"ids": ids})
+
+    def watch_collect(self, mid):
+        """GET /master/{id}/watch — disarm + return per-signal stats:
+        min/max/avg/last (engine units), edges (rising 0.1 crossings, 0.05
+        re-arm, starts disarmed), highMs (time >= 0.1), ticks. ticks == 0
+        means the engine never ticked while armed."""
+        return self.get(f"/master/{mid}/watch")
 
     def rack_save(self):
         return self.post("/rack/save")
@@ -305,10 +326,29 @@ class Runner:
         self.log_path = path + ".log"
         return path
 
+    def disable_app_nap(self):
+        """One-time (idempotent) per-app default: with no Audio module in the
+        rack, Rack's engine runs on its CPU-clocked fallback thread
+        (rack-sdk Engine.hpp startFallbackThread), and macOS App Nap
+        throttles it whenever the Rack window is occluded — measured live:
+        engine sample time up to ~26% slower than wall clock, varying run to
+        run with window stacking. That skews every wall-clock assertion
+        (probe edge counts, sequencer liveliness). Disabling App Nap for
+        Rack pins the fallback thread to real time; it's also the sane
+        setting for an audio app generally."""
+        try:
+            subprocess.run(["defaults", "write", "com.vcvrack.rack2",
+                             "NSAppSleepDisabled", "-bool", "YES"],
+                            check=True, capture_output=True)
+        except Exception as e:
+            self.log(f"warning: could not disable App Nap for Rack ({e}); "
+                     f"wall-clock assertions may see a napped (slow) engine")
+
     def launch(self):
         rack_bin = self.find_rack_bin()
         if self.session_path is None:
             self.new_session()
+        self.disable_app_nap()
         env = dict(os.environ)
         env["VCVOID_UAT_BRIDGE"] = "1"
         self.log_fh = open(self.log_path, "a")
@@ -473,6 +513,32 @@ class Runner:
             return self.row[slug_key]
         raise KeyError(f"module '{slug_key}' not in current row {list(self.row.keys())}")
 
+    def probe_steady(self, module_id, port_id, kind, ms):
+        """Probe with autosave-stall evidence: Rack's periodic (~15s) autosave
+        serializes the whole rack on the UI thread and CAN hiccup the audio
+        engine — a Rack-core effect unrelated to vcvoid tick scheduling
+        (issue #7; no autosave-correlated stall actually observed yet), which
+        would inflate periodStddevMs in whichever probe window it lands. If (and ONLY if) Rack2/log.txt shows a
+        saveAutosave landed inside the probe window, discard the sample and
+        re-probe once (the next autosave is ~15s out, so the retry cannot hit
+        it). An unexplained stall is never retried — it must FAIL the step."""
+        rack_log = os.path.expanduser("~/Library/Application Support/Rack2/log.txt")
+        def autosaves():
+            try:
+                with open(rack_log, errors="replace") as f:
+                    return sum(1 for line in f if "saveAutosave" in line)
+            except OSError:
+                return -1
+        for attempt in range(2):
+            n0 = autosaves()
+            code, pr, raw = self.bridge.probe(module_id, port_id, kind, ms)
+            n1 = autosaves()
+            if attempt == 0 and n0 >= 0 and n1 > n0:
+                self.log(f"    probe window crossed a Rack autosave "
+                         f"(log.txt saveAutosave count {n0}->{n1}); re-probing once")
+                continue
+            return code, pr, raw
+
     def collect_crash_evidence(self):
         """Gather crash evidence pointers/tails for the results file: our
         Rack stdout/stderr capture, Rack2 log.txt tail, and any new
@@ -540,6 +606,41 @@ class Runner:
     def longpress(self, module_id, param_id, hold_ms=1800):
         return self.bridge.params(module_id, param_id, 1, hold_ms=hold_ms)
 
+    def gesture_fired(self, fire_cable, fn, evidence_ids=(), tries=2, desc=""):
+        """Closed-loop gesture: arm an engine-signal watch on `fire_cable`
+        (the internal cable the gesture must pulse, e.g. _SAVEP), run fn()
+        (which performs the gesture and waits out its holds), collect the
+        watch, and check the pulse actually fired (edges >= 1, sampled per
+        engine tick — 1-tick trigger pulses are caught by construction).
+        Retries the gesture if it didn't — the read-before-act convention
+        toggle_until already uses for taps: a human operator whose longpress
+        didn't take would simply press again. An 1800ms hold sits only
+        ~300ms above the 1.5s longpress threshold, and transient engine
+        stalls have been observed to eat that margin. `evidence_ids` are
+        extra signals recorded for the log (e.g. the button's B register:
+        its highMs is the engine-perceived press duration).
+        Returns (ok, per-signal stats dict of the last attempt)."""
+        sigs = {}
+        for attempt in range(tries):
+            code, resp, _ = self.bridge.watch_arm(self.master_id,
+                                                   [fire_cable, *evidence_ids])
+            if code != 200:
+                self.log(f"    gesture {desc or fire_cable}: watch arm -> {code} {resp}")
+                return False, {"watch_arm_error": resp}
+            fn()
+            code, resp, _ = self.bridge.watch_collect(self.master_id)
+            sigs = (resp or {}).get("signals") or {}
+            fired = sigs.get(fire_cable, {}).get("edges", 0) >= 1
+            ev = "; ".join(f"{n} highMs={sigs.get(n, {}).get('highMs', 0):.0f} "
+                           f"edges={sigs.get(n, {}).get('edges', 0)}"
+                           for n in (fire_cable, *evidence_ids))
+            self.log(f"    gesture {desc or fire_cable}: "
+                     f"{'fired' if fired else 'DID NOT FIRE'}"
+                     f"{f' (retry {attempt + 1})' if attempt else ''} [{ev}]")
+            if fired:
+                return True, sigs
+        return False, sigs
+
     def gesture(self, name, row_slug_map=None):
         """Look up `name` in the MFPS driving map and issue the right
         POST /params sequence. row_slug_map optionally overrides which row
@@ -568,7 +669,8 @@ class Runner:
             self.bridge.params(mod_id, mod["paramId"], 1, hold_ms=mod_hold, settle=False)
             time.sleep(0.15)  # ensure the modifier registers first
             self.bridge.params(mid, entry["paramId"], 1, hold_ms=tap_hold, settle=False)
-            time.sleep(max(mod_hold, tap_hold) / 1000.0 + 0.35)
+            # 1.5x: same slow-engine wall allowance as Bridge.params' settle
+            time.sleep(max(mod_hold, tap_hold) / 1000.0 * 1.5 + 0.35)
         else:
             raise ValueError(f"unknown gesture type {gtype} for {name}")
 
@@ -882,10 +984,10 @@ def phase3(r):
     r.step("3.1", "P1.1 sweep: O1 edge rate rises (1Hz->10Hz sine)", s3_1)
 
     def s3_2():
-        expected = ("probe O4 (portId=3), I1 unpatched, ms=1300 -> edges in 4±1 (2Hz N1 "
-                    "retrigger, 500ms period) and periodStddevMs < 3ms (frame-accurate probe "
-                    "timestamps, issue #5)")
-        _, pr, _ = r.bridge.probe(r.master_id, 3, "out", 1300)
+        expected = ("probe O4 (portId=3), I1 unpatched, ms=2100 -> edges in 4±1 (2Hz N1 "
+                    "retrigger, 500ms period, 4.2 expected) and periodStddevMs < 3ms "
+                    "(frame-accurate probe timestamps, issue #5)")
+        _, pr, _ = r.probe_steady(r.master_id, 3, "out", 2100)
         edges = pr.get("edges", -1)
         stddev = pr.get("periodStddevMs", -1)
         status = "PASS" if (3 <= edges <= 5 and 0 <= stddev < 3.0) else "FAIL"
@@ -895,10 +997,16 @@ def phase3(r):
     r.step("3.2", "N1 normalization: O4 2Hz retrigger baseline", s3_2)
 
     def s3_3():
-        expected = ("cabling ~8Hz LFO into I1 makes O4 edges jump vs N1 baseline; removing "
+        # Contour is in trigger mode (attack 1ms straight to a ~200ms release,
+        # manual contour.md): at the 8Hz retrigger the release never completes,
+        # so O4 floats above the probe's 0.5V Schmitt re-arm — the correct,
+        # observable signature is min/avg JUMPING UP (edges actually collapse
+        # to ~1), reverting once the cable is removed.
+        expected = ("cabling ~8Hz LFO into I1 retriggers O4's contour faster than its "
+                    "release completes: min/avg jump up vs N1 baseline; removing the cable "
                     "reverts; baseline/reverted periodStddevMs < 3ms (steady 2Hz N1 square, "
                     "frame-accurate probe timestamps, issue #5)")
-        _, before, _ = r.bridge.probe(r.master_id, 3, "out", 1300)
+        _, before, _ = r.probe_steady(r.master_id, 3, "out", 2100)
         # Fundamental LFO: plugin "Fundamental", slug "LFO"; FREQ_PARAM is
         # paramId 2 (octave-scaled, 2^n Hz -> 3.0 gives 8 Hz); SQR output is
         # port index 3 (SIN=0, TRI=1, SAW=2, SQR=3).
@@ -912,23 +1020,30 @@ def phase3(r):
         code, cid, _ = r.bridge.add_cable(added_lfo, 3, r.master_id, 0)  # SQR out -> master I1
         cable_id = cid.get("id") if cid else None
         time.sleep(0.3)
-        _, after, _ = r.bridge.probe(r.master_id, 3, "out", 1300)
+        _, after, _ = r.bridge.probe(r.master_id, 3, "out", 2100)
         if cable_id is not None:
             r.bridge.remove_cable(cable_id)
         r.bridge.remove_module(added_lfo)
         time.sleep(0.3)
-        _, reverted, _ = r.bridge.probe(r.master_id, 3, "out", 1300)
-        jump = after.get("edges", 0) > before.get("edges", 0)
-        revert_ok = abs(reverted.get("edges", 0) - before.get("edges", 0)) <= 1
+        _, reverted, _ = r.probe_steady(r.master_id, 3, "out", 2100)
+        # Baseline completes its release each 500ms period (min ~0V); at 8Hz it
+        # can't (min stays up) and duty rises, so avg jumps by volts.
+        jump = (after.get("min", 0) > before.get("min", 10) + 1.0
+                and after.get("avg", 0) > before.get("avg", 10) + 1.0)
+        revert_ok = (abs(reverted.get("edges", 0) - before.get("edges", 0)) <= 1
+                     and reverted.get("min", 10) < 0.5)
         before_stddev = before.get("periodStddevMs", -1)
         reverted_stddev = reverted.get("periodStddevMs", -1)
         steady = 0 <= before_stddev < 3.0 and 0 <= reverted_stddev < 3.0
         status = "PASS" if (jump and revert_ok and steady) else "FAIL"
-        return status, expected, (f"before={before.get('edges')} (stddev={before_stddev}) "
-                                   f"after_cabled={after.get('edges')} "
-                                   f"after_removed={reverted.get('edges')} (stddev={reverted_stddev})")
+        return status, expected, (f"before: edges={before.get('edges')} min={before.get('min')} "
+                                   f"avg={before.get('avg')} (stddev={before_stddev}); "
+                                   f"cabled: min={after.get('min')} avg={after.get('avg')} "
+                                   f"edges={after.get('edges')}; "
+                                   f"removed: edges={reverted.get('edges')} min={reverted.get('min')} "
+                                   f"(stddev={reverted_stddev})")
 
-    r.step("3.3", "cable external LFO into I1, O4 edges jump; uncable reverts to N1", s3_3)
+    r.step("3.3", "cable external LFO into I1, O4 min/avg jump; uncable reverts to N1", s3_3)
 
     def s3_4():
         expected = "probe O2 edges consistent with 5-in-8 euclid at R1-driven rate over 2000ms"
@@ -1041,11 +1156,18 @@ def phase4(r):
         expected = "longpress-save (B1.6) captures pattern; mangle then longpress-load (B1.5) restores it"
         _, before, _ = r.bridge.leds(r.master_id)
         baseline = dict((before or {}).get("buttons", {}))
-        r.longpress(p2b8, 7, hold_ms=1800)  # B1.6 save = paramId 7
+        # Closed-loop longpresses: the fixture wires B1.6/B1.5 longpress to the
+        # _SAVEP/_LOADP cables — watch those to confirm each gesture actually
+        # fired (and retry if not) instead of inferring from the LEDs later.
+        ok_save, _ = r.gesture_fired("_SAVEP",
+            lambda: r.longpress(p2b8, 7, hold_ms=1800),  # B1.6 save = paramId 7
+            evidence_ids=("B1.6",), desc="longpress-save B1.6")
         time.sleep(0.3)
         r.tap(b32, 1, hold_ms=300)  # mangle: toggle a different step
         time.sleep(0.3)
-        r.longpress(p2b8, 6, hold_ms=1800)  # B1.5 load = paramId 6
+        ok_load, _ = r.gesture_fired("_LOADP",
+            lambda: r.longpress(p2b8, 6, hold_ms=1800),  # B1.5 load = paramId 6
+            evidence_ids=("B1.5",), desc="longpress-load B1.5")
         time.sleep(0.5)
         _, after, _ = r.bridge.leds(r.master_id)
         restored = dict((after or {}).get("buttons", {}))
@@ -1055,8 +1177,9 @@ def phase4(r):
         # not count as pattern (observed live: cursor on L2.3 vs L2.6).
         lit = lambda d: {k for k in keys if d.get(k, 0) >= 0.9}
         match = lit(baseline) == lit(restored)
-        status = "PASS" if match else "FAIL"
-        return status, expected, f"baseline_lit={sorted(lit(baseline))} " \
+        status = "PASS" if match and ok_save and ok_load else "FAIL"
+        return status, expected, f"save_fired={ok_save} load_fired={ok_load} " \
+                                  f"baseline_lit={sorted(lit(baseline))} " \
                                   f"restored_lit={sorted(lit(restored))} " \
                                   f"(raw baseline={{{','.join(f'{k}:{baseline.get(k)}' for k in keys)}}})"
 
@@ -1216,14 +1339,29 @@ def phase6(r):
     r.step("6.0", "load uat-gates.ini", s6_0)
 
     def s6_1():
-        expected = "G8 jack1 (1Hz)/jack2 (0.5Hz) gate probes: 0/5V, edges within tolerance"
-        _, p1, _ = r.bridge.probe(g8, 0, "out", 2500)   # 1 Hz: 2-3 edges, both levels
-        _, p2, _ = r.bridge.probe(g8, 1, "out", 4500)   # 0.5 Hz: covers both phases
-        def gate_ok(p):
-            return (p.get("max", 0) >= 4.5 and p.get("min", 99) <= 0.5
-                    and p.get("edges", 0) >= 1)
-        ok = gate_ok(p1) and gate_ok(p2)
-        return ("PASS" if ok else "FAIL"), expected, f"jack1={p1}; jack2={p2}"
+        expected = ("G8 jack1 (1Hz square) probe: 0/5V, edges within tolerance; "
+                    "jack2 (0.5Hz divided clock) pulses on the G2 register watch "
+                    "(clocktool's default output gate is 10ms — manual clocktool.md — "
+                    "which the ~1kHz foreign-module port probe can legitimately miss; "
+                    "the per-engine-tick watch cannot)")
+        _, p1, _ = r.bridge.probe(g8, 0, "out", 2500)   # 1 Hz square: 2-3 edges, both levels
+        # jack2: engine-side liveliness via the G2 register watch (tick-
+        # accurate), with the port probe alongside for the 5V level whenever
+        # it does catch a pulse. jack1's 50%-duty square already proves the
+        # port-level 0/5V property for the G8's output stage.
+        r.bridge.watch_arm(r.master_id, ["G2"])
+        _, p2, _ = r.bridge.probe(g8, 1, "out", 4500)   # 0.5 Hz: ~2 pulses in window
+        _, w, _ = r.bridge.watch_collect(r.master_id)
+        g2 = (w or {}).get("signals", {}).get("G2", {})
+        jack1_ok = (p1.get("max", 0) >= 4.5 and p1.get("min", 99) <= 0.5
+                    and p1.get("edges", 0) >= 1)
+        # Port level asserted only when the sampler caught the 10ms pulse.
+        jack2_ok = (g2.get("edges", 0) >= 1
+                    and (p2.get("edges", 0) == 0 or p2.get("max", 0) >= 4.5))
+        ok = jack1_ok and jack2_ok
+        return ("PASS" if ok else "FAIL"), expected, (
+            f"jack1={p1}; jack2_port={p2}; G2_watch=edges={g2.get('edges')} "
+            f"highMs={g2.get('highMs')} max={g2.get('max')}")
 
     r.step("6.1", "G8 gate jack probes 0/5V", s6_1)
 
@@ -1472,6 +1610,15 @@ def phase10(r):
         expected = "load uat-mfps.ini -> statusLine ^ok, [0-9]+ bytes RAM; chainError empty"
         ok_chain, chain = r.wait_chain(["p2b8", "b32", "m4", "m4"])
         code, st, _ = r.bridge.load_patch(r.master_id, patch("uat-mfps.ini"))
+        # Factory-fresh capstone: loadPatchFile transfers the PREVIOUS patch's
+        # circuit state into same-type circuits of the new one (hardware-
+        # faithful, hardware.md §11.1) — running phase 4's fixture first was
+        # observed to silently gate off MFPS tracks (10.2-10.4 flat). The
+        # capstone spec assumes a freshly generated MFPS (zero active steps),
+        # so re-seed from startvalues.
+        code_rs, st, _ = r.bridge.reset_state(r.master_id)
+        if code_rs != 200:
+            return "FAIL", expected, f"reset-state -> {code_rs} {st}"
         # statusLine is "<file> — ok, N bytes RAM" (filename-prefixed), so
         # search, don't anchor (observed live 2026-07-12).
         ok = bool(st and re.search(r"ok, \d+ bytes RAM", st.get("statusLine", "")))
@@ -1548,7 +1695,12 @@ def phase10(r):
         expected = ("save preset A (longpress B2.1) -> mangle -> load preset A (CTRL+tap B2.1 "
                     "chord per driving map) -> fader motorTargets match saved baseline")
         baseline = motor_targets()
-        r.gesture("PRESET_A_SAVE", row_map)
+        # Closed-loop: the MFPS patch pulses _T1_P1_SAVE when the track-1
+        # preset-A save longpress registers — watch it and retry the gesture
+        # if it didn't fire (B2.1's highMs = engine-perceived press duration).
+        ok_save, _ = r.gesture_fired("_T1_P1_SAVE",
+            lambda: r.gesture("PRESET_A_SAVE", row_map),
+            evidence_ids=("B2.1",), desc="PRESET_A_SAVE")
         time.sleep(0.5)
         # mangle a fader the melody left distinctive, confirm it landed
         # (paired plate presses inside fader_edit toggle the step; only the
@@ -1561,11 +1713,16 @@ def phase10(r):
                 mangle_landed = True
                 break
         mangled = motor_targets()
-        r.gesture("PRESET_A_LOAD", row_map)
+        # Same closed loop for the CTRL+tap chord: _T1_P1_LOAD must pulse
+        # (_CONTROL recorded as evidence that the modifier hold was seen).
+        ok_load, _ = r.gesture_fired("_T1_P1_LOAD",
+            lambda: r.gesture("PRESET_A_LOAD", row_map),
+            evidence_ids=("B2.1", "_CONTROL"), desc="PRESET_A_LOAD")
         time.sleep(0.8)
         restored = motor_targets()
-        status = "PASS" if mangle_landed and restored == baseline else "FAIL"
-        return status, expected, (f"baseline={baseline}; mangled={mangled} (landed={mangle_landed}); "
+        status = "PASS" if mangle_landed and ok_save and ok_load and restored == baseline else "FAIL"
+        return status, expected, (f"save_fired={ok_save} load_fired={ok_load}; "
+                                   f"baseline={baseline}; mangled={mangled} (landed={mangle_landed}); "
                                    f"restored={restored}")
 
     r.step("10.5", "MFPS preset A save/load round-trip via CTRL chord", s10_5)
@@ -1584,11 +1741,21 @@ def phase10(r):
         r.gesture("RATC", row_map)
         time.sleep(0.3)
         _, after_ratc, _ = r.bridge.probe(r.master_id, 0, "out", 1500)
-        ratc_changed = after_luck.get("edges") != after_ratc.get("edges")
+        faders_after_ratc = motor_targets()
+        # RATC (B2.17) is a buttongroup MENU button: tapping it repurposes the
+        # faders to per-step sub-gate (ratchet) counts — the deterministic,
+        # measurable change is the motor-recall re-snap of the fader targets
+        # (runbook: "gate edges on O1 and/or fader pattern"). A bare tap does
+        # NOT itself add ratchets, so an edge-count delta is only a bonus
+        # signal, not the assert (it flaked exactly that way when the window
+        # phase-aligned).
+        ratc_changed = (faders_after_ratc != faders_after_luck
+                        or after_luck.get("edges") != after_ratc.get("edges"))
         status = "PASS" if luck_changed and ratc_changed else "FAIL"
         return status, expected, (f"O1 edges before={before.get('edges')} "
                                    f"after_luck={after_luck.get('edges')} after_ratc={after_ratc.get('edges')}; "
-                                   f"faders changed by LUCK: {faders_before != faders_after_luck}")
+                                   f"faders changed by LUCK: {faders_before != faders_after_luck}; "
+                                   f"faders re-snapped by RATC menu: {faders_after_ratc != faders_after_luck}")
 
     r.step("10.6", "LUCK randomize / RATC ratchet produce measurable change", s10_6)
 

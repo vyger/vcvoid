@@ -187,21 +187,36 @@ Rack row: `master | p2b8 | b32` (adjacent, left to right).
 Rack row: `master | p2b8`. `POST /master/{id}/patch` with the absolute path
 to `uat-core.ini` first.
 
+> **Autosave vs `periodStddevMs` asserts (defensive guard):** Rack's periodic
+> (~15 s) autosave serializes the whole rack on the UI thread and *can* hiccup
+> the audio engine — a Rack-core effect unrelated to vcvoid tick scheduling
+> (issue #7 fixed the vcvoid-side drops; no autosave-correlated stall has
+> actually been observed yet). If a probe window straddles an autosave
+> (`saveAutosave` count in Rack2 `log.txt` increased during the probe),
+> discard the sample and re-probe once — the next autosave is ~15 s out.
+> Only retry with that log evidence; an unexplained stall must FAIL.
+> (`tools/uat_run.py` does this automatically via `probe_steady`.)
+
 1. ☐ Sweep P1.1: `POST /params {"moduleId":p2b8,"paramId":0,"value":0.0}`
    then `1.0`. `GET /master/{id}/registers?ids=O1` before/after → value
    moves consistent with a 1→10 Hz sine sweep (A×B+C input math); or probe
    O1 (`kind=out`, portId=0) at each end and compare `edges` over a fixed
    window.
-2. ☐ `GET /probe?moduleId={id}&portId=3&kind=out&ms=1300` (O4) with
-   I1 unpatched → `edges` in `4±1` for a 2 Hz retrigger (500 ms period) over
-   1300 ms (N1 normalization feeding I1), **and** `periodStddevMs < 3` (probe
-   timestamps are frame-accurate for a vcvoid master as of issue #5 — this is
-   now a real absolute assert, not a relative "steadier than noise" check).
-   Exact recipe in `tools/uatbridge-smoke.sh`.
+2. ☐ `GET /probe?moduleId={id}&portId=3&kind=out&ms=2100` (O4) with
+   I1 unpatched → `edges` in `4±1` for a 2 Hz retrigger (500 ms period,
+   4.2 expected) over 2100 ms (N1 normalization feeding I1), **and**
+   `periodStddevMs < 3` (probe timestamps are frame-accurate for a vcvoid
+   master as of issue #5 — this is now a real absolute assert, not a relative
+   "steadier than noise" check). Exact recipe in `tools/uatbridge-smoke.sh`.
 3. ☐ `POST /cables` wiring a Rack LFO (~8 Hz square) into master
    I1 (portId per `GET /modules`/`GET /cables` port indices). Probe O4 →
-   edges jump to ~8 Hz×window. `DELETE /cables/{id}` → probe O4 again →
-   back to ~2 Hz (N1 normalization), with baseline/reverted
+   the contour is in *trigger* mode (attack ~1 ms straight to a ~200 ms
+   release, see `manual/circuits/contour.md`): at an 8 Hz retrigger the
+   release never completes, so O4's `min`/`avg` **jump up by volts** vs the
+   N1 baseline (edges as counted by the probe's 0.5 V-re-arm Schmitt actually
+   collapse to ~1 — do NOT assert an edge-count increase). `DELETE
+   /cables/{id}` → probe O4 again → back to the ~2 Hz N1 envelope (edges
+   within ±1 of baseline, `min` back below 0.5 V), with baseline/reverted
    `periodStddevMs < 3` in both the pre-cable and post-uncable probes (same
    steady 2 Hz N1 square as step 2). First live normalization test.
 4. ☐ Euclid rate cross-check: `GET /probe?moduleId={id}&portId=1&kind=out&ms=2000`
@@ -243,9 +258,17 @@ Rack row: `master | p2b8 | b32`. Load via `POST /master/{id}/patch`.
    save: `POST /params {"moduleId":p2b8,"paramId":<B1.6 id=7>,"value":1,"holdMs":1800}`
    (≥1.5 s per SKILL.md's longpress convention — **must** go through this
    bridge's `holdMs`, not a scripted click, per the driving-knowledge note
-   that other UI-click paths don't reliably register holds). Change the
+   that other UI-click paths don't reliably register holds). **Verify the
+   longpress actually fired** via the signal watch: arm
+   `POST /master/{id}/watch {"ids":["_SAVEP","B1.6"]}` before the gesture,
+   `GET /master/{id}/watch` after → `_SAVEP.edges >= 1` (the fixture wires
+   B1.6's `longpress` output to `_SAVEP`); retry the gesture if it didn't
+   fire — 1800 ms sits only ~300 ms above the 1.5 s threshold and transient
+   engine stalls have been observed to eat that margin (`B1.6`'s `highMs` in
+   the same watch is the engine-perceived press duration). Change the
    pattern (tap a different step button), then longpress-load
-   (`paramId=<B1.5 id=6>`, `holdMs:1800`). `GET /master/{id}/registers`
+   (`paramId=<B1.5 id=6>`, `holdMs:1800`, watch `_LOADP` the same way).
+   `GET /master/{id}/registers`
    for the pattern-bearing registers → pattern snaps back to the saved one.
 
 ## Phase 5 — Persistence & timing
@@ -300,7 +323,14 @@ g8-first row pins `chainError` and freezes the G8 gates).
 
 1. ☐ `GET /probe?moduleId={g8id}&portId=0&kind=out&ms=1200` →
    edges `≈1.2±1` (1 Hz gate), `min≈0,max≈5` (0/5 V, not the 0/10 V
-   register scale). Jack 2 (portId=1) at 0.5 Hz similarly.
+   register scale). Jack 2 (portId=1, 0.5 Hz divided clock): assert
+   liveliness via the **signal watch on register `G2`** (`edges >= 1` over a
+   ~4.5 s window), not the port probe alone — `clocktool`'s default output
+   gate is only 10 ms (`manual/circuits/clocktool.md`), which the foreign-
+   module probe's ~1 kHz HTTP-thread sampling can legitimately miss; the
+   per-engine-tick watch cannot. Assert the port's 5 V level only when the
+   probe did catch a pulse (jack 1's 50%-duty square already proves the
+   0/5 V port property).
 2. ☐ `POST /cables` a Rack square LFO into G8 jack 5 **input**
    half (`portId=4`, `kind=in` semantics — the input is a separate Rack
    input port per SKILL.md's split-hitbox note, not a kind flag on one
@@ -405,6 +435,12 @@ CLAUDE.md) — same bytes as would ship to hardware.
 1. ☐ Assemble the five-module row via `POST /modules`; `POST
    /master/{id}/patch` the absolute path to `uat-mfps.ini` →
    `.statusLine` matches `^ok, [0-9]+ bytes RAM`; `.chainError` empty.
+   Then `POST /master/{id}/reset-state` — **required, not optional**: patch
+   loads transfer the previous patch's circuit state into same-type circuits
+   of the new one (hardware-faithful, hardware.md §11.1), and an earlier
+   fixture's state was observed to silently gate off MFPS tracks (flat
+   gates/pitch in steps 2-4 below). The capstone spec assumes a freshly
+   generated MFPS (zero active steps), so re-seed from startvalues.
 2. ☐ Press B2.12 (START — b32 paramId 11): `POST /params
    {"moduleId":b32,"paramId":11,"value":1,"holdMs":300}`. `GET
    /probe?moduleId={id}&portId=1&kind=out&ms=1000` (gate on O2) → edges
@@ -423,7 +459,12 @@ CLAUDE.md) — same bytes as would ship to hardware.
 5. ☐ Preset save/load round-trip. Baseline: `GET /master/{id}/faders`
    (record melody state). Save to preset A: `POST /params` longpress B2.1
    (b32 `paramId:0`, `holdMs:1800`, per the ≥1.5 s longpress convention) —
-   save needs no modifier. **Load is a CTRL chord, not a tap**: the MFPS
+   save needs no modifier. **Verify it fired** via the signal watch (arm
+   `POST /master/{id}/watch {"ids":["_T1_P1_SAVE","B2.1"]}` before,
+   `GET /master/{id}/watch` after → `_T1_P1_SAVE.edges >= 1`; retry the
+   gesture if not — see Phase 4 step 3 for why). Load's fire signal is
+   `_T1_P1_LOAD` (watch `_CONTROL` alongside as evidence the modifier hold
+   was seen). **Load is a CTRL chord, not a tap**: the MFPS
    load button is wired `b = B2.1 * _CONTROL` with `_CONTROL = B1.8` (the
    p2b8 CTRL button), so a bare tap on B2.1 computes `B2.1 × 0 = 0` and
    silently does nothing (exactly the 2026-07-12 run's false FAIL). Drive
