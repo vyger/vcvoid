@@ -20,11 +20,16 @@ itself permission to launch Rack.
 
 ```sh
 cd plugin && make install                 # rebuilds & installs; bakes VCVOID_GIT_HASH
-cp tests/smoketest_default.vcv /tmp/uat-session.vcv   # scratch copy: /rack/save
-                                          # writes to the loaded patch's path
+SESSION=$(mktemp -t uat-session-XXXXXX).vcv   # UNIQUE per run — /rack/save writes
+cp tests/smoketest_default.vcv "$SESSION"     # back to this path, so a fixed name
+                                              # gets dirtied by one run and silently
+                                              # reused by the next (seen 2026-07-12)
 VCVOID_UAT_BRIDGE=1 "/Applications/VCV Rack 2 Free.app/Contents/MacOS/Rack" \
-  /tmp/uat-session.vcv &
+  "$SESSION" &
 ```
+
+Within one run, relaunches (persistence checks) reuse the same `$SESSION`
+path deliberately; a NEW run always mints a new name.
 
 Rack takes the patch as a positional argument; the repo template
 `tests/smoketest_default.vcv` is the canonical deterministic starting rack
@@ -39,6 +44,17 @@ user's session up).
 (`tools/uatbridge-smoke.sh` probes `/Applications/VCV Rack 2 {Pro,Free}.app`
 then `/Applications/Rack.app` in that order if `$RACK` isn't set; `-u`
 pins the autosave dir the script later parses.)
+
+**Scripted full UAT**: `tools/uat_run.py` is the canonical executor for the
+whole runbook (`docs/uat/runbook.md`) — it owns this entire lifecycle
+(mktemp session copy, launch, `/ping` hash gate, readiness polls, graceful
+quits and persistence relaunches, crash detection with evidence collection)
+and drives every machine-checkable step from the driving maps in
+`docs/uat/driving/*.json`, writing per-step results to `docs/uat/results/`.
+Example: `python3 tools/uat_run.py` (all phases), `--phases 10` for a
+subset, `--list` to print steps, `--allow-hash-mismatch` after docs-only
+HEAD drift. Exit code = FAIL count. Prefer it over hand-driving the phases;
+the endpoint reference below is for triage and ad-hoc checks.
 
 1. **Poll `/ping` until it answers** (bridge HTTP thread comes up quickly,
    but don't assume instant — poll, don't sleep-once):
@@ -61,6 +77,16 @@ pins the autosave dir the script later parses.)
    by hand before driving.
 4. When done: `POST /rack/quit` for a graceful shutdown (saves
    settings/autosave); only kill the process as a failure-path fallback.
+5. **Crash = stop, permanently.** If the Rack process dies without your
+   `/rack/quit` (check `pgrep -f "MacOS/Rack"` when `/ping` starts refusing
+   connections mid-session), the session is over and any UAT run in
+   progress is an immediate FAIL. Do **not** relaunch and continue: the
+   next launch after a crash shows a modal "Rack crashed" safe-mode dialog
+   that the bridge cannot see or dismiss — automation would hang on
+   `/ping` or, worse, drive a safe-moded Rack. Preserve evidence first
+   (your Rack stderr/stdout capture, `~/Library/Application Support/Rack2/log.txt`,
+   new `~/Library/Logs/DiagnosticReports/Rack-*.ips`), then hand recovery
+   to the human.
 
 ## Endpoint reference (as implemented)
 
@@ -126,11 +152,25 @@ parse `statusLine` with a regex/`test()`.
 | `POST /master/{id}/midi-port` | `{port, direction:"in"|"out", deviceName}` (substring match, first hit by driverId then deviceId order) | `{ok:true, driverId, deviceId, name}` | 400 invalid body / bad direction; 404 `{"error":"no such midi port on this master","port":...}` or `{"error":"no device name matched","candidates":[...]}`; 503 ui-not-attached; 404 unknown master |
 | `GET /master/{id}/faders` | — | `[{global, motorTarget, notches, led, ledColor}, ...]` in chain order; `[]` with no patch or no M4 | 404 unknown master |
 | `GET /master/{id}/leds` | — | `{matrix:[16 x {r,g,b}]}` present **only** on masters with an LED matrix (MASTER16; omitted entirely on MASTER18 — check for key presence, not an empty array), plus `buttons:{"L<ctrl>.<n>": 0..1}` always present | 404 unknown master |
+| `POST /master/{id}/watch` | `{ids:["_CABLE","B2.1","F1",...]}` (max 16) — arm a signal watch; each id is sampled once per ENGINE TICK in the master's `process()` from the next tick on, so 1-tick trigger pulses are caught by construction (register polling can't). Cables and `F<n>` fader handles ARE existence-checked here (the one place a typo'd `_CABLE` 400s instead of reading 0); plain registers are parse-checked only — a syntactically valid register nothing in the chain backs (`O9`, a button on an absent controller) still arms and reads 0.0. Re-arming replaces the previous watch. | `{armed:true, ids:[...]}` | 400 invalid body / empty or oversized ids / `{"error":"unknown signal","name":...}` / no patch loaded; 404 unknown master |
+| `GET /master/{id}/watch` | — (disarms + collects) | `{tickRateHz, signals:{"<id>":{min,max,avg,last,edges,highMs,ticks}}}` — engine units (−1…+1); `edges` = rising 0.1 crossings with 0.05 re-arm, starting DISARMED (a window opening mid-pulse doesn't count the in-progress pulse); `highMs` = time spent ≥ 0.1 (integrated at the tick rate current at each sample, so a mid-window tick-rate change can't skew it); `ticks == 0` means the engine never ticked while armed (no data, not "all low") | 409 no watch armed — including after a patch load/reload/reset-state disarmed the watch mid-window (an engine swap invalidates the arm-time name validation, so the bridge 409s rather than returning silently-stale zeros); 404 unknown master |
 
 Register-id kinds: plain registers (`O1`, `L1.1`, `R3`, ...) go through the
 same `parseRegisterName` the engine uses and 400 if unrecognized. Cable
-(`_NAME`) and fader (`F<n>`) handles have **no existence check** — an
-unresolvable one silently reads back `0.0` rather than 400ing (see Caveats).
+(`_NAME`) and fader (`F<n>`) handles have **no existence check** on
+`/registers` — an unresolvable one silently reads back `0.0` rather than
+400ing (see Caveats). `POST /master/{id}/watch` DOES validate them, so
+arming a watch is also the cheap way to confirm a cable name exists.
+
+**Gesture-fired check (closed-loop driving):** to verify a longpress/chord
+actually registered engine-side, arm a watch on the internal cable the
+gesture must pulse (e.g. the fixture's `_SAVEP`, MFPS's `_T1_P1_SAVE`)
+*plus* the button's `B` register as evidence, drive the gesture, collect:
+`edges >= 1` on the cable = it fired; the `B` register's `highMs` is the
+engine-perceived press duration. If it didn't fire, retry the gesture
+(read-before-act, same as toggle taps) — an 1800 ms hold sits only ~300 ms
+above the 1.5 s longpress threshold and transient stalls can eat that.
+`tools/uat_run.py` wraps this as `gesture_fired()`.
 
 **Units — two different scales, don't mix them up.** `/master/{id}/registers`
 returns values in DROID's normalized **−1…+1** engine domain (the project's
@@ -155,7 +195,7 @@ square feeds) read back as **0/1**, not 0/10 — only the Rack-port voltage
 | `GET /cables` | — | `[{id, outputModuleId, outputId, inputModuleId, inputId}]` | 503 ui-not-attached |
 | `POST /cables` | `{outputModuleId, outputId, inputModuleId, inputId}` | `{id}` | 400 invalid body / portId out of range; 404 no such module; 503 ui-not-attached |
 | `DELETE /cables/{id}` | — | `{ok:true}` | 404 no such cable; 503 ui-not-attached |
-| `POST /params` | `{moduleId, paramId, value, holdMs}` — `holdMs` omitted/0 = plain set; `>0` = set now, auto-reset to `0` after `holdMs` ms | `{ok:true, holdMs?}` (holdMs echoed only if >0) | 400 missing/non-numeric moduleId/paramId, negative paramId, or paramId out of range for the module; 404 no such module; 503 ui-not-attached |
+| `POST /params` | `{moduleId, paramId, value, holdMs}` — `holdMs` omitted/0 = plain set; `>0` = set now, auto-reset to `0` after `holdMs` ms **of ENGINE SAMPLE TIME** (frame-deadline, anchored when the set lands on the UI thread). Equals wall time when a real audio device drives the engine; with no Audio module, Rack's CPU-clocked fallback engine thread can run up to ~26% slower than wall (observed), so the release can take proportionally longer in wall terms — but the gesture's duration as the DROID engine measures it (longpress thresholds!) is always exactly `holdMs`. | `{ok:true, holdMs?}` (holdMs echoed only if >0) | 400 missing/non-numeric moduleId/paramId, negative paramId, or paramId out of range for the module; 404 no such module; 503 ui-not-attached |
 | `GET /probe?moduleId=&portId=&kind=out\|in&ms=500` | query only | `{min, max, avg, edges, periodStddevMs, sampleRateHz}` | 400 missing/invalid moduleId, portId, kind, or ms; 400 portId out of range; 404 no such module (or module removed mid-probe) |
 
 `503 {"error":"ui bridge not attached; add any vcvoid module or launch from
@@ -184,16 +224,21 @@ DROID register: `O1` = outputs[0], `O4` = outputs[3], etc.
 - **Steady-clock check**: same probe, assert `periodStddevMs` is a small
   fraction of the expected period (needs `edges >= 3` to be meaningful —
   0/1 edges always report `periodStddevMs: 0`, which is "no data," not
-  "steady"). CALIBRATION CAVEAT (measured 2026-07-11): per-sample timestamps
-  are reconstructed as a uniform grid over a wall-clock window that includes
-  arm/disarm overhead, so `sampleRateHz` reads ~10% below the true rate and
-  `periodStddevMs` is inflated by the same skew — a clean 5 Hz square
-  measured ~47 ms stddev on a 200 ms period. Use `periodStddevMs` for
-  relative comparisons (steady vs wildly jittering), not absolute `< 2 ms`
-  asserts, until the probe timestamps real sample times.
-  `sampleRateHz` tells you the probe's approximate time resolution for that
-  call (vcvoid masters get audio-rate sampling via a ring buffer; any other
-  module is sampled on the HTTP thread at ~1 kHz).
+  "steady"). FIXED (2026-07-12, issue #5): probe timestamps are no longer
+  reconstructed from a wall-clock window. vcvoid-master probes are
+  frame-accurate — each sample's timestamp is derived from the true
+  audio-thread sample rate (`args.sampleRate`, captured live alongside the
+  sample write, not looked up after the fact), so `sampleRateHz` reports the
+  real engine rate and `periodStddevMs` is honest. Absolute asserts like
+  `periodStddevMs < 2 ms` on a clean square are now legitimate for master
+  probes. Foreign-module probes (any non-vcvoid module) get a real
+  `steady_clock` timestamp per sample instead of an assumed-uniform 1 ms
+  grid, so their `periodStddevMs` reflects actual HTTP-thread scheduling
+  jitter at ~1 kHz resolution — expect looser tolerances there than on a
+  master probe.
+  `sampleRateHz` tells you the probe's time resolution for that call (vcvoid
+  masters: the true audio engine rate via a ring buffer; any other module:
+  actual samples-over-actual-span at ~1 kHz on the HTTP thread).
 - **DC / level check**: probe over a short window (~50–200 ms is plenty for
   a non-moving signal); assert `min ≈ max ≈ avg` (within float noise) and
   compare `avg` to the expected voltage.

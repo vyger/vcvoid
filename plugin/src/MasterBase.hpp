@@ -139,11 +139,17 @@ struct DroidMasterBase : Module {
     // it does not grow or wrap.
     static constexpr size_t kProbeMaxSamples = 1'000'000;
     std::atomic<bool> probeArmed_{false};
-    std::mutex probeMutex_;                 // guards probePort_/probeIsOutput_/probeBuf_/probeCount_
+    std::mutex probeMutex_;                 // guards probePort_/probeIsOutput_/probeBuf_/probeCount_/probeRateHz_
     int probePort_ = 0;
     bool probeIsOutput_ = true;
     std::vector<float> probeBuf_;
     size_t probeCount_ = 0;
+    // True audio-thread sample rate at capture time (args.sampleRate),
+    // recorded alongside every sample write below. Lets the bridge derive
+    // frame-exact timestamps (i / probeRateHz_) instead of reconstructing a
+    // grid from HTTP-thread wall-clock elapsed time, which runs ~10% slow
+    // once arm/disarm/re-resolution overhead is folded in (issue #5).
+    double probeRateHz_ = 0.0;
 
     // Arm a probe on output/input port `port` (Rack port index, 0-based).
     // Called from the HTTP thread; must run before the caller starts timing
@@ -156,16 +162,95 @@ struct DroidMasterBase : Module {
         probeCount_ = 0;
         probeArmed_.store(true, std::memory_order_release);
     }
-    // Disarm and return the collected samples (only the first probeCount_ are
-    // valid data; the rest of the preallocated buffer is discarded here).
-    std::vector<float> disarmProbe() {
+    // Disarm and return the collected samples plus the true audio-thread
+    // sample rate they were captured at (out param, Hz; 0 if no frame ever
+    // ran while armed). Only the first probeCount_ samples are valid data;
+    // the rest of the preallocated buffer is discarded here.
+    std::vector<float> disarmProbe(double* rateHzOut = nullptr) {
         std::lock_guard<std::mutex> lk(probeMutex_);
         probeArmed_.store(false, std::memory_order_relaxed);
         std::vector<float> out(probeBuf_.begin(), probeBuf_.begin() + probeCount_);
         probeBuf_.clear();
         probeBuf_.shrink_to_fit();
+        if (rateHzOut) *rateHzOut = probeRateHz_;
         return out;
     }
+
+    // --- UAT bridge signal watch (M6 follow-up: engine registers / cables) ---
+    // Armed/collected by the HTTP thread (uat::Bridge::handleWatch*) via
+    // armWatch()/collectWatch(); sampled once per ENGINE TICK right after
+    // engine->tick() below, inside the engineMutex hold — so a 1-tick trigger
+    // pulse (e.g. an internal cable like _T1_P1_SAVE) is caught by
+    // construction, which HTTP-side register polling cannot guarantee.
+    // Stats are O(1) per signal regardless of window length (no sample
+    // buffer), so a watch left armed by a vanished client is harmless.
+    // Lock order: the audio thread holds engineMutex then takes watchMutex_;
+    // HTTP-side arm/collect take watchMutex_ alone (never inside->outside).
+    // Edge = rising crossing of 0.1 with re-arm below 0.05 (engine units:
+    // 1 V / 0.5 V — the /probe Schmitt scaled by 10), starting DISARMED so a
+    // window opening mid-pulse doesn't count the in-progress pulse.
+    struct WatchStat {
+        std::string name;       // as armed: register, "F<n>", or "_CABLE"
+        float min = 0.f, max = 0.f, last = 0.f;
+        double sum = 0.0;
+        uint64_t ticks = 0;     // samples taken (0 -> engine never ticked)
+        // Time spent >= 0.1, integrated per tick at the tick rate CURRENT at
+        // each sample — a mid-window tick-rate change (adaptive mode, POST
+        // tick-rate) can't misscale the total the way a ticks-x-final-rate
+        // conversion would.
+        double highSecs = 0.0;
+        int edges = 0;
+        bool edgeArmed = false;
+    };
+    static constexpr size_t kWatchMaxSignals = 16;
+    std::mutex watchMutex_;     // guards watch_/watchTickRate_ (tick vs arm/collect)
+    std::atomic<bool> watchArmed_{false};
+    std::vector<WatchStat> watch_;
+    float watchTickRate_ = 0.f; // effectiveRate at last sample (reported as tickRateHz)
+
+    // Install a watch (replaces any armed one). Caller (bridge HTTP thread)
+    // validates the names against the live engine FIRST, under engineMutex.
+    // The vector (with its string allocations) is built OUTSIDE the lock and
+    // swapped in, so a re-arm over a live watch never blocks the audio
+    // thread on HTTP-thread heap work.
+    void armWatch(const std::vector<std::string>& names) {
+        std::vector<WatchStat> fresh;
+        fresh.reserve(names.size());
+        for (const auto& n : names) {
+            WatchStat w;
+            w.name = n;
+            fresh.push_back(std::move(w));
+        }
+        std::lock_guard<std::mutex> lk(watchMutex_);
+        watch_.swap(fresh);
+        watchTickRate_ = 0.f;
+        watchArmed_.store(!watch_.empty(), std::memory_order_release);
+    }
+    // Disarm and collect the accumulated stats. Returns false (leaving *out
+    // untouched) if no watch was armed — checked under the same lock as the
+    // collect so two concurrent collectors can't both read one arm.
+    bool collectWatch(std::vector<WatchStat>* out, float* tickRateOut = nullptr) {
+        std::lock_guard<std::mutex> lk(watchMutex_);
+        if (!watchArmed_.load(std::memory_order_relaxed))
+            return false;
+        watchArmed_.store(false, std::memory_order_relaxed);
+        if (tickRateOut) *tickRateOut = watchTickRate_;
+        out->clear();
+        out->swap(watch_);
+        return true;
+    }
+    // Drop any armed watch. Called (under engineMutex) wherever the engine
+    // is swapped or destroyed: the arm-time name validation only holds for
+    // the engine it ran against — a stale cable name would silently read 0.0
+    // from the new engine every tick (Engine::getValue's documented unknown-
+    // name behavior), which is indistinguishable from "signal never fired".
+    // Collecting after a mid-watch patch load now 409s instead.
+    void disarmWatch() {
+        std::lock_guard<std::mutex> lk(watchMutex_);
+        watch_.clear();
+        watchArmed_.store(false, std::memory_order_relaxed);
+    }
+    bool watchArmed() const { return watchArmed_.load(std::memory_order_acquire); }
 
     // --- tick-cost stats (issue #3 CPU query) ---
     // Audio-thread accumulation over ~1 s epochs, published as atomics the
@@ -320,6 +405,10 @@ public:
             }
         }
         std::lock_guard<std::mutex> lock(engineMutex);
+        // Every engine swap/drop invalidates an armed signal watch: its names
+        // were validated against the OLD engine (see disarmWatch). Lock order
+        // engineMutex -> watchMutex_ matches the audio thread's.
+        disarmWatch();
         lastResult = r;
         patchPath = path;
         if (r.ok) {
@@ -394,6 +483,7 @@ public:
             std::lock_guard<std::mutex> lock(engineMutex);
             path = patchPath;
             engine.reset();
+            disarmWatch();   // engine dropped: armed names no longer resolvable
             lastSnapshot = droid::StateSnapshot();
         }
         if (!path.empty())
@@ -421,16 +511,23 @@ public:
         if (probeArmed_.load(std::memory_order_acquire)) {
             std::lock_guard<std::mutex> lk(probeMutex_);
             if (probeArmed_.load(std::memory_order_relaxed) && probeCount_ < probeBuf_.size()) {
+                probeRateHz_ = args.sampleRate;
                 probeBuf_[probeCount_++] = probeIsOutput_
                     ? outputs[probePort_].getVoltage()
                     : inputs[probePort_].getVoltage();
             }
         }
 
-        if (++frameCounter < divider) return;
-        frameCounter = 0;
+        // Saturating increment: while a tick is overdue (contended below) the
+        // counter parks at `divider` instead of growing without bound, so a
+        // pathological contention streak can't overflow it.
+        frameCounter = std::min(frameCounter + 1, divider);
+        if (frameCounter < divider) return;
         std::unique_lock<std::mutex> lock(engineMutex, std::try_to_lock);
-        if (!lock.owns_lock()) return;   // contended: retry next tick frame
+        if (!lock.owns_lock()) return;   // overdue: retry the try-lock next frame
+        // Reset only once the lock is held: a contended frame delays the tick
+        // by ≤1 audio frame instead of dropping a whole divider cycle (#7).
+        frameCounter = 0;
 
         using namespace droid::chain;
         // ---- chain upstream: controls from the expander chain -------------
@@ -627,6 +724,33 @@ public:
             statValid.store(true);
             epochSumUs_ = epochMaxUs_ = 0.0;
             epochTicks_ = 0;
+        }
+
+        // UAT signal watch: sample armed engine signals once per tick, fresh
+        // off engine->tick() above (engine is non-null on this path). Lock-free
+        // armed check first so the common (unarmed) case costs one atomic load.
+        if (watchArmed_.load(std::memory_order_acquire)) {
+            std::lock_guard<std::mutex> wlk(watchMutex_);
+            if (watchArmed_.load(std::memory_order_relaxed)) {
+                watchTickRate_ = effectiveRate;
+                for (WatchStat& w : watch_) {
+                    float v = engine->getValue(w.name);
+                    if (w.ticks == 0) w.min = w.max = v;
+                    w.min = std::min(w.min, v);
+                    w.max = std::max(w.max, v);
+                    w.last = v;
+                    w.sum += v;
+                    w.ticks++;
+                    if (v >= 0.1f && effectiveRate > 0.f)
+                        w.highSecs += 1.0 / effectiveRate;
+                    if (w.edgeArmed && v >= 0.1f) {
+                        w.edgeArmed = false;
+                        w.edges++;
+                    } else if (!w.edgeArmed && v < 0.05f) {
+                        w.edgeArmed = true;
+                    }
+                }
+            }
         }
 
         // ---- chain downstream: LED states to the expander chain -----------

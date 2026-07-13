@@ -28,6 +28,14 @@ in the phases** — if a step is in a phase body, it is machine-verified.
 Each step keeps its original phase/number so results can cite `10.5`-style
 locators.
 
+**The canonical executor is `tools/uat_run.py`** (`python3 tools/uat_run.py`;
+`--list` prints the steps, `--phases 1,3,10` selects a subset): it runs every
+machine-checkable step deterministically, loads gestures/paramIds from the
+driving maps in `docs/uat/driving/`, and writes the per-step record to
+`docs/uat/results/` (exit code = FAIL count). An agent's role is to run it and
+triage failures; manual step-by-step bridge driving remains the fallback, and
+this document remains the spec.
+
 ## Preconditions
 
 - Build + install: `cd plugin && make install` (bakes `VCVOID_GIT_HASH` into
@@ -36,13 +44,22 @@ locators.
 - Launch from the **rack template** `tests/smoketest_default.vcv` — a
   single BLANK master, nothing else, and it stays pristine that way; every
   run builds its rack up from that one master via `POST /modules`. Rack
-  takes the patch as a positional argument. Always launch a scratch COPY —
-  `POST /rack/save` writes back to the loaded patch's own path and would
-  mutate the repo template:
-  1. `cp tests/smoketest_default.vcv /tmp/uat-session.vcv`
-     `VCVOID_UAT_BRIDGE=1 "/Applications/VCV Rack 2 Free.app/Contents/MacOS/Rack" /tmp/uat-session.vcv &`
-     (or just run `tools/uatbridge-smoke.sh` — launch mode does exactly this
-     and doubles as the fast regression gate before the phases below).
+  takes the patch as a positional argument. Always launch a scratch COPY
+  with a **unique, per-run filename** — `POST /rack/save` writes back to the
+  loaded patch's own path, so a fixed name like `/tmp/uat-session.vcv` is a
+  trap: the persistence phases save the full end-of-run rack into it, and
+  the next launch that forgets the `cp` silently starts from that dirty
+  rack instead of the template (observed 2026-07-12: a follow-up launch
+  inherited a previous run's controller row). A fresh `mktemp` name makes a
+  stale reuse impossible rather than merely unlikely:
+  1. `SESSION=$(mktemp -t uat-session-XXXXXX).vcv`
+     `cp tests/smoketest_default.vcv "$SESSION"`
+     `VCVOID_UAT_BRIDGE=1 "/Applications/VCV Rack 2 Free.app/Contents/MacOS/Rack" "$SESSION" &`
+     (or just run `tools/uatbridge-smoke.sh` — launch mode handles the
+     scratch copy and doubles as the fast regression gate before the
+     phases below). Relaunches *within* one run's persistence phases reuse
+     that same `$SESSION` path on purpose — surviving state is what those
+     phases assert — but a NEW run always mints a new name.
   2. Poll `GET /ping` until it answers; compare `.gitHash` to
      `git rev-parse --short HEAD` — mismatch means rebuild/reinstall, don't
      proceed (`SKIP_HASH`-style overrides are for docs-only HEAD drift only).
@@ -57,6 +74,25 @@ locators.
      HTTP thread cannot attach it), so zero vcvoid modules ⇒ every
      UI-thread route 503s, `POST /modules` included.
 - Audio device active in Rack (the engine must tick).
+
+### Crash = immediate FAIL (no recovery)
+
+A Rack **crash aborts the entire UAT run, immediately and permanently** —
+the run's verdict is FAIL regardless of how many steps had passed.
+Detection: the Rack process exits without a `POST /rack/quit` having been
+issued, or `/ping` stops answering mid-run (connection refused, not a slow
+response) — verify with a process check (`pgrep -f "MacOS/Rack"`) before
+concluding crash vs. transient.
+
+On crash: do **NOT** relaunch and continue. The next Rack launch after a
+crash posts a modal "Rack crashed" safe-mode dialog that no bridge endpoint
+can see or dismiss — the bridge never comes up behind it, and any attempt
+to automate past it operates on an unknown, safe-moded state. Recovery is a
+**human** action (clear the dialog, decide on the autosave). The harness
+must instead: record `CRASH` at the exact step locator, preserve evidence
+(the Rack stderr/stdout capture, `~/Library/Application Support/Rack2/log.txt`,
+and any new `~/Library/Logs/DiagnosticReports/Rack-*.ips` crash report),
+write the results file, and stop.
 - Template patches (all in `patches/`, all pre-validated against
   `droidcheck` and `make patchsmoke`):
   `uat-core.ini`, `uat-overlays.ini`, `uat-gates.ini`,
@@ -107,13 +143,18 @@ automated run.
 1. ☐ Follow Preconditions: build+install, launch, `/ping` gitHash gate,
    master-registration poll. Equivalent to running
    `tools/uatbridge-smoke.sh` up through its ping/discovery section.
-2. ☐ `GET /modules` after self-assembling or loading a patch with all 14
-   vcvoid modules present at least once — or, simpler, instantiate each
-   vcvoid slug in turn via `POST /modules {"plugin":"vcvoid","slug":"<x>", "x":..,"y":..}`
+2. ☐ First record the template master's id from `GET /modules` — that
+   module is the run's lifeline and must NEVER be deleted: the bridge's UI
+   drain detaches with zero vcvoid modules in the rack, after which every
+   UI-thread route (including `POST /modules` itself) 503s until a
+   relaunch. Then instantiate each vcvoid slug in turn via
+   `POST /modules {"plugin":"vcvoid","slug":"<x>", "x":..,"y":..}`
    for each of `master, master18, p2b8, p4b2, p10, s10, p8s8, b32, e4, m4,
    g8, db8e, x7, bling` → expect 200 + `{id}` each time, then
-   `DELETE /modules/{id}` for each → expect `{ok:true}`, no non-200 in the
-   sequence.
+   `DELETE /modules/{id}` for **exactly the ids returned by those POSTs**
+   (never the template master's) → expect `{ok:true}`, no non-200 in the
+   sequence. Afterwards `GET /modules` → the template master (original id)
+   is still present, alone.
 
 ## Phase 2 — Chain assembly edge cases
 
@@ -146,18 +187,38 @@ Rack row: `master | p2b8 | b32` (adjacent, left to right).
 Rack row: `master | p2b8`. `POST /master/{id}/patch` with the absolute path
 to `uat-core.ini` first.
 
+> **Autosave vs `periodStddevMs` asserts (defensive guard):** Rack's periodic
+> (~15 s) autosave serializes the whole rack on the UI thread and *can* hiccup
+> the audio engine — a Rack-core effect unrelated to vcvoid tick scheduling
+> (issue #7 fixed the vcvoid-side drops; no autosave-correlated stall has
+> actually been observed yet). If a probe window straddles an autosave
+> (`saveAutosave` count in Rack2 `log.txt` increased during the probe),
+> discard the sample and re-probe once — the next autosave is ~15 s out.
+> Only retry with that log evidence; an unexplained stall must FAIL.
+> (`tools/uat_run.py` does this automatically via `probe_steady`.)
+
 1. ☐ Sweep P1.1: `POST /params {"moduleId":p2b8,"paramId":0,"value":0.0}`
    then `1.0`. `GET /master/{id}/registers?ids=O1` before/after → value
    moves consistent with a 1→10 Hz sine sweep (A×B+C input math); or probe
    O1 (`kind=out`, portId=0) at each end and compare `edges` over a fixed
    window.
-2. ☐ `GET /probe?moduleId={id}&portId=3&kind=out&ms=1300` (O4) with
-   I1 unpatched → `edges` in `4±1` for a 2 Hz retrigger over 1300 ms (N1
-   normalization feeding I1). Exact recipe in `tools/uatbridge-smoke.sh`.
+2. ☐ `GET /probe?moduleId={id}&portId=3&kind=out&ms=2100` (O4) with
+   I1 unpatched → `edges` in `4±1` for a 2 Hz retrigger (500 ms period,
+   4.2 expected) over 2100 ms (N1 normalization feeding I1), **and**
+   `periodStddevMs < 3` (probe timestamps are frame-accurate for a vcvoid
+   master as of issue #5 — this is now a real absolute assert, not a relative
+   "steadier than noise" check). Exact recipe in `tools/uatbridge-smoke.sh`.
 3. ☐ `POST /cables` wiring a Rack LFO (~8 Hz square) into master
    I1 (portId per `GET /modules`/`GET /cables` port indices). Probe O4 →
-   edges jump to ~8 Hz×window. `DELETE /cables/{id}` → probe O4 again →
-   back to ~2 Hz (N1 normalization). First live normalization test.
+   the contour is in *trigger* mode (attack ~1 ms straight to a ~200 ms
+   release, see `manual/circuits/contour.md`): at an 8 Hz retrigger the
+   release never completes, so O4's `min`/`avg` **jump up by volts** vs the
+   N1 baseline (edges as counted by the probe's 0.5 V-re-arm Schmitt actually
+   collapse to ~1 — do NOT assert an edge-count increase). `DELETE
+   /cables/{id}` → probe O4 again → back to the ~2 Hz N1 envelope (edges
+   within ±1 of baseline, `min` back below 0.5 V), with baseline/reverted
+   `periodStddevMs < 3` in both the pre-cable and post-uncable probes (same
+   steady 2 Hz N1 square as step 2). First live normalization test.
 4. ☐ Euclid rate cross-check: `GET /probe?moduleId={id}&portId=1&kind=out&ms=2000`
    (O2) → edges consistent with 5-in-8 euclid at the R1-driven rate. (The
    master matrix LED's 3 Hz *flash*/color for input 1 has no bridge endpoint
@@ -197,9 +258,17 @@ Rack row: `master | p2b8 | b32`. Load via `POST /master/{id}/patch`.
    save: `POST /params {"moduleId":p2b8,"paramId":<B1.6 id=7>,"value":1,"holdMs":1800}`
    (≥1.5 s per SKILL.md's longpress convention — **must** go through this
    bridge's `holdMs`, not a scripted click, per the driving-knowledge note
-   that other UI-click paths don't reliably register holds). Change the
+   that other UI-click paths don't reliably register holds). **Verify the
+   longpress actually fired** via the signal watch: arm
+   `POST /master/{id}/watch {"ids":["_SAVEP","B1.6"]}` before the gesture,
+   `GET /master/{id}/watch` after → `_SAVEP.edges >= 1` (the fixture wires
+   B1.6's `longpress` output to `_SAVEP`); retry the gesture if it didn't
+   fire — 1800 ms sits only ~300 ms above the 1.5 s threshold and transient
+   engine stalls have been observed to eat that margin (`B1.6`'s `highMs` in
+   the same watch is the engine-perceived press duration). Change the
    pattern (tap a different step button), then longpress-load
-   (`paramId=<B1.5 id=6>`, `holdMs:1800`). `GET /master/{id}/registers`
+   (`paramId=<B1.5 id=6>`, `holdMs:1800`, watch `_LOADP` the same way).
+   `GET /master/{id}/registers`
    for the pattern-bearing registers → pattern snaps back to the saved one.
 
 ## Phase 5 — Persistence & timing
@@ -247,11 +316,21 @@ Continue from Phase 4 state.
 
 ## Phase 6 — Gates & MASTER18 (`uat-gates.ini`, `test-m6-master18.ini`)
 
-Rack row: `master | g8 | x7`.
+Rack row: `master | x7 | g8` — the X7 must sit **immediately right of the
+master** (block[0]; `engine/src/chain.cpp` `x7ChainError` reports
+`x7 must be first in the chain` otherwise, verified live 2026-07-12: a
+g8-first row pins `chainError` and freezes the G8 gates).
 
 1. ☐ `GET /probe?moduleId={g8id}&portId=0&kind=out&ms=1200` →
    edges `≈1.2±1` (1 Hz gate), `min≈0,max≈5` (0/5 V, not the 0/10 V
-   register scale). Jack 2 (portId=1) at 0.5 Hz similarly.
+   register scale). Jack 2 (portId=1, 0.5 Hz divided clock): assert
+   liveliness via the **signal watch on register `G2`** (`edges >= 1` over a
+   ~4.5 s window), not the port probe alone — `clocktool`'s default output
+   gate is only 10 ms (`manual/circuits/clocktool.md`), which the foreign-
+   module probe's ~1 kHz HTTP-thread sampling can legitimately miss; the
+   per-engine-tick watch cannot. Assert the port's 5 V level only when the
+   probe did catch a pulse (jack 1's 50%-duty square already proves the
+   0/5 V port property).
 2. ☐ `POST /cables` a Rack square LFO into G8 jack 5 **input**
    half (`portId=4`, `kind=in` semantics — the input is a separate Rack
    input port per SKILL.md's split-hitbox note, not a kind flag on one
@@ -356,6 +435,12 @@ CLAUDE.md) — same bytes as would ship to hardware.
 1. ☐ Assemble the five-module row via `POST /modules`; `POST
    /master/{id}/patch` the absolute path to `uat-mfps.ini` →
    `.statusLine` matches `^ok, [0-9]+ bytes RAM`; `.chainError` empty.
+   Then `POST /master/{id}/reset-state` — **required, not optional**: patch
+   loads transfer the previous patch's circuit state into same-type circuits
+   of the new one (hardware-faithful, hardware.md §11.1), and an earlier
+   fixture's state was observed to silently gate off MFPS tracks (flat
+   gates/pitch in steps 2-4 below). The capstone spec assumes a freshly
+   generated MFPS (zero active steps), so re-seed from startvalues.
 2. ☐ Press B2.12 (START — b32 paramId 11): `POST /params
    {"moduleId":b32,"paramId":11,"value":1,"holdMs":300}`. `GET
    /probe?moduleId={id}&portId=1&kind=out&ms=1000` (gate on O2) → edges
@@ -373,16 +458,26 @@ CLAUDE.md) — same bytes as would ship to hardware.
    under patch control).
 5. ☐ Preset save/load round-trip. Baseline: `GET /master/{id}/faders`
    (record melody state). Save to preset A: `POST /params` longpress B2.1
-   (`paramId:0`, `holdMs:1800`, per the ≥1.5 s longpress convention).
-   Mangle the melody (change several fader values via touch+move as in
-   step 3). Re-read `GET /master/{id}/faders` to confirm the mangle landed
-   (rules out a false read). Load preset A (longpress the MFPS's load
-   control — confirm its actual load paramId from the patch's generated
-   button map before scripting). `GET /master/{id}/faders` → matches the
-   saved baseline. If it does not, `POST /master/{id}/reset-state`
-   (fresh-boot re-seed from startvalues) and repeat save→mangle→load once
-   from a known-clean state to isolate save-vs-load — the assertion is that
-   a clean-state round-trip restores the saved faders exactly.
+   (b32 `paramId:0`, `holdMs:1800`, per the ≥1.5 s longpress convention) —
+   save needs no modifier. **Verify it fired** via the signal watch (arm
+   `POST /master/{id}/watch {"ids":["_T1_P1_SAVE","B2.1"]}` before,
+   `GET /master/{id}/watch` after → `_T1_P1_SAVE.edges >= 1`; retry the
+   gesture if not — see Phase 4 step 3 for why). Load's fire signal is
+   `_T1_P1_LOAD` (watch `_CONTROL` alongside as evidence the modifier hold
+   was seen). **Load is a CTRL chord, not a tap**: the MFPS
+   load button is wired `b = B2.1 * _CONTROL` with `_CONTROL = B1.8` (the
+   p2b8 CTRL button), so a bare tap on B2.1 computes `B2.1 × 0 = 0` and
+   silently does nothing (exactly the 2026-07-12 run's false FAIL). Drive
+   the chord as two overlapping holds: `POST /params` B1.8 (p2b8
+   `paramId:9`, `value:1`, `holdMs:1500`), then immediately `POST /params`
+   B2.1 (b32 `paramId:0`, `value:1`, `holdMs:300`) inside that window.
+   `GET /master/{id}/faders` → matches the saved baseline. If it does not,
+   `POST /master/{id}/reset-state` (fresh-boot re-seed from startvalues)
+   and repeat save→mangle→load once from a known-clean state to isolate
+   save-vs-load — the assertion is that a clean-state round-trip restores
+   the saved faders exactly. Mangle between save and load via touch+move
+   as in step 3, and re-read `GET /master/{id}/faders` to confirm the
+   mangle landed (rules out a false read).
 6. ☐ LUCK (B2.10) randomize: `POST /params` tap; RATC (B2.17)
    ratchets: `POST /params` tap. `GET /probe` on the gate outputs (O2 /
    O4 / O6 / O8, portIds 1/3/5/7) before/after each → edges count/pattern

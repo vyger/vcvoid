@@ -1,0 +1,232 @@
+{
+  "_comment": "MFPS gesture map for patches/uat-mfps.ini (Phase 10 capstone). Rack row: master | p2b8 | b32 | m4 | m4. 'module' is the generic vcvoid slug from modules.json; the runner resolves it to the actual Rack module id assembled for that row position. paramId ints per docs/uat/driving/modules.json (cite plugin/src/<Module>.cpp). 'desc' is copied from patches/uat-mfps.ini's own header comments (the patch's single source of truth for what each control does). Gestures: tap (holdMs 300), longpress (holdMs >=1500 threshold; use 1800 — the runner verifies each longpress fired via the /watch endpoint and retries, so no extra margin is needed), chord (hold modifier's holdMs, tap the primary control inside that window).",
+  "_source_patch": "patches/uat-mfps.ini (header comments, lines ~19-45)",
+  "modifiers": {
+    "CTRL": {
+      "module": "p2b8",
+      "paramId": 9,
+      "label": "B1.8",
+      "desc": "[CTRL] Switch some of the button functions",
+      "holdMs": 1500
+    }
+  },
+  "controls": {
+    "CTRL": {
+      "module": "p2b8",
+      "paramId": 9,
+      "label": "B1.8",
+      "desc": "[CTRL] Switch some of the button functions",
+      "gesture": "tap",
+      "holdMs": 300
+    },
+    "ROOT": {
+      "module": "p2b8",
+      "paramId": 2,
+      "label": "B1.1",
+      "desc": "[ROOT] Allow root note",
+      "gesture": "tap",
+      "holdMs": 300
+    },
+    "3RD": {
+      "module": "p2b8",
+      "paramId": 3,
+      "label": "B1.2",
+      "desc": "[3RD] Allow third note",
+      "gesture": "tap",
+      "holdMs": 300
+    },
+    "5TH": {
+      "module": "p2b8",
+      "paramId": 4,
+      "label": "B1.3",
+      "desc": "[5TH] Allow fifth note",
+      "gesture": "tap",
+      "holdMs": 300
+    },
+    "7TH": {
+      "module": "p2b8",
+      "paramId": 5,
+      "label": "B1.4",
+      "desc": "[7TH] Allow seventh note",
+      "gesture": "tap",
+      "holdMs": 300
+    },
+    "PRESET_A_SAVE": {
+      "module": "b32",
+      "paramId": 0,
+      "label": "B2.1",
+      "desc": "[Preset A] Ctrl: Switch to preset A, long press: save to preset A",
+      "gesture": "longpress",
+      "holdMs": 1800
+    },
+    "PRESET_A_LOAD": {
+      "module": "b32",
+      "paramId": 0,
+      "label": "B2.1",
+      "desc": "[Preset A] Ctrl: Switch to preset A, long press: save to preset A",
+      "gesture": "chord",
+      "modifier": "CTRL",
+      "holdMs": 300,
+      "note": "load is wired b = B2.1 * _CONTROL with _CONTROL = B1.8 (CTRL) -- a bare tap on B2.1 evaluates B2.1*0=0 and silently does nothing (the 2026-07-12 false FAIL). Drive as: hold CTRL (holdMs 1500), then within that window tap B2.1 (holdMs 300)."
+    },
+    "PRESET_B_SAVE": {
+      "module": "b32",
+      "paramId": 1,
+      "label": "B2.2",
+      "desc": "[Preset B] Ctrl: Switch to preset B, long press: save to preset B",
+      "gesture": "longpress",
+      "holdMs": 1800
+    },
+    "PRESET_B_LOAD": {
+      "module": "b32",
+      "paramId": 1,
+      "label": "B2.2",
+      "desc": "[Preset B] Ctrl: Switch to preset B, long press: save to preset B",
+      "gesture": "chord",
+      "modifier": "CTRL",
+      "holdMs": 300
+    },
+    "PRESET_C_SAVE": {
+      "module": "b32",
+      "paramId": 2,
+      "label": "B2.3",
+      "desc": "[Preset C] Ctrl: Switch to preset C, long press: save to preset C",
+      "gesture": "longpress",
+      "holdMs": 1800
+    },
+    "PRESET_C_LOAD": {
+      "module": "b32",
+      "paramId": 2,
+      "label": "B2.3",
+      "desc": "[Preset C] Ctrl: Switch to preset C, long press: save to preset C",
+      "gesture": "chord",
+      "modifier": "CTRL",
+      "holdMs": 300
+    },
+    "CLR": {
+      "module": "b32",
+      "paramId": 3,
+      "label": "B2.4",
+      "desc": "[CLR] Short press: reset play mode, with CTRL: clear track, long press factory reset",
+      "gesture": "tap",
+      "holdMs": 300
+    },
+    "LUCK": {
+      "module": "b32",
+      "paramId": 9,
+      "label": "B2.10",
+      "desc": "[LUCK] Randomly change step buttons, if Ctrl is held, change the gates instead.",
+      "gesture": "tap",
+      "holdMs": 300
+    },
+    "RST": {
+      "module": "b32",
+      "paramId": 10,
+      "label": "B2.11",
+      "desc": "[RST] Reset current track (Ctrl: all track) to step 1 immediately",
+      "gesture": "tap",
+      "holdMs": 300
+    },
+    "START": {
+      "module": "b32",
+      "paramId": 11,
+      "label": "B2.12",
+      "desc": "[START] Start/stop sequencer - start also does reset",
+      "gesture": "tap",
+      "holdMs": 300
+    },
+    "TON": {
+      "module": "b32",
+      "paramId": 12,
+      "label": "B2.13",
+      "desc": "[TON] Tonality menu",
+      "gesture": "tap",
+      "holdMs": 300
+    },
+    "CLK": {
+      "module": "b32",
+      "paramId": 13,
+      "label": "B2.14",
+      "desc": "[CLK] Menu for clock speed and swing",
+      "gesture": "tap",
+      "holdMs": 300
+    },
+    "TRK": {
+      "module": "b32",
+      "paramId": 14,
+      "label": "B2.15",
+      "desc": "[TRK] Track menu",
+      "gesture": "tap",
+      "holdMs": 300
+    },
+    "PERF": {
+      "module": "b32",
+      "paramId": 15,
+      "label": "B2.16",
+      "desc": "[PERF] Performance menu",
+      "gesture": "tap",
+      "holdMs": 300
+    },
+    "RATC": {
+      "module": "b32",
+      "paramId": 16,
+      "label": "B2.17",
+      "desc": "[RATC] Number of sub gates per clock",
+      "gesture": "tap",
+      "holdMs": 300
+    },
+    "COPY": {
+      "module": "b32",
+      "paramId": 23,
+      "label": "B2.24",
+      "desc": "[COPY] Copy current page of current track. With CTRL: Paste",
+      "gesture": "tap",
+      "holdMs": 300
+    },
+    "PAGE": {
+      "module": "b32",
+      "paramId": 27,
+      "label": "B2.28",
+      "desc": "[PAGE] Select second page of steps",
+      "gesture": "tap",
+      "holdMs": 300
+    },
+    "TRACK_1": {
+      "module": "b32",
+      "paramId": 28,
+      "label": "B2.29",
+      "desc": "[Track 1] Select track 1",
+      "gesture": "tap",
+      "holdMs": 300
+    },
+    "TRACK_2": {
+      "module": "b32",
+      "paramId": 29,
+      "label": "B2.30",
+      "desc": "[Track 2] Select track 2",
+      "gesture": "tap",
+      "holdMs": 300
+    },
+    "TRACK_3": {
+      "module": "b32",
+      "paramId": 30,
+      "label": "B2.31",
+      "desc": "[Track 3] Select track 3",
+      "gesture": "tap",
+      "holdMs": 300
+    },
+    "TRACK_4": {
+      "module": "b32",
+      "paramId": 31,
+      "label": "B2.32",
+      "desc": "[Track 4] Select track 4",
+      "gesture": "tap",
+      "holdMs": 300
+    }
+  },
+  "fader_paramId": {
+    "_comment": "m4 instance 1 = steps 1-4, m4 instance 2 = steps 5-8, per modules.json m4 layout.",
+    "faders": {"paramId_base": 0, "count": 4},
+    "touch_plates": {"paramId_base": 4, "count": 4}
+  }
+}
