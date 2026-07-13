@@ -176,6 +176,59 @@ struct DroidMasterBase : Module {
         return out;
     }
 
+    // --- UAT bridge signal watch (M6 follow-up: engine registers / cables) ---
+    // Armed/collected by the HTTP thread (uat::Bridge::handleWatch*) via
+    // armWatch()/collectWatch(); sampled once per ENGINE TICK right after
+    // engine->tick() below, inside the engineMutex hold — so a 1-tick trigger
+    // pulse (e.g. an internal cable like _T1_P1_SAVE) is caught by
+    // construction, which HTTP-side register polling cannot guarantee.
+    // Stats are O(1) per signal regardless of window length (no sample
+    // buffer), so a watch left armed by a vanished client is harmless.
+    // Lock order: the audio thread holds engineMutex then takes watchMutex_;
+    // HTTP-side arm/collect take watchMutex_ alone (never inside->outside).
+    // Edge = rising crossing of 0.1 with re-arm below 0.05 (engine units:
+    // 1 V / 0.5 V — the /probe Schmitt scaled by 10), starting DISARMED so a
+    // window opening mid-pulse doesn't count the in-progress pulse.
+    struct WatchStat {
+        std::string name;       // as armed: register, "F<n>", or "_CABLE"
+        float min = 0.f, max = 0.f, last = 0.f;
+        double sum = 0.0;
+        uint64_t ticks = 0;     // samples taken (0 -> engine never ticked)
+        uint64_t highTicks = 0; // samples >= 0.1
+        int edges = 0;
+        bool edgeArmed = false;
+        bool first = true;
+    };
+    static constexpr size_t kWatchMaxSignals = 16;
+    std::mutex watchMutex_;     // guards watch_/watchTickRate_ (tick vs arm/collect)
+    std::atomic<bool> watchArmed_{false};
+    std::vector<WatchStat> watch_;
+    float watchTickRate_ = 0.f; // effectiveRate at sample time (for highMs)
+
+    // Install a watch (replaces any armed one). Caller (bridge HTTP thread)
+    // validates the names against the live engine FIRST, under engineMutex.
+    void armWatch(const std::vector<std::string>& names) {
+        std::lock_guard<std::mutex> lk(watchMutex_);
+        watch_.clear();
+        for (const auto& n : names) {
+            WatchStat w;
+            w.name = n;
+            watch_.push_back(std::move(w));
+        }
+        watchTickRate_ = 0.f;
+        watchArmed_.store(!watch_.empty(), std::memory_order_release);
+    }
+    // Disarm and return the accumulated stats (empty if never armed).
+    std::vector<WatchStat> collectWatch(float* tickRateOut = nullptr) {
+        std::lock_guard<std::mutex> lk(watchMutex_);
+        watchArmed_.store(false, std::memory_order_relaxed);
+        if (tickRateOut) *tickRateOut = watchTickRate_;
+        std::vector<WatchStat> out;
+        out.swap(watch_);
+        return out;
+    }
+    bool watchArmed() const { return watchArmed_.load(std::memory_order_acquire); }
+
     // --- tick-cost stats (issue #3 CPU query) ---
     // Audio-thread accumulation over ~1 s epochs, published as atomics the
     // bridge HTTP thread reads lock-free. Epoch counters are audio-thread
@@ -643,6 +696,32 @@ public:
             statValid.store(true);
             epochSumUs_ = epochMaxUs_ = 0.0;
             epochTicks_ = 0;
+        }
+
+        // UAT signal watch: sample armed engine signals once per tick, fresh
+        // off engine->tick() above (engine is non-null on this path). Lock-free
+        // armed check first so the common (unarmed) case costs one atomic load.
+        if (watchArmed_.load(std::memory_order_acquire)) {
+            std::lock_guard<std::mutex> wlk(watchMutex_);
+            if (watchArmed_.load(std::memory_order_relaxed)) {
+                watchTickRate_ = effectiveRate;
+                for (WatchStat& w : watch_) {
+                    float v = engine->getValue(w.name);
+                    if (w.first) { w.min = w.max = v; w.first = false; }
+                    w.min = std::min(w.min, v);
+                    w.max = std::max(w.max, v);
+                    w.last = v;
+                    w.sum += v;
+                    w.ticks++;
+                    if (v >= 0.1f) w.highTicks++;
+                    if (w.edgeArmed && v >= 0.1f) {
+                        w.edgeArmed = false;
+                        w.edges++;
+                    } else if (!w.edgeArmed && v < 0.05f) {
+                        w.edgeArmed = true;
+                    }
+                }
+            }
         }
 
         // ---- chain downstream: LED states to the expander chain -----------

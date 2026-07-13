@@ -76,6 +76,12 @@ private:
     std::string handleMasterCpu(DroidMasterBase* m, int* code);
     std::string handleMasterCpuProfiling(DroidMasterBase* m, const Request& req, int* code);
 
+    // Signal watch (issue #5 UAT follow-up): tick-rate observation of engine
+    // registers / internal cables, arm (POST) + collect (GET) split so
+    // gestures can run while armed.
+    std::string handleWatchArm(DroidMasterBase* m, const Request& req, int* code);
+    std::string handleWatchCollect(DroidMasterBase* m, int* code);
+
     // Generic rack ops (Task 8): module/cable list/add/delete/move. All six
     // route through the uiCall() helper in Bridge.cpp (RackWidget/ModuleWidget/
     // CableWidget are UI-thread widgets, not Share-locked like Engine).
