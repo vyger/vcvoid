@@ -28,6 +28,14 @@ in the phases** — if a step is in a phase body, it is machine-verified.
 Each step keeps its original phase/number so results can cite `10.5`-style
 locators.
 
+**The canonical executor is `tools/uat_run.py`** (`python3 tools/uat_run.py`;
+`--list` prints the steps, `--phases 1,3,10` selects a subset): it runs every
+machine-checkable step deterministically, loads gestures/paramIds from the
+driving maps in `docs/uat/driving/`, and writes the per-step record to
+`docs/uat/results/` (exit code = FAIL count). An agent's role is to run it and
+triage failures; manual step-by-step bridge driving remains the fallback, and
+this document remains the spec.
+
 ## Preconditions
 
 - Build + install: `cd plugin && make install` (bakes `VCVOID_GIT_HASH` into
@@ -280,7 +288,10 @@ Continue from Phase 4 state.
 
 ## Phase 6 — Gates & MASTER18 (`uat-gates.ini`, `test-m6-master18.ini`)
 
-Rack row: `master | g8 | x7`.
+Rack row: `master | x7 | g8` — the X7 must sit **immediately right of the
+master** (block[0]; `engine/src/chain.cpp` `x7ChainError` reports
+`x7 must be first in the chain` otherwise, verified live 2026-07-12: a
+g8-first row pins `chainError` and freezes the G8 gates).
 
 1. ☐ `GET /probe?moduleId={g8id}&portId=0&kind=out&ms=1200` →
    edges `≈1.2±1` (1 Hz gate), `min≈0,max≈5` (0/5 V, not the 0/10 V
