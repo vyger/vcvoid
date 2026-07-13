@@ -179,9 +179,12 @@ std::string Bridge::handleMasterStatus(DroidMasterBase* m, int* code) {
 // dispatch the golden-test harness uses, engine.cpp:242); plain registers go
 // through parseRegId + canonicalize + getRegister, the fast typed path the
 // Rack chain adapter itself uses. An unresolved plain-register name is a 400
-// (the offending name is echoed); an unresolved cable/fader name has no
-// existence check exposed by Engine (cableIndex_ is private) so it reads back
-// 0.0, matching Engine's own unreachable-cable fallback in makeOperand.
+// (the offending name is echoed); an unresolved cable/fader name reads back
+// 0.0, matching Engine's own unreachable-cable fallback in makeOperand. That
+// silent-0.0 behavior is KEPT deliberately for back-compat (existing scripts
+// poll cables that may not exist yet); Engine::hasSignal now exists for
+// callers that need the distinction — POST /master/{id}/watch validates with
+// it, so arming a watch is the way to confirm a cable name resolves.
 std::string Bridge::handleMasterRegisters(DroidMasterBase* m, const Request& req, int* code) {
     auto it = req.query.find("ids");
     if (it == req.query.end() || it->second.empty()) {
@@ -1470,12 +1473,9 @@ std::string Bridge::handleMasterCpuProfiling(DroidMasterBase* m, const Request& 
 // the watch runs — the whole point: catching 1-tick trigger pulses that
 // HTTP-side register polling misses.
 std::string Bridge::handleWatchArm(DroidMasterBase* m, const Request& req, int* code) {
-    json_error_t parseErr;
-    json_t* root = json_loads(req.body.c_str(), 0, &parseErr);
-    if (!root) {
-        *code = 400;
+    json_t* root = parseJsonBody(req.body, code);
+    if (!root)
         return "{\"error\":\"invalid JSON body\"}";
-    }
     json_t* jIds = json_object_get(root, "ids");
     if (!jIds || !json_is_array(jIds) || json_array_size(jIds) == 0) {
         json_decref(root);
@@ -1532,12 +1532,16 @@ std::string Bridge::handleWatchArm(DroidMasterBase* m, const Request& req, int* 
 // (no patch running) — callers must treat that as "no data", not "all low".
 // 409 if no watch is armed.
 std::string Bridge::handleWatchCollect(DroidMasterBase* m, int* code) {
-    if (!m->watchArmed()) {
+    float tickRate = 0.f;
+    std::vector<DroidMasterBase::WatchStat> stats;
+    // Armed-check and collect are one locked operation (collectWatch), so
+    // two concurrent GETs can't both consume one arm — the loser 409s. Also
+    // 409s after a patch load/reset disarmed the watch mid-window (see
+    // MasterBase::disarmWatch) rather than returning silently-stale zeros.
+    if (!m->collectWatch(&stats, &tickRate)) {
         *code = 409;
         return "{\"error\":\"no watch armed\"}";
     }
-    float tickRate = 0.f;
-    std::vector<DroidMasterBase::WatchStat> stats = m->collectWatch(&tickRate);
     *code = 200;
     json_t* o = json_object();
     json_object_set_new(o, "tickRateHz", json_real(tickRate));
@@ -1549,8 +1553,7 @@ std::string Bridge::handleWatchCollect(DroidMasterBase* m, int* code) {
         json_object_set_new(s, "avg", json_real(w.ticks ? (float)(w.sum / w.ticks) : 0.f));
         json_object_set_new(s, "last", json_real(w.last));
         json_object_set_new(s, "edges", json_integer(w.edges));
-        json_object_set_new(s, "highMs",
-            json_real(tickRate > 0.f ? 1000.0 * w.highTicks / tickRate : 0.0));
+        json_object_set_new(s, "highMs", json_real(1000.0 * w.highSecs));
         json_object_set_new(s, "ticks", json_integer((json_int_t)w.ticks));
         json_object_set_new(sigs, w.name.c_str(), s);
     }
