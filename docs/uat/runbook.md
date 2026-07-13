@@ -107,13 +107,18 @@ automated run.
 1. ☐ Follow Preconditions: build+install, launch, `/ping` gitHash gate,
    master-registration poll. Equivalent to running
    `tools/uatbridge-smoke.sh` up through its ping/discovery section.
-2. ☐ `GET /modules` after self-assembling or loading a patch with all 14
-   vcvoid modules present at least once — or, simpler, instantiate each
-   vcvoid slug in turn via `POST /modules {"plugin":"vcvoid","slug":"<x>", "x":..,"y":..}`
+2. ☐ First record the template master's id from `GET /modules` — that
+   module is the run's lifeline and must NEVER be deleted: the bridge's UI
+   drain detaches with zero vcvoid modules in the rack, after which every
+   UI-thread route (including `POST /modules` itself) 503s until a
+   relaunch. Then instantiate each vcvoid slug in turn via
+   `POST /modules {"plugin":"vcvoid","slug":"<x>", "x":..,"y":..}`
    for each of `master, master18, p2b8, p4b2, p10, s10, p8s8, b32, e4, m4,
    g8, db8e, x7, bling` → expect 200 + `{id}` each time, then
-   `DELETE /modules/{id}` for each → expect `{ok:true}`, no non-200 in the
-   sequence.
+   `DELETE /modules/{id}` for **exactly the ids returned by those POSTs**
+   (never the template master's) → expect `{ok:true}`, no non-200 in the
+   sequence. Afterwards `GET /modules` → the template master (original id)
+   is still present, alone.
 
 ## Phase 2 — Chain assembly edge cases
 
