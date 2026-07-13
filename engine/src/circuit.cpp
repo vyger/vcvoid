@@ -65,45 +65,71 @@ const gen::JackDef* Circuit::resolveJack(const char* name, int& index, int wantI
     return j;
 }
 
+// Double jackTable_'s capacity (or seed it at 16) and rehash all live
+// entries. Called only from memoInsert when the table is >= 3/4 full, i.e.
+// during the first tick's resolutions — steady state is lookup-only.
+void Circuit::memoGrow() {
+    std::vector<JackMemo> old = std::move(jackTable_);
+    size_t newCap = old.empty() ? 16 : old.size() * 2;
+    jackTable_.clear();
+    jackTable_.resize(newCap);
+    for (auto& e : old) {
+        if (!e.ptr) continue;
+        uint32_t mask = uint32_t(jackTable_.size() - 1);
+        uint32_t pos = memoHash(e.ptr, e.index, e.isInput) & mask;
+        while (jackTable_[pos].ptr) pos = (pos + 1) & mask;
+        jackTable_[pos] = std::move(e);
+    }
+}
+
+// Insert-only (tombstone-free): grow first if load factor would exceed 3/4,
+// then linear-probe to the first empty slot.
+void Circuit::memoInsert(const char* name, int index, bool isInput, int slot) {
+    if (jackTable_.empty() || (jackCount_ + 1) * 4 > jackTable_.size() * 3)
+        memoGrow();
+    uint32_t mask = uint32_t(jackTable_.size() - 1);
+    uint32_t pos = memoHash(name, index, isInput) & mask;
+    while (jackTable_[pos].ptr) pos = (pos + 1) & mask;
+    jackTable_[pos] = JackMemo{name, index, slot, isInput, std::string(name)};
+    jackCount_++;
+}
+
 // Memoized front end for in()/out(): return the cached slot for this
 // (name, index) pair, or resolve once through resolveJack()/slotIndex() and
 // cache. in()/out() run with the same names every tick, and (per the
 // repo-wide audit in circuit.hpp) every call site passes a name whose
-// POINTER is stable tick to tick, so the hit path compares the stored
-// pointer first — three scalar compares, no strcmp — and only falls back to
-// a content compare (and then repairs the stored pointer) if the pointer
-// ever changes. The key uses the CALLER's index (before any name-embedded
+// POINTER is stable tick to tick, so this is a pointer-keyed open-addressed
+// hash lookup: hash -> linear probe -> 3-scalar compare, no string touch on
+// the hit path. The key uses the CALLER's index (before any name-embedded
 // index like "input3" rewrites it), so each call site keys consistently.
 int Circuit::memoSlot(const char* name, int index, bool wantInput) {
-    // A circuit's tick() replays the same in()/out() sequence every tick, so
-    // the entry after the previous hit is almost always the next one asked
-    // for: scan from a rotating cursor and the common case is one probe.
-    size_t n = jackMemo_.size();
-    for (size_t k = 0; k < n; k++) {
-        size_t pos = memoCursor_ + k;
-        if (pos >= n) pos -= n;
-        JackMemo& e = jackMemo_[pos];
-        // direction is part of the key: a circuit may use one name for both an
-        // input and an output (algoquencer's `pitch`)
-        if (e.index != index || e.isInput != wantInput) continue;
-        if (e.ptr == name) {
-            // Pointer-identity fast path. Dynamically verify the repo-wide
-            // invariant (same pointer => same content) in non-NDEBUG builds;
-            // unit tests + all 566 goldens run with asserts active, so this
-            // proves the invariant across every circuit they exercise. The
-            // bench target defines NDEBUG and skips the check.
-            assert(std::strcmp(e.name.c_str(), name) == 0);
-            memoCursor_ = pos + 1 < n ? pos + 1 : 0;
-            return e.slot;
-        }
-        // Pointer mismatch: fall back to content compare (handles two
-        // distinct-pointer literals/tables with equal content sharing a
-        // key). On a content match, adopt the new pointer so subsequent
-        // ticks from this call site take the fast path.
-        if (e.name[0] == name[0] && std::strcmp(e.name.c_str(), name) == 0) {
-            e.ptr = name;
-            memoCursor_ = pos + 1 < n ? pos + 1 : 0;
-            return e.slot;
+    if (!jackTable_.empty()) {
+        uint32_t mask = uint32_t(jackTable_.size() - 1);
+        uint32_t pos = memoHash(name, index, wantInput) & mask;
+        for (;;) {
+            JackMemo& e = jackTable_[pos];
+            if (!e.ptr) break;   // insert-only table: empty slot ends the probe
+            if (e.ptr == name && e.index == index && e.isInput == wantInput) {
+                // Pointer-identity hit. Dynamically verify the repo-wide
+                // invariant (same pointer => same content) in non-NDEBUG
+                // builds; unit tests + all 566 goldens run with asserts
+                // active, so this proves the invariant across every circuit
+                // they exercise. The bench target defines NDEBUG and skips
+                // the check.
+                assert(std::strcmp(e.name.c_str(), name) == 0);
+                return e.slot;
+            }
+            if (e.index == index && e.isInput == wantInput &&
+                e.name[0] == name[0] && std::strcmp(e.name.c_str(), name) == 0) {
+                // Pointer mismatch but content match: a distinct-pointer
+                // literal/table entry with equal content landed on this
+                // key. Resolve via the content path (already done — we just
+                // compared it) and adopt the new pointer so subsequent ticks
+                // from this call site take the fast path.
+                e.ptr = name;
+                return e.slot;
+            }
+            pos = (pos + 1) & mask;
         }
     }
     int effIndex = index;
@@ -115,7 +141,7 @@ int Circuit::memoSlot(const char* name, int index, bool wantInput) {
     int limit = int(wantInput ? inputs.size() : outputs.size());
     if (slot < 0 || slot >= limit)
         jackFatal(def, name, wantInput ? "bad input slot" : "bad output slot");
-    jackMemo_.push_back({name, name, index, slot, wantInput});
+    memoInsert(name, index, wantInput, slot);
     return slot;
 }
 

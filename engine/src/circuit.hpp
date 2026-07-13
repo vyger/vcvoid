@@ -69,25 +69,37 @@ private:
     // time (linear prefix search + std::string temp) dominated the audio
     // thread in profiles.
     //
-    // Fast path: every call site in the engine passes a name whose POINTER is
-    // stable across ticks (a string literal, or an entry from a static/
-    // per-instance table built once) — see circuit.cpp for the repo-wide audit
-    // (fadermatrix/matrixmixer used to snprintf into a reused stack buffer;
-    // both were converted to stable per-index name tables). Given that
-    // invariant, the memo hit check can compare the stored POINTER instead of
-    // strcmp'ing the content, which is what dominated the profiled audio
-    // thread. `name` still holds the CONTENT as a std::string: it backs the
-    // first resolution and a fallback content-compare for the (currently
-    // theoretical, but not statically provable) case of two distinct-pointer
-    // literals with equal content landing on the same key — on a content
-    // match the stored pointer is updated to the new one. In non-NDEBUG
-    // builds (unit tests, goldens) a pointer-hit is additionally verified
-    // with an assert(strcmp(...) == 0), so `make test`'s 566 goldens
-    // dynamically prove the invariant holds for every circuit they exercise;
-    // NDEBUG (the bench target) drops that check.
-    struct JackMemo { std::string name; const char* ptr; int index; int slot; bool isInput; };
-    std::vector<JackMemo> jackMemo_;
-    size_t memoCursor_ = 0;   // scan start: entry after the previous hit
+    // Round 2 established (and non-NDEBUG builds dynamically prove, via the
+    // 566 golden files) the repo-wide invariant: every call site in the
+    // engine passes a name whose POINTER is stable across ticks (a string
+    // literal, or an entry from a static/per-instance table built once — see
+    // circuit.cpp for the audit; fadermatrix/matrixmixer were converted to
+    // stable per-index name tables to satisfy it). Round 3 exploits that
+    // invariant directly with a pointer-keyed open-addressed hash table
+    // instead of a cursor-scanned vector: circuits with conditional jack
+    // access (button's `if (selected)`, motorfader/seqcore preset paths)
+    // desync a rotating scan cursor every tick, degrading it to a linear
+    // scan over ~40-byte string-bearing entries — the table removes that
+    // scan entirely (hash -> probe -> 3-scalar compare, no string touch on
+    // the hit path).
+    //
+    // Table entries are pointer-keyed: (ptr, index, isInput) -> slot. `name`
+    // (the CONTENT, as a std::string) is retained only to back the miss path
+    // (a new pointer for an already-seen name must resolve to the SAME slot)
+    // and, in non-NDEBUG builds, to dynamically re-verify content equality on
+    // every hit — so `make test`'s golden suite continues to prove the
+    // invariant. NDEBUG (the bench target) skips that verification.
+    struct JackMemo { const char* ptr = nullptr; int index = 0; int slot = 0; bool isInput = false; std::string name; };
+    std::vector<JackMemo> jackTable_;   // power-of-two capacity; empty slots have ptr == nullptr
+    unsigned jackCount_ = 0;            // live entries, for grow-on-load
+    static uint32_t memoHash(const char* ptr, int index, bool isInput) {
+        uint64_t h = (uintptr_t(ptr) >> 3) * 0x9E3779B97F4A7C15ull;
+        h ^= uint64_t(unsigned(index) << 1 | (isInput ? 1u : 0u));
+        h ^= h >> 33;
+        return uint32_t(h);
+    }
+    void memoGrow();
+    void memoInsert(const char* name, int index, bool isInput, int slot);
     int memoSlot(const char* name, int index, bool wantInput);
 
 public:
