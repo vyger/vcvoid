@@ -61,6 +61,16 @@ pins the autosave dir the script later parses.)
    by hand before driving.
 4. When done: `POST /rack/quit` for a graceful shutdown (saves
    settings/autosave); only kill the process as a failure-path fallback.
+5. **Crash = stop, permanently.** If the Rack process dies without your
+   `/rack/quit` (check `pgrep -f "MacOS/Rack"` when `/ping` starts refusing
+   connections mid-session), the session is over and any UAT run in
+   progress is an immediate FAIL. Do **not** relaunch and continue: the
+   next launch after a crash shows a modal "Rack crashed" safe-mode dialog
+   that the bridge cannot see or dismiss — automation would hang on
+   `/ping` or, worse, drive a safe-moded Rack. Preserve evidence first
+   (your Rack stderr/stdout capture, `~/Library/Application Support/Rack2/log.txt`,
+   new `~/Library/Logs/DiagnosticReports/Rack-*.ips`), then hand recovery
+   to the human.
 
 ## Endpoint reference (as implemented)
 
