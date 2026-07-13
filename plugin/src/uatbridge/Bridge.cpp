@@ -1347,6 +1347,10 @@ std::string Bridge::handleMasterCpu(DroidMasterBase* m, int* code) {
     json_t* rk = json_object();
     bool meterOn = rack::settings::cpuMeter;
     json_object_set_new(rk, "meterEnabled", json_boolean(meterOn));
+#ifdef __clang__
+    // PRIVATE is only a deprecation warning under clang; on GCC it expands to
+    // __attribute__((error(...))) and these calls would hard-fail, so non-clang
+    // builds report only meterEnabled and omit cpuShare.
     int mlen = m->meterLength();
     if (meterOn && mlen > 0) {
         const float* buf = m->meterBuffer();
@@ -1355,6 +1359,7 @@ std::string Bridge::handleMasterCpu(DroidMasterBase* m, int* code) {
         double sr = APP->engine->getSampleRate();
         json_object_set_new(rk, "cpuShare", json_real(sum / mlen * sr));
     }
+#endif
     json_object_set_new(o, "rack", rk);
 
     // Per-circuit profile: engine call under engineMutex, the documented
@@ -1450,7 +1455,7 @@ std::string Bridge::dispatch(const Request& req) {
         body = handleParams(req, &code);
     else if (req.method == "GET" && req.path == "/probe")
         body = handleProbe(req, &code);
-    else if ((parts.size() == 3 || parts.size() == 4) && parts[0] == "master") {
+    else if (parts.size() == 3 && parts[0] == "master") {
         int64_t id = std::strtoll(parts[1].c_str(), nullptr, 10);
         DroidMasterBase* m = findMaster(id);
         if (!m) { code = 404; body = "{\"error\":\"no such master\"}"; }
@@ -1476,9 +1481,15 @@ std::string Bridge::dispatch(const Request& req) {
             body = handleMasterTickRate(m, req, &code);
         else if (req.method == "GET" && parts[2] == "cpu")
             body = handleMasterCpu(m, &code);
-        else if (req.method == "POST" && parts.size() == 4 &&
-                 parts[2] == "cpu" && parts[3] == "profiling")
-            body = handleMasterCpuProfiling(m, req, &code);
+    }
+    // 4-segment master route gets its own condition (like /modules/<id>/move
+    // below) so the 3-segment block above keeps its exact matching behavior.
+    else if (req.method == "POST" && parts.size() == 4 && parts[0] == "master" &&
+             parts[2] == "cpu" && parts[3] == "profiling") {
+        int64_t id = std::strtoll(parts[1].c_str(), nullptr, 10);
+        DroidMasterBase* m = findMaster(id);
+        if (!m) { code = 404; body = "{\"error\":\"no such master\"}"; }
+        else body = handleMasterCpuProfiling(m, req, &code);
     }
     else if (req.method == "POST" && req.path == "/rack/save")
         body = handleRackSave(&code);
