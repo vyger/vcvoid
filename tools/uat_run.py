@@ -882,18 +882,22 @@ def phase3(r):
     r.step("3.1", "P1.1 sweep: O1 edge rate rises (1Hz->10Hz sine)", s3_1)
 
     def s3_2():
-        expected = "probe O4 (portId=3), I1 unpatched, ms=1300 -> edges in 4±1 (2Hz N1 retrigger)"
+        expected = ("probe O4 (portId=3), I1 unpatched, ms=1300 -> edges in 4±1 (2Hz N1 "
+                    "retrigger, 500ms period) and periodStddevMs < 3ms (frame-accurate probe "
+                    "timestamps, issue #5)")
         _, pr, _ = r.bridge.probe(r.master_id, 3, "out", 1300)
         edges = pr.get("edges", -1)
-        status = "PASS" if 3 <= edges <= 5 else "FAIL"
-        return status, expected, f"edges={edges} min={pr.get('min')} max={pr.get('max')}"
+        stddev = pr.get("periodStddevMs", -1)
+        status = "PASS" if (3 <= edges <= 5 and 0 <= stddev < 3.0) else "FAIL"
+        return status, expected, (f"edges={edges} periodStddevMs={stddev} "
+                                   f"sampleRateHz={pr.get('sampleRateHz')} min={pr.get('min')} max={pr.get('max')}")
 
     r.step("3.2", "N1 normalization: O4 2Hz retrigger baseline", s3_2)
-    # promote 3.2 to XFAIL per known probe-calibration skew (SKILL.md caveat, measured 2026-07-11)
-    xfail_last(r, "probe timestamp calibration skew (SKILL.md caveat, measured 2026-07-11)")
 
     def s3_3():
-        expected = "cabling ~8Hz LFO into I1 makes O4 edges jump vs N1 baseline; removing reverts"
+        expected = ("cabling ~8Hz LFO into I1 makes O4 edges jump vs N1 baseline; removing "
+                    "reverts; baseline/reverted periodStddevMs < 3ms (steady 2Hz N1 square, "
+                    "frame-accurate probe timestamps, issue #5)")
         _, before, _ = r.bridge.probe(r.master_id, 3, "out", 1300)
         # Fundamental LFO: plugin "Fundamental", slug "LFO"; FREQ_PARAM is
         # paramId 2 (octave-scaled, 2^n Hz -> 3.0 gives 8 Hz); SQR output is
@@ -916,12 +920,15 @@ def phase3(r):
         _, reverted, _ = r.bridge.probe(r.master_id, 3, "out", 1300)
         jump = after.get("edges", 0) > before.get("edges", 0)
         revert_ok = abs(reverted.get("edges", 0) - before.get("edges", 0)) <= 1
-        status = "PASS" if (jump and revert_ok) else "FAIL"
-        return status, expected, (f"before={before.get('edges')} after_cabled={after.get('edges')} "
-                                   f"after_removed={reverted.get('edges')}")
+        before_stddev = before.get("periodStddevMs", -1)
+        reverted_stddev = reverted.get("periodStddevMs", -1)
+        steady = 0 <= before_stddev < 3.0 and 0 <= reverted_stddev < 3.0
+        status = "PASS" if (jump and revert_ok and steady) else "FAIL"
+        return status, expected, (f"before={before.get('edges')} (stddev={before_stddev}) "
+                                   f"after_cabled={after.get('edges')} "
+                                   f"after_removed={reverted.get('edges')} (stddev={reverted_stddev})")
 
     r.step("3.3", "cable external LFO into I1, O4 edges jump; uncable reverts to N1", s3_3)
-    xfail_last(r, "probe timestamp calibration skew (SKILL.md caveat, measured 2026-07-11)")
 
     def s3_4():
         expected = "probe O2 edges consistent with 5-in-8 euclid at R1-driven rate over 2000ms"

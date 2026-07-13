@@ -367,10 +367,14 @@ std::string Bridge::handleParams(const Request& req, int* code) {
 // crossing of 1.0 V with 0.5 V hysteresis (re-arms once the signal drops back
 // below 0.5 V) — a standard Schmitt-trigger debounce so a noisy/ramping
 // signal near the threshold does not multi-count. Per-sample timestamps are
-// reconstructed as a uniform grid over the measured wall-clock elapsedMs
-// (samples are taken at a roughly constant cadence in both backends, so this
-// is a good approximation without threading real timestamps through the hot
-// per-frame probe write). 0 or 1 edges -> periodStddevMs 0 (no interval to
+// now passed in explicitly (timestampsMs, one per sample, monotonically
+// non-decreasing) rather than reconstructed from a uniform grid over
+// wall-clock elapsed time (issue #5: that grid ran ~10% slow once
+// arm/disarm/re-resolution overhead on the HTTP thread was folded into
+// "elapsed", inflating periodStddevMs and under-reading sampleRateHz).
+// Master-backend callers pass frame-exact timestamps derived from the true
+// audio sample rate; the foreign-module backend passes real per-sample
+// steady_clock timestamps. 0 or 1 edges -> periodStddevMs 0 (no interval to
 // measure; documented rather than null so JSON consumers need no null-check).
 struct ProbeStats {
     float min = 0.f, max = 0.f, avg = 0.f;
@@ -379,10 +383,11 @@ struct ProbeStats {
     double sampleRateHz = 0.0;
 };
 
-static ProbeStats computeProbeStats(const std::vector<float>& samples, double elapsedMs) {
+static ProbeStats computeProbeStats(const std::vector<float>& samples,
+                                     const std::vector<double>& timestampsMs,
+                                     double sampleRateHz) {
     ProbeStats st;
     if (samples.empty()) return st;
-    double msPerSample = samples.size() > 1 ? elapsedMs / (double)(samples.size() - 1) : 0.0;
     double sum = 0.0;
     bool armed = true;   // re-armed (below 0.5V or start): a rise past 1.0V counts as an edge
     std::vector<double> edgeMs;
@@ -395,7 +400,7 @@ static ProbeStats computeProbeStats(const std::vector<float>& samples, double el
         if (armed && v >= 1.0f) {
             armed = false;
             st.edges++;
-            edgeMs.push_back(i * msPerSample);
+            edgeMs.push_back(timestampsMs[i]);
         } else if (!armed && v < 0.5f) {
             armed = true;
         }
@@ -412,7 +417,7 @@ static ProbeStats computeProbeStats(const std::vector<float>& samples, double el
         var /= periods.size();
         st.periodStddevMs = std::sqrt(var);
     }
-    st.sampleRateHz = elapsedMs > 0.0 ? samples.size() / (elapsedMs / 1000.0) : 0.0;
+    st.sampleRateHz = sampleRateHz;
     return st;
 }
 
@@ -503,10 +508,22 @@ std::string Bridge::handleProbe(const Request& req, int* code) {
             *code = 404;
             return "{\"error\":\"module removed during probe\"}";
         }
-        std::vector<float> samples = m2->disarmProbe();
-        double elapsedMs = std::chrono::duration<double, std::milli>(
-            std::chrono::steady_clock::now() - t0).count();
-        stats = computeProbeStats(samples, elapsedMs);
+        double rateHz = 0.0;
+        std::vector<float> samples = m2->disarmProbe(&rateHz);
+        // Frame-accurate timestamps: the ring buffer is filled once per audio
+        // frame at args.sampleRate (recorded live by process(), not looked up
+        // after the fact), so timestamp i is simply i/rateHz — no wall-clock
+        // involved. sampleRateHz reported to the caller is that same true
+        // rate, not samples-over-elapsed-wall-time.
+        std::vector<double> timestampsMs;
+        timestampsMs.reserve(samples.size());
+        if (rateHz > 0.0) {
+            for (size_t i = 0; i < samples.size(); i++)
+                timestampsMs.push_back((double)i / rateHz * 1000.0);
+        } else {
+            timestampsMs.assign(samples.size(), 0.0);
+        }
+        stats = computeProbeStats(samples, timestampsMs, rateHz);
     } else {
         // Foreign backend needs APP (thread-local context) — not yet applied
         // if no vcvoid widget has stepped (installBridgeWidget notes it).
@@ -525,21 +542,33 @@ std::string Bridge::handleProbe(const Request& req, int* code) {
             return "{\"error\":\"portId out of range\"}";
         }
         std::vector<float> samples;
+        std::vector<double> timestampsMs;
         samples.reserve((size_t)ms + 1);
+        timestampsMs.reserve((size_t)ms + 1);
         // Re-fetch the module every iteration: it can be deleted mid-probe
         // (e.g. the UAT script deletes it) — if so, stop early and report
         // stats over whatever was collected rather than dereferencing a
-        // dangling pointer.
+        // dangling pointer. Each sample gets its own real steady_clock
+        // timestamp (not an assumed-uniform grid) since this loop's actual
+        // cadence drifts above 1ms once getModule()/getVoltage() and
+        // scheduling jitter are included — real timestamps make
+        // periodStddevMs honest at this backend's coarser (~1 kHz) resolution.
         for (int i = 0; i < ms; i++) {
             rack::engine::Module* mm = APP->engine->getModule(moduleId);
             if (!mm) break;
             samples.push_back(wantOut ? mm->outputs[portId].getVoltage()
                                        : mm->inputs[portId].getVoltage());
+            timestampsMs.push_back(std::chrono::duration<double, std::milli>(
+                std::chrono::steady_clock::now() - t0).count());
             std::this_thread::sleep_for(std::chrono::milliseconds(1));
         }
-        double elapsedMs = std::chrono::duration<double, std::milli>(
-            std::chrono::steady_clock::now() - t0).count();
-        stats = computeProbeStats(samples, elapsedMs);
+        // sampleRateHz here means what its doc comment says: approximate
+        // resolution (n samples over the actual span they took), not a
+        // precise audio-rate figure — this backend samples on the HTTP
+        // thread, not the audio thread.
+        double spanMs = timestampsMs.size() >= 2 ? (timestampsMs.back() - timestampsMs.front()) : 0.0;
+        double sampleRateHz = spanMs > 0.0 ? (samples.size() - 1) / (spanMs / 1000.0) : 0.0;
+        stats = computeProbeStats(samples, timestampsMs, sampleRateHz);
     }
 
     *code = 200;
