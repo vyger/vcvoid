@@ -1314,6 +1314,103 @@ std::string Bridge::handleMasterTickRate(DroidMasterBase* m, const Request& req,
     return handleMasterStatus(m2, code);
 }
 
+// Issue #3: CPU cost query -- timing-mode/rate fields (Task 3), the whole-tick
+// avg/max atomics published per ~1 s epoch by process() (Task 4), Rack's own
+// meter as its UI reports it, and the per-circuit profiler snapshot (Task 2).
+// All reads are the same "engineMutex, HTTP thread, no uiCall" pattern already
+// used by handleMasterRegisters -- no reload/menu-thread state is touched.
+std::string Bridge::handleMasterCpu(DroidMasterBase* m, int* code) {
+    *code = 200;
+    json_t* o = json_object();
+    bool adaptive = m->timingMode == DroidMasterBase::TimingMode::Adaptive;
+    float effRate = m->effectiveRate;
+    json_object_set_new(o, "timingMode", json_string(adaptive ? "adaptive" : "fixed"));
+    json_object_set_new(o, "targetHz", json_real(m->targetHz));
+    json_object_set_new(o, "effectiveRate", json_real(effRate));
+    json_object_set_new(o, "adaptiveHz", json_real(m->adaptiveHz));
+
+    // Whole-tick stats: lock-free atomics published per ~1 s epoch by process().
+    json_t* tick = json_object();
+    bool valid = m->statValid.load();
+    float avg = m->statAvgTickUs.load();
+    json_object_set_new(tick, "valid", json_boolean(valid));
+    json_object_set_new(tick, "avgUs", json_real(avg));
+    json_object_set_new(tick, "maxUs", json_real(m->statMaxTickUs.load()));
+    json_object_set_new(tick, "estCpuShare", json_real(avg * effRate / 1e6));
+    json_object_set_new(tick, "windowSeconds", json_real(1.0));
+    json_object_set_new(o, "tick", tick);
+
+    // Rack's own meter, as its UI shows it (fraction of realtime). Uses the
+    // PRIVATE Module::meterBuffer API -- acceptable in this env-gated dev
+    // bridge; reads of the ring are torn-read tolerable diagnostics. Only
+    // meaningful while settings::cpuMeter is on.
+    json_t* rk = json_object();
+    bool meterOn = rack::settings::cpuMeter;
+    json_object_set_new(rk, "meterEnabled", json_boolean(meterOn));
+    int mlen = m->meterLength();
+    if (meterOn && mlen > 0) {
+        const float* buf = m->meterBuffer();
+        double sum = 0.0;
+        for (int i = 0; i < mlen; i++) sum += buf[i];
+        double sr = APP->engine->getSampleRate();
+        json_object_set_new(rk, "cpuShare", json_real(sum / mlen * sr));
+    }
+    json_object_set_new(o, "rack", rk);
+
+    // Per-circuit profile: engine call under engineMutex, the documented
+    // pattern for HTTP-thread engine reads (handleMasterRegisters et al).
+    json_t* prof = json_object();
+    json_t* arr = json_array();
+    bool enabled = false;
+    {
+        std::lock_guard<std::mutex> lk(m->engineMutex);
+        if (m->engine && m->engine->profilingEnabled()) {
+            enabled = true;
+            for (const auto& c : m->engine->profileSnapshot()) {
+                json_t* e = json_object();
+                json_object_set_new(e, "index", json_integer(c.index));
+                json_object_set_new(e, "circuit", json_string(c.name));
+                json_object_set_new(e, "totalUs", json_real(c.totalUs));
+                json_object_set_new(e, "ticks", json_integer((json_int_t)c.ticks));
+                json_object_set_new(e, "avgUs",
+                    json_real(c.ticks ? c.totalUs / (double)c.ticks : 0.0));
+                json_array_append_new(arr, e);
+            }
+        }
+    }
+    json_object_set_new(prof, "enabled", json_boolean(enabled));
+    json_object_set_new(prof, "circuits", arr);
+    json_object_set_new(o, "profiling", prof);
+    return dumpAndFree(o);
+}
+
+// Issue #3: profiling on/off toggle. setProfiling() only flips a flag and
+// clears accumulators (no reload, no uiCall needed) -- safe under the plain
+// engineMutex lock from the HTTP thread, same as handleMasterCpu's read
+// above. The mutex is released before recursing into handleMasterCpu (which
+// re-acquires it itself), so there is no self-deadlock.
+std::string Bridge::handleMasterCpuProfiling(DroidMasterBase* m, const Request& req, int* code) {
+    json_t* root = parseJsonBody(req.body, code);
+    if (!root) return "{\"error\":\"invalid JSON body\"}";
+    json_t* jEn = json_object_get(root, "enabled");
+    if (!jEn || !json_is_boolean(jEn)) {
+        json_decref(root);
+        *code = 400;
+        return "{\"error\":\"missing/invalid enabled\"}";
+    }
+    bool enabled = json_boolean_value(jEn);
+    json_decref(root);
+    {
+        std::lock_guard<std::mutex> lk(m->engineMutex);
+        if (!m->engine) {
+            *code = 409;
+            return "{\"error\":\"no patch loaded\"}";
+        }
+        m->engine->setProfiling(enabled);
+    }
+    return handleMasterCpu(m, code);
+}
+
 void Bridge::expireHolds() {
     auto now = std::chrono::steady_clock::now();
     std::vector<Hold> expired;
@@ -1353,7 +1450,7 @@ std::string Bridge::dispatch(const Request& req) {
         body = handleParams(req, &code);
     else if (req.method == "GET" && req.path == "/probe")
         body = handleProbe(req, &code);
-    else if (parts.size() == 3 && parts[0] == "master") {
+    else if ((parts.size() == 3 || parts.size() == 4) && parts[0] == "master") {
         int64_t id = std::strtoll(parts[1].c_str(), nullptr, 10);
         DroidMasterBase* m = findMaster(id);
         if (!m) { code = 404; body = "{\"error\":\"no such master\"}"; }
@@ -1377,6 +1474,11 @@ std::string Bridge::dispatch(const Request& req) {
             body = handleLeds(m, &code);
         else if (req.method == "POST" && parts[2] == "tick-rate")
             body = handleMasterTickRate(m, req, &code);
+        else if (req.method == "GET" && parts[2] == "cpu")
+            body = handleMasterCpu(m, &code);
+        else if (req.method == "POST" && parts.size() == 4 &&
+                 parts[2] == "cpu" && parts[3] == "profiling")
+            body = handleMasterCpuProfiling(m, req, &code);
     }
     else if (req.method == "POST" && req.path == "/rack/save")
         body = handleRackSave(&code);
