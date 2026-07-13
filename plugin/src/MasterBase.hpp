@@ -294,6 +294,10 @@ public:
                 // The engine derives all timing from its constructor rate, so
                 // if the adaptive rate moved the divider, rebuild at the true
                 // effective rate (load cost only; patch loads are rare).
+                // Invariant: this reload is of the IDENTICAL text, and load
+                // success is tick-rate-independent by construction, so r stays
+                // ok here. The failure branch below is belt-and-braces should
+                // that invariant ever break.
                 if (effectiveRate != fresh->tickRateHz()) {
                     fresh = std::make_unique<droid::Engine>(masterType_, effectiveRate);
                     r = fresh->load(text);
