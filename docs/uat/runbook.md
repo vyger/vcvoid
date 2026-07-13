@@ -57,6 +57,25 @@ locators.
      HTTP thread cannot attach it), so zero vcvoid modules ⇒ every
      UI-thread route 503s, `POST /modules` included.
 - Audio device active in Rack (the engine must tick).
+
+### Crash = immediate FAIL (no recovery)
+
+A Rack **crash aborts the entire UAT run, immediately and permanently** —
+the run's verdict is FAIL regardless of how many steps had passed.
+Detection: the Rack process exits without a `POST /rack/quit` having been
+issued, or `/ping` stops answering mid-run (connection refused, not a slow
+response) — verify with a process check (`pgrep -f "MacOS/Rack"`) before
+concluding crash vs. transient.
+
+On crash: do **NOT** relaunch and continue. The next Rack launch after a
+crash posts a modal "Rack crashed" safe-mode dialog that no bridge endpoint
+can see or dismiss — the bridge never comes up behind it, and any attempt
+to automate past it operates on an unknown, safe-moded state. Recovery is a
+**human** action (clear the dialog, decide on the autosave). The harness
+must instead: record `CRASH` at the exact step locator, preserve evidence
+(the Rack stderr/stdout capture, `~/Library/Application Support/Rack2/log.txt`,
+and any new `~/Library/Logs/DiagnosticReports/Rack-*.ips` crash report),
+write the results file, and stop.
 - Template patches (all in `patches/`, all pre-validated against
   `droidcheck` and `make patchsmoke`):
   `uat-core.ini`, `uat-overlays.ini`, `uat-gates.ini`,
