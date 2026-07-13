@@ -83,10 +83,14 @@ eqcheck: $(BUILD)/eqcheck
 
 # bench: headless per-circuit CPU profiler (issue #5). -O2 overrides the
 # global -O1 for this target only — perf measurement wants an optimized
-# build; the rest of the tree stays at -O1 for fast edit/test cycles.
+# build; the rest of the tree stays at -O1 for fast edit/test cycles. -DNDEBUG
+# is likewise bench-only: it drops the pointer-invariant assert in
+# Circuit::memoSlot (circuit.cpp) so the bench measures the fast path with no
+# assert overhead, while unittests/goldens keep asserts active to prove the
+# invariant.
 $(BUILD)/bench: $(ENGINE_SRC) tools/bench/bench.cpp $(wildcard engine/src/*.hpp) $(wildcard engine/gen/*.hpp)
 	@mkdir -p $(BUILD)
-	$(CXX) $(CXXFLAGS) -O2 $(ENGINE_SRC) tools/bench/bench.cpp -o $@
+	$(CXX) $(CXXFLAGS) -O2 -DNDEBUG $(ENGINE_SRC) tools/bench/bench.cpp -o $@
 
 bench: $(BUILD)/bench
 
