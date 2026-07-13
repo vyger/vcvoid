@@ -219,13 +219,31 @@ Continue from Phase 4 state.
    /master/{id}/reload`; then `GET /master/{id}/registers` → envelope rate
    follows, sequencer pattern/presets survive.
 3. ☐ `POST /master/{id}/tick-rate {"hz":2000}` → 2000 → 4000 →
-   8000 → 6000 (default), asserting 200 + no registers reads glitching
+   8000 → 6000, asserting 200 + no registers reads glitching
    (`GET /master/{id}/registers?ids=O1` stays numeric throughout, no 500s).
-   Sample-rate contract: `POST /rack/sample-rate` 48k→96k→44.1k each returns
-   200 (setting accepted). Whether the *running* audio device actually
-   re-opens live is unverified by the bridge (SKILL.md Caveats) — the
-   no-crash/no-stuck-output judgment while switching in the Engine menu is a
-   Final sign-off item.
+   Each response's `.timingMode == "fixed"` and `.targetHz` matches the
+   requested `hz`. Then `POST /master/{id}/tick-rate {"mode":"adaptive"}`
+   (the default for a freshly placed master, exercised here explicitly
+   after leaving Fixed) → `.timingMode == "adaptive"` and `.targetHz ==
+   .adaptiveHz`. Sample-rate contract: `POST /rack/sample-rate`
+   48k→96k→44.1k each returns 200 (setting accepted). Whether the *running*
+   audio device actually re-opens live is unverified by the bridge (SKILL.md
+   Caveats) — the no-crash/no-stuck-output judgment while switching in the
+   Engine menu is a Final sign-off item.
+4. ☐ CPU/profiling (`GET`/`POST /master/{id}/cpu[/profiling]`, SKILL.md
+   for full field reference). Recipe: with `uat-core.ini` loaded, `POST
+   /master/{id}/cpu/profiling {"enabled":true}` → 200, `.profiling.enabled
+   == true`; wait ~1.5 s (one whole-tick stat epoch); `GET
+   /master/{id}/cpu` → `.tick.valid == true`, `.tick.avgUs`/`.tick.maxUs`
+   numeric and > 0, `.profiling.circuits` non-empty with each entry's
+   `avgUs ≈ totalUs / ticks`; sort by `avgUs` descending to sanity-check the
+   costliest circuit looks plausible (not asserted, just eyeballed for the
+   sign-off notes). `POST /master/{id}/reload` → `GET /master/{id}/cpu` →
+   `.profiling.enabled == false` again (profiling resets on every patch
+   reload, fresh `Engine` default) and `.tick.valid == false` immediately
+   after (stale epoch cleared). Re-enable and repeat once to confirm the
+   toggle round-trips. Separately: `POST /master/{id}/cpu/profiling` before
+   any patch has ever loaded on a scratch master → 409 `no patch loaded`.
 
 ## Phase 6 — Gates & MASTER18 (`uat-gates.ini`, `test-m6-master18.ini`)
 
