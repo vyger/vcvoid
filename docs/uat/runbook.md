@@ -193,12 +193,17 @@ to `uat-core.ini` first.
    O1 (`kind=out`, portId=0) at each end and compare `edges` over a fixed
    window.
 2. ☐ `GET /probe?moduleId={id}&portId=3&kind=out&ms=1300` (O4) with
-   I1 unpatched → `edges` in `4±1` for a 2 Hz retrigger over 1300 ms (N1
-   normalization feeding I1). Exact recipe in `tools/uatbridge-smoke.sh`.
+   I1 unpatched → `edges` in `4±1` for a 2 Hz retrigger (500 ms period) over
+   1300 ms (N1 normalization feeding I1), **and** `periodStddevMs < 3` (probe
+   timestamps are frame-accurate for a vcvoid master as of issue #5 — this is
+   now a real absolute assert, not a relative "steadier than noise" check).
+   Exact recipe in `tools/uatbridge-smoke.sh`.
 3. ☐ `POST /cables` wiring a Rack LFO (~8 Hz square) into master
    I1 (portId per `GET /modules`/`GET /cables` port indices). Probe O4 →
    edges jump to ~8 Hz×window. `DELETE /cables/{id}` → probe O4 again →
-   back to ~2 Hz (N1 normalization). First live normalization test.
+   back to ~2 Hz (N1 normalization), with baseline/reverted
+   `periodStddevMs < 3` in both the pre-cable and post-uncable probes (same
+   steady 2 Hz N1 square as step 2). First live normalization test.
 4. ☐ Euclid rate cross-check: `GET /probe?moduleId={id}&portId=1&kind=out&ms=2000`
    (O2) → edges consistent with 5-in-8 euclid at the R1-driven rate. (The
    master matrix LED's 3 Hz *flash*/color for input 1 has no bridge endpoint

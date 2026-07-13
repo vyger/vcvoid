@@ -210,16 +210,21 @@ DROID register: `O1` = outputs[0], `O4` = outputs[3], etc.
 - **Steady-clock check**: same probe, assert `periodStddevMs` is a small
   fraction of the expected period (needs `edges >= 3` to be meaningful —
   0/1 edges always report `periodStddevMs: 0`, which is "no data," not
-  "steady"). CALIBRATION CAVEAT (measured 2026-07-11): per-sample timestamps
-  are reconstructed as a uniform grid over a wall-clock window that includes
-  arm/disarm overhead, so `sampleRateHz` reads ~10% below the true rate and
-  `periodStddevMs` is inflated by the same skew — a clean 5 Hz square
-  measured ~47 ms stddev on a 200 ms period. Use `periodStddevMs` for
-  relative comparisons (steady vs wildly jittering), not absolute `< 2 ms`
-  asserts, until the probe timestamps real sample times.
-  `sampleRateHz` tells you the probe's approximate time resolution for that
-  call (vcvoid masters get audio-rate sampling via a ring buffer; any other
-  module is sampled on the HTTP thread at ~1 kHz).
+  "steady"). FIXED (2026-07-12, issue #5): probe timestamps are no longer
+  reconstructed from a wall-clock window. vcvoid-master probes are
+  frame-accurate — each sample's timestamp is derived from the true
+  audio-thread sample rate (`args.sampleRate`, captured live alongside the
+  sample write, not looked up after the fact), so `sampleRateHz` reports the
+  real engine rate and `periodStddevMs` is honest. Absolute asserts like
+  `periodStddevMs < 2 ms` on a clean square are now legitimate for master
+  probes. Foreign-module probes (any non-vcvoid module) get a real
+  `steady_clock` timestamp per sample instead of an assumed-uniform 1 ms
+  grid, so their `periodStddevMs` reflects actual HTTP-thread scheduling
+  jitter at ~1 kHz resolution — expect looser tolerances there than on a
+  master probe.
+  `sampleRateHz` tells you the probe's time resolution for that call (vcvoid
+  masters: the true audio engine rate via a ring buffer; any other module:
+  actual samples-over-actual-span at ~1 kHz on the HTTP thread).
 - **DC / level check**: probe over a short window (~50–200 ms is plenty for
   a non-moving signal); assert `min ≈ max ≈ avg` (within float noise) and
   compare `avg` to the expected voltage.

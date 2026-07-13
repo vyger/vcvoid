@@ -139,11 +139,17 @@ struct DroidMasterBase : Module {
     // it does not grow or wrap.
     static constexpr size_t kProbeMaxSamples = 1'000'000;
     std::atomic<bool> probeArmed_{false};
-    std::mutex probeMutex_;                 // guards probePort_/probeIsOutput_/probeBuf_/probeCount_
+    std::mutex probeMutex_;                 // guards probePort_/probeIsOutput_/probeBuf_/probeCount_/probeRateHz_
     int probePort_ = 0;
     bool probeIsOutput_ = true;
     std::vector<float> probeBuf_;
     size_t probeCount_ = 0;
+    // True audio-thread sample rate at capture time (args.sampleRate),
+    // recorded alongside every sample write below. Lets the bridge derive
+    // frame-exact timestamps (i / probeRateHz_) instead of reconstructing a
+    // grid from HTTP-thread wall-clock elapsed time, which runs ~10% slow
+    // once arm/disarm/re-resolution overhead is folded in (issue #5).
+    double probeRateHz_ = 0.0;
 
     // Arm a probe on output/input port `port` (Rack port index, 0-based).
     // Called from the HTTP thread; must run before the caller starts timing
@@ -156,14 +162,17 @@ struct DroidMasterBase : Module {
         probeCount_ = 0;
         probeArmed_.store(true, std::memory_order_release);
     }
-    // Disarm and return the collected samples (only the first probeCount_ are
-    // valid data; the rest of the preallocated buffer is discarded here).
-    std::vector<float> disarmProbe() {
+    // Disarm and return the collected samples plus the true audio-thread
+    // sample rate they were captured at (out param, Hz; 0 if no frame ever
+    // ran while armed). Only the first probeCount_ samples are valid data;
+    // the rest of the preallocated buffer is discarded here.
+    std::vector<float> disarmProbe(double* rateHzOut = nullptr) {
         std::lock_guard<std::mutex> lk(probeMutex_);
         probeArmed_.store(false, std::memory_order_relaxed);
         std::vector<float> out(probeBuf_.begin(), probeBuf_.begin() + probeCount_);
         probeBuf_.clear();
         probeBuf_.shrink_to_fit();
+        if (rateHzOut) *rateHzOut = probeRateHz_;
         return out;
     }
 
@@ -421,6 +430,7 @@ public:
         if (probeArmed_.load(std::memory_order_acquire)) {
             std::lock_guard<std::mutex> lk(probeMutex_);
             if (probeArmed_.load(std::memory_order_relaxed) && probeCount_ < probeBuf_.size()) {
+                probeRateHz_ = args.sampleRate;
                 probeBuf_[probeCount_++] = probeIsOutput_
                     ? outputs[probePort_].getVoltage()
                     : inputs[probePort_].getVoltage();
