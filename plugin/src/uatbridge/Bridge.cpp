@@ -366,7 +366,11 @@ std::string Bridge::handleParams(const Request& req, int* code) {
 // Shared stats over a sampled voltage series (M6 /probe). Edge = rising
 // crossing of 1.0 V with 0.5 V hysteresis (re-arms once the signal drops back
 // below 0.5 V) — a standard Schmitt-trigger debounce so a noisy/ramping
-// signal near the threshold does not multi-count. Per-sample timestamps are
+// signal near the threshold does not multi-count. The trigger starts
+// DISARMED: a window that opens while the signal is already high must not
+// count the in-progress pulse as an edge at t≈0 — that fabricated a short
+// first period and randomly inflated periodStddevMs by tens of ms whenever
+// a probe happened to start mid-pulse (issue #7 verification fallout). Per-sample timestamps are
 // now passed in explicitly (timestampsMs, one per sample, monotonically
 // non-decreasing) rather than reconstructed from a uniform grid over
 // wall-clock elapsed time (issue #5: that grid ran ~10% slow once
@@ -389,7 +393,7 @@ static ProbeStats computeProbeStats(const std::vector<float>& samples,
     ProbeStats st;
     if (samples.empty()) return st;
     double sum = 0.0;
-    bool armed = true;   // re-armed (below 0.5V or start): a rise past 1.0V counts as an edge
+    bool armed = samples[0] < 0.5f;   // armed (seen below 0.5V): a rise past 1.0V counts as an edge
     std::vector<double> edgeMs;
     st.min = st.max = samples[0];
     for (size_t i = 0; i < samples.size(); i++) {
