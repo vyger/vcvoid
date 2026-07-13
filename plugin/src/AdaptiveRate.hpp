@@ -18,7 +18,7 @@ constexpr float kMinAdaptiveHz = 2000.0f;
 constexpr float kMaxAdaptiveHz = 5555.0f;   // 1e6 / kBaseCycleUs, rounded down
 
 inline float adaptiveTickHz(unsigned patchRamBytes) {
-    float cycleUs = kBaseCycleUs + kUsPerRamByte * (float)patchRamBytes;
+    float cycleUs = kBaseCycleUs + kUsPerRamByte * static_cast<float>(patchRamBytes);
     float hz = 1e6f / cycleUs;
     if (hz < kMinAdaptiveHz) hz = kMinAdaptiveHz;
     if (hz > kMaxAdaptiveHz) hz = kMaxAdaptiveHz;
