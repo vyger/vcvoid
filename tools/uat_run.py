@@ -34,6 +34,18 @@ DRIVING_DIR = os.path.join(REPO_ROOT, "docs", "uat", "driving")
 RESULTS_DIR = os.path.join(REPO_ROOT, "docs", "uat", "results")
 PATCHES_DIR = os.path.join(REPO_ROOT, "patches")
 TEMPLATE_VCV = os.path.join(REPO_ROOT, "tests", "smoketest_default.vcv")
+RACK_LOG = os.path.expanduser("~/Library/Application Support/Rack2/log.txt")
+
+# holdMs on POST /params is ENGINE SAMPLE TIME (bridge frame-deadline holds);
+# with no Audio module in the rack, Rack's CPU-clocked fallback engine thread
+# can pace sample time up to ~26% slower than wall clock (observed live), so
+# a hold can take ~1.35x holdMs of wall time to release. One shared allowance
+# so single-hold settles and chord settles can never drift apart.
+HOLD_SETTLE_FACTOR = 1.5
+HOLD_SETTLE_MARGIN = 0.35
+
+def settle_for(hold_ms):
+    time.sleep(hold_ms / 1000.0 * HOLD_SETTLE_FACTOR + HOLD_SETTLE_MARGIN)
 BASE = "http://127.0.0.1:2601"
 
 RACK_APP_CANDIDATES = [
@@ -178,17 +190,14 @@ class Bridge:
         tap). Pass settle=False only for deliberate overlapping holds
         (chords).
 
-        The 1.5x factor: holdMs is measured in ENGINE SAMPLE TIME (bridge
-        frame-deadline holds), and with no Audio module in the rack Rack's
-        fallback engine thread can pace sample time up to ~26% slower than
-        wall clock (observed live) — so a holdMs hold can take ~1.35x holdMs
-        of wall time to release. 1.5x + margin covers that without polling."""
+        Settle duration comes from the shared settle_for() helper (see the
+        HOLD_SETTLE_FACTOR comment at module top for why it exceeds holdMs)."""
         body = {"moduleId": module_id, "paramId": param_id, "value": value}
         if hold_ms:
             body["holdMs"] = hold_ms
         result = self.post("/params", body)
         if hold_ms and settle:
-            time.sleep(hold_ms / 1000.0 * 1.5 + 0.35)
+            settle_for(hold_ms)
         return result
 
     def cables(self):
@@ -335,11 +344,22 @@ class Runner:
         run with window stacking. That skews every wall-clock assertion
         (probe edge counts, sequencer liveliness). Disabling App Nap for
         Rack pins the fallback thread to real time; it's also the sane
-        setting for an audio app generally."""
+        setting for an audio app generally. The default is PERSISTENT (it
+        outlives the run, intentionally — napping hurts interactive Rack use
+        too); the log line below records when this runner actually changed
+        it, so the mutation is never silent."""
         try:
+            already = subprocess.run(
+                ["defaults", "read", "com.vcvrack.rack2", "NSAppSleepDisabled"],
+                capture_output=True, text=True).stdout.strip()
+            if already == "1":
+                return
             subprocess.run(["defaults", "write", "com.vcvrack.rack2",
                              "NSAppSleepDisabled", "-bool", "YES"],
                             check=True, capture_output=True)
+            self.log("disabled App Nap for com.vcvrack.rack2 "
+                     "(persistent defaults write; revert with `defaults delete "
+                     "com.vcvrack.rack2 NSAppSleepDisabled`)")
         except Exception as e:
             self.log(f"warning: could not disable App Nap for Rack ({e}); "
                      f"wall-clock assertions may see a napped (slow) engine")
@@ -522,31 +542,39 @@ class Runner:
         saveAutosave landed inside the probe window, discard the sample and
         re-probe once (the next autosave is ~15s out, so the retry cannot hit
         it). An unexplained stall is never retried — it must FAIL the step."""
-        rack_log = os.path.expanduser("~/Library/Application Support/Rack2/log.txt")
-        def autosaves():
+        def autosaved_during(fn):
+            """Run fn(); return (fn's result, whether a saveAutosave line was
+            appended to Rack's log while it ran). Only the appended tail is
+            scanned (log.txt grows all session; a full re-scan per probe
+            would pay for the whole run's history every time)."""
             try:
-                with open(rack_log, errors="replace") as f:
-                    return sum(1 for line in f if "saveAutosave" in line)
+                offset = os.path.getsize(RACK_LOG)
             except OSError:
-                return -1
-        for attempt in range(2):
-            n0 = autosaves()
-            code, pr, raw = self.bridge.probe(module_id, port_id, kind, ms)
-            n1 = autosaves()
-            if attempt == 0 and n0 >= 0 and n1 > n0:
-                self.log(f"    probe window crossed a Rack autosave "
-                         f"(log.txt saveAutosave count {n0}->{n1}); re-probing once")
-                continue
-            return code, pr, raw
+                return fn(), False   # log unreadable: no evidence, no retry
+            result = fn()
+            try:
+                with open(RACK_LOG, errors="replace") as f:
+                    f.seek(offset)
+                    hit = any("saveAutosave" in line for line in f)
+            except OSError:
+                hit = False
+            return result, hit
+        result, autosaved = autosaved_during(
+            lambda: self.bridge.probe(module_id, port_id, kind, ms))
+        if autosaved:
+            self.log("    probe window crossed a Rack autosave "
+                     "(log.txt saveAutosave appended); re-probing once")
+            result, _ = autosaved_during(
+                lambda: self.bridge.probe(module_id, port_id, kind, ms))
+        return result
 
     def collect_crash_evidence(self):
         """Gather crash evidence pointers/tails for the results file: our
         Rack stdout/stderr capture, Rack2 log.txt tail, and any new
         DiagnosticReports Rack-*.ips since run start."""
         parts = [f"rack stdout/stderr capture: {self.log_path}"]
-        rack_log = os.path.expanduser("~/Library/Application Support/Rack2/log.txt")
         try:
-            with open(rack_log) as f:
+            with open(RACK_LOG) as f:
                 tail = "".join(f.readlines()[-15:])
             parts.append(f"log.txt tail: {tail!r}")
         except OSError:
@@ -622,6 +650,21 @@ class Runner:
         Returns (ok, per-signal stats dict of the last attempt)."""
         sigs = {}
         for attempt in range(tries):
+            if attempt and evidence_ids:
+                # Before re-pressing, wait for the button register to read
+                # low again: on a slow engine the first attempt's
+                # frame-deadline hold can outlive the wall-clock settle, and
+                # re-posting value=1 onto a still-held param produces no
+                # fresh press edge — the retry would be a silent no-op.
+                btn = evidence_ids[0]
+                def released():
+                    _, regs, _ = self.bridge.registers(self.master_id, [btn])
+                    v = (regs or {}).get(btn, 0)
+                    return (isinstance(v, (int, float)) and v < 0.5, v)
+                ok_rel, _ = wait_for(released, timeout=6, interval=0.2)
+                if not ok_rel:
+                    self.log(f"    gesture {desc or fire_cable}: {btn} never "
+                             f"released before retry; pressing anyway")
             code, resp, _ = self.bridge.watch_arm(self.master_id,
                                                    [fire_cable, *evidence_ids])
             if code != 200:
@@ -669,8 +712,7 @@ class Runner:
             self.bridge.params(mod_id, mod["paramId"], 1, hold_ms=mod_hold, settle=False)
             time.sleep(0.15)  # ensure the modifier registers first
             self.bridge.params(mid, entry["paramId"], 1, hold_ms=tap_hold, settle=False)
-            # 1.5x: same slow-engine wall allowance as Bridge.params' settle
-            time.sleep(max(mod_hold, tap_hold) / 1000.0 * 1.5 + 0.35)
+            settle_for(max(mod_hold, tap_hold))
         else:
             raise ValueError(f"unknown gesture type {gtype} for {name}")
 
@@ -1349,7 +1391,9 @@ def phase6(r):
         # accurate), with the port probe alongside for the 5V level whenever
         # it does catch a pulse. jack1's 50%-duty square already proves the
         # port-level 0/5V property for the G8's output stage.
-        r.bridge.watch_arm(r.master_id, ["G2"])
+        code_arm, arm_resp, _ = r.bridge.watch_arm(r.master_id, ["G2"])
+        if code_arm != 200:
+            return "FAIL", expected, f"watch arm G2 -> {code_arm} {arm_resp}"
         _, p2, _ = r.bridge.probe(g8, 1, "out", 4500)   # 0.5 Hz: ~2 pulses in window
         _, w, _ = r.bridge.watch_collect(r.master_id)
         g2 = (w or {}).get("signals", {}).get("G2", {})
@@ -1610,12 +1654,19 @@ def phase10(r):
         expected = "load uat-mfps.ini -> statusLine ^ok, [0-9]+ bytes RAM; chainError empty"
         ok_chain, chain = r.wait_chain(["p2b8", "b32", "m4", "m4"])
         code, st, _ = r.bridge.load_patch(r.master_id, patch("uat-mfps.ini"))
+        # Check the LOAD's own outcome before reset-state below can mask it:
+        # a failed load leaves patchPath on the previous fixture, and
+        # reset-state would then happily reload THAT and report a healthy
+        # statusLine — a false PASS with 10.2+ running against the wrong patch.
+        if code != 200:
+            return "FAIL", expected, f"load uat-mfps.ini -> {code} {st}"
         # Factory-fresh capstone: loadPatchFile transfers the PREVIOUS patch's
         # circuit state into same-type circuits of the new one (hardware-
         # faithful, hardware.md §11.1) — running phase 4's fixture first was
         # observed to silently gate off MFPS tracks (10.2-10.4 flat). The
         # capstone spec assumes a freshly generated MFPS (zero active steps),
-        # so re-seed from startvalues.
+        # so re-seed from startvalues. reset-state returns full master status,
+        # so the statusLine/chainError asserts below stay meaningful.
         code_rs, st, _ = r.bridge.reset_state(r.master_id)
         if code_rs != 200:
             return "FAIL", expected, f"reset-state -> {code_rs} {st}"

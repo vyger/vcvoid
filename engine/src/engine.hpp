@@ -57,7 +57,11 @@ public:
     // cable of the LOADED patch, a valid fader handle, or a parseable
     // register. getValue returns 0.0 for unknown names by design; callers
     // that must distinguish "reads 0" from "typo" (the UAT bridge's signal
-    // watch validates names at arm time) check this first.
+    // watch validates names at arm time) check this first. NOTE: the
+    // register branch is parse-only — a syntactically valid register that no
+    // hardware in the chain backs (O9, a button on an absent controller)
+    // still passes and reads the RegisterFile's default 0.0; only cables and
+    // faders get a true existence check.
     bool hasSignal(const std::string& name) const;
     void setInputPatched(int n, bool p) { state_.regs.setInputPatched(uint8_t(n), p); }
 

@@ -194,38 +194,61 @@ struct DroidMasterBase : Module {
         float min = 0.f, max = 0.f, last = 0.f;
         double sum = 0.0;
         uint64_t ticks = 0;     // samples taken (0 -> engine never ticked)
-        uint64_t highTicks = 0; // samples >= 0.1
+        // Time spent >= 0.1, integrated per tick at the tick rate CURRENT at
+        // each sample — a mid-window tick-rate change (adaptive mode, POST
+        // tick-rate) can't misscale the total the way a ticks-x-final-rate
+        // conversion would.
+        double highSecs = 0.0;
         int edges = 0;
         bool edgeArmed = false;
-        bool first = true;
     };
     static constexpr size_t kWatchMaxSignals = 16;
     std::mutex watchMutex_;     // guards watch_/watchTickRate_ (tick vs arm/collect)
     std::atomic<bool> watchArmed_{false};
     std::vector<WatchStat> watch_;
-    float watchTickRate_ = 0.f; // effectiveRate at sample time (for highMs)
+    float watchTickRate_ = 0.f; // effectiveRate at last sample (reported as tickRateHz)
 
     // Install a watch (replaces any armed one). Caller (bridge HTTP thread)
     // validates the names against the live engine FIRST, under engineMutex.
+    // The vector (with its string allocations) is built OUTSIDE the lock and
+    // swapped in, so a re-arm over a live watch never blocks the audio
+    // thread on HTTP-thread heap work.
     void armWatch(const std::vector<std::string>& names) {
-        std::lock_guard<std::mutex> lk(watchMutex_);
-        watch_.clear();
+        std::vector<WatchStat> fresh;
+        fresh.reserve(names.size());
         for (const auto& n : names) {
             WatchStat w;
             w.name = n;
-            watch_.push_back(std::move(w));
+            fresh.push_back(std::move(w));
         }
+        std::lock_guard<std::mutex> lk(watchMutex_);
+        watch_.swap(fresh);
         watchTickRate_ = 0.f;
         watchArmed_.store(!watch_.empty(), std::memory_order_release);
     }
-    // Disarm and return the accumulated stats (empty if never armed).
-    std::vector<WatchStat> collectWatch(float* tickRateOut = nullptr) {
+    // Disarm and collect the accumulated stats. Returns false (leaving *out
+    // untouched) if no watch was armed — checked under the same lock as the
+    // collect so two concurrent collectors can't both read one arm.
+    bool collectWatch(std::vector<WatchStat>* out, float* tickRateOut = nullptr) {
         std::lock_guard<std::mutex> lk(watchMutex_);
+        if (!watchArmed_.load(std::memory_order_relaxed))
+            return false;
         watchArmed_.store(false, std::memory_order_relaxed);
         if (tickRateOut) *tickRateOut = watchTickRate_;
-        std::vector<WatchStat> out;
-        out.swap(watch_);
-        return out;
+        out->clear();
+        out->swap(watch_);
+        return true;
+    }
+    // Drop any armed watch. Called (under engineMutex) wherever the engine
+    // is swapped or destroyed: the arm-time name validation only holds for
+    // the engine it ran against — a stale cable name would silently read 0.0
+    // from the new engine every tick (Engine::getValue's documented unknown-
+    // name behavior), which is indistinguishable from "signal never fired".
+    // Collecting after a mid-watch patch load now 409s instead.
+    void disarmWatch() {
+        std::lock_guard<std::mutex> lk(watchMutex_);
+        watch_.clear();
+        watchArmed_.store(false, std::memory_order_relaxed);
     }
     bool watchArmed() const { return watchArmed_.load(std::memory_order_acquire); }
 
@@ -382,6 +405,10 @@ public:
             }
         }
         std::lock_guard<std::mutex> lock(engineMutex);
+        // Every engine swap/drop invalidates an armed signal watch: its names
+        // were validated against the OLD engine (see disarmWatch). Lock order
+        // engineMutex -> watchMutex_ matches the audio thread's.
+        disarmWatch();
         lastResult = r;
         patchPath = path;
         if (r.ok) {
@@ -456,6 +483,7 @@ public:
             std::lock_guard<std::mutex> lock(engineMutex);
             path = patchPath;
             engine.reset();
+            disarmWatch();   // engine dropped: armed names no longer resolvable
             lastSnapshot = droid::StateSnapshot();
         }
         if (!path.empty())
@@ -707,13 +735,14 @@ public:
                 watchTickRate_ = effectiveRate;
                 for (WatchStat& w : watch_) {
                     float v = engine->getValue(w.name);
-                    if (w.first) { w.min = w.max = v; w.first = false; }
+                    if (w.ticks == 0) w.min = w.max = v;
                     w.min = std::min(w.min, v);
                     w.max = std::max(w.max, v);
                     w.last = v;
                     w.sum += v;
                     w.ticks++;
-                    if (v >= 0.1f) w.highTicks++;
+                    if (v >= 0.1f && effectiveRate > 0.f)
+                        w.highSecs += 1.0 / effectiveRate;
                     if (w.edgeArmed && v >= 0.1f) {
                         w.edgeArmed = false;
                         w.edges++;
