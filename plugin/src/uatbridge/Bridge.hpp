@@ -100,10 +100,22 @@ private:
     // before expiry; re-resolved via APP->engine->getModule() at restore
     // time. Guarded by holdsMutex_; expired in expireHolds() (UI thread,
     // called from BridgeWidget::step()).
+    //
+    // The deadline is an ENGINE FRAME (Engine::getFrame()), not a wall-clock
+    // time, and it is computed when the queued set actually EXECUTES on the
+    // UI thread, not when the POST arrives. Both choices exist because
+    // gesture durations must be exact in the ENGINE's timebase: with no
+    // Audio module in the rack (the UAT template), Rack's fallback engine
+    // thread paces sample time off the CPU clock and macOS can throttle it —
+    // measured sessions ran up to ~26% slower than wall clock, silently
+    // compressing a wall-timed 1800ms longpress below the DROID button
+    // circuit's 1.5s threshold. A frame-based deadline holds the param for
+    // exactly holdMs of sample time regardless of engine pace (and equals
+    // wall time whenever a real audio device drives the engine).
     struct Hold {
         int64_t moduleId;
         int paramId;
-        std::chrono::steady_clock::time_point deadline;
+        int64_t frameDeadline;
     };
     std::mutex holdsMutex_;
     std::vector<Hold> holds_;

@@ -341,20 +341,27 @@ std::string Bridge::handleParams(const Request& req, int* code) {
         return "{\"error\":\"paramId out of range\"}";
     }
 
-    runOnUi([moduleId, paramId, value] {
+    runOnUi([this, moduleId, paramId, value, holdMs] {
         // Re-resolve on the UI thread and re-check bounds defensively: the
         // module can be deleted (and a param count can only be trusted for the
         // module we re-fetch) between the HTTP-thread check above and this run.
         if (rack::engine::Module* m = APP->engine->getModule(moduleId))
-            if (paramId >= 0 && paramId < (int)m->params.size())
+            if (paramId >= 0 && paramId < (int)m->params.size()) {
                 APP->engine->setParamValue(m, paramId, value);
+                // Schedule the release in ENGINE FRAMES from the moment the
+                // set actually lands (see Hold in Bridge.hpp: sample-time
+                // deadlines keep gesture durations exact when the fallback
+                // engine thread runs slower than wall clock, and anchoring
+                // here instead of at POST time means UI-queue drain latency
+                // can't shorten the hold).
+                if (holdMs > 0) {
+                    int64_t deadline = APP->engine->getFrame() +
+                        (int64_t)(holdMs / 1000.0 * APP->engine->getSampleRate());
+                    std::lock_guard<std::mutex> lk(holdsMutex_);
+                    holds_.push_back({moduleId, paramId, deadline});
+                }
+            }
     });
-
-    if (holdMs > 0) {
-        std::lock_guard<std::mutex> lk(holdsMutex_);
-        holds_.push_back({moduleId, paramId,
-            std::chrono::steady_clock::now() + std::chrono::milliseconds(holdMs)});
-    }
 
     *code = 200;
     json_t* o = json_object();
@@ -1454,12 +1461,16 @@ std::string Bridge::handleMasterCpuProfiling(DroidMasterBase* m, const Request& 
 }
 
 void Bridge::expireHolds() {
-    auto now = std::chrono::steady_clock::now();
+    // Sample-time expiry (see Hold in Bridge.hpp): compare against the
+    // engine's frame counter, so a hold lasts exactly holdMs of ENGINE time
+    // even when the no-audio-module fallback thread paces sample time slower
+    // than wall clock.
+    int64_t nowFrame = APP->engine->getFrame();
     std::vector<Hold> expired;
     {
         std::lock_guard<std::mutex> lk(holdsMutex_);
         auto it = std::remove_if(holds_.begin(), holds_.end(), [&](const Hold& h) {
-            return h.deadline <= now;
+            return h.frameDeadline <= nowFrame;
         });
         expired.assign(it, holds_.end());
         holds_.erase(it, holds_.end());
