@@ -164,9 +164,9 @@ struct DroidMaster18Widget : DroidMasterBaseWidget {
     }
 
     void appendContextMenu(Menu* menu) override {
-        DroidMasterBaseWidget::appendContextMenu(menu);
+        appendMasterMenu(menu);
         auto* m = dynamic_cast<DroidMaster18*>(module);
-        if (!m) return;
+        if (!m) { appendBuildInfoMenu(menu); return; }
         menu->addChild(new MenuSeparator);
         auto sub = [&](const char* label, rack::midi::Port* port) {
             menu->addChild(createSubmenuItem(label, "", [port](Menu* sm) {
@@ -179,6 +179,7 @@ struct DroidMaster18Widget : DroidMasterBaseWidget {
         sub("MIDI1 output (TRS)", &m->trs1Out);
         sub("MIDI2 input (TRS)",  &m->trs2In);
         sub("MIDI2 output (TRS)", &m->trs2Out);
+        appendBuildInfoMenu(menu);
     }
 };
 

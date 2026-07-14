@@ -10,6 +10,9 @@ FLAGS += -I../engine
 SOURCES += $(wildcard src/*.cpp) $(ENGINE_SOURCES)
 SOURCES += $(wildcard src/uatbridge/*.cpp)
 FLAGS += -DVCVOID_GIT_HASH=\"$(shell git -C .. rev-parse --short HEAD)\"
+# Tag if the build is exactly at one, else the branch name; empty on a
+# detached HEAD that isn't at a tag. Shown in every module's context menu.
+FLAGS += -DVCVOID_GIT_REF=\"$(shell git -C .. describe --tags --exact-match 2>/dev/null || git -C .. symbolic-ref --short -q HEAD)\"
 DISTRIBUTABLES += res
 
 include $(RACK_DIR)/plugin.mk
