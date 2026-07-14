@@ -5,6 +5,7 @@
 // nanovg — no SVG assets.
 #include "plugin.hpp"
 #include "Layout.hpp"
+#include "BuildInfo.hpp"
 #include "uatbridge/Bridge.hpp"
 
 namespace dw {
@@ -416,5 +417,10 @@ struct VcvoidModuleWidget : rack::app::ModuleWidget {
     void step() override {
         rack::app::ModuleWidget::step();
         if (auto* b = uat::Bridge::instance()) b->ensureWidget();
+    }
+
+    // Subclasses that override this (X7) must keep the build-info line last.
+    void appendContextMenu(Menu* menu) override {
+        appendBuildInfoMenu(menu);
     }
 };
