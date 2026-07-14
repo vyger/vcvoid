@@ -5,6 +5,7 @@
 #include "Layout.hpp"
 #include "uatbridge/Bridge.hpp"   // forward-declares Rack types only; safe here
 #include "AdaptiveRate.hpp"
+#include "BuildInfo.hpp"
 #include <osdialog.h>
 #include <sys/stat.h>
 #include <fstream>
@@ -1079,6 +1080,14 @@ struct DroidMasterBaseWidget : ModuleWidget {
     }
 
     void appendContextMenu(Menu* menu) override {
+        appendMasterMenu(menu);
+        appendBuildInfoMenu(menu);
+    }
+
+    // The master-common menu body, separate from appendContextMenu so
+    // DroidMaster18Widget can insert its MIDI submenus between this and the
+    // trailing build-info line.
+    void appendMasterMenu(Menu* menu) {
         DroidMasterBase* m = getModule<DroidMasterBase>();
         menu->addChild(new MenuSeparator);
         // Chain status: physical contents plus any validation error. chainPhysical,

@@ -25,9 +25,9 @@ It's also quite helpful if you don't yet have a droid hardware system and are cu
 
 ## Screenshots
 
-| master | master18 | m4 | p2b8 | g8 |
-|:------:|:--------:|:--:|:----:|:--:|
-| ![vcvoid master](docs/screenshots/master.png) | ![vcvoid master18](docs/screenshots/master18.png) | ![vcvoid m4 motor faders](docs/screenshots/m4.png) | ![vcvoid p2b8 controller](docs/screenshots/p2b8.png) | ![vcvoid g8 gate expander](docs/screenshots/g8.png) |
+<p align="center">
+  <img src="docs/screenshots/rack.png" alt="vcvoid modules (master, P2B8, B32, two M4s) running a motor-fader performance sequencer patch in VCV Rack, driving VCV VCOs/VCFs and a Befaco Percall" width="760">
+</p>
 
 ## Modules
 

@@ -208,7 +208,7 @@ struct DroidX7Widget : VcvoidModuleWidget {
 
     void appendContextMenu(Menu* menu) override {
         auto* m = dynamic_cast<DroidX7*>(module);
-        if (!m) return;
+        if (!m) { appendBuildInfoMenu(menu); return; }
         menu->addChild(new MenuSeparator);
         auto sub = [&](const char* label, rack::midi::Port* port) {
             menu->addChild(createSubmenuItem(label, "", [port](Menu* sm) {
@@ -219,6 +219,7 @@ struct DroidX7Widget : VcvoidModuleWidget {
         sub("TRS output device", &m->trsOut);
         sub("USB input device",  &m->usbIn);
         sub("USB output device", &m->usbOut);
+        appendBuildInfoMenu(menu);
     }
 };
 
