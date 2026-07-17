@@ -111,7 +111,7 @@ TEST(ram_over_budget) {
     CHECK(found);
 }
 
-// Experimental "ignore hardware memory limits" (#13): with the option set, the
+// Experimental "ignore memory limits" (#13): with the option set, the
 // same over-budget patch compiles ok — overflows downgrade to warnings, and
 // ramUsed still reports the true (over-budget) footprint.
 TEST(ram_over_budget_ignored) {

@@ -1163,7 +1163,7 @@ struct DroidMasterBaseWidget : ModuleWidget {
             }));
         menu->addChild(new MenuSeparator);
         menu->addChild(createMenuLabel("Experimental"));
-        menu->addChild(createBoolMenuItem("Ignore hardware memory limits", "",
+        menu->addChild(createBoolMenuItem("Ignore memory limits", "",
             [m]() { return m->ignoreHwMemoryLimits; },
             [m](bool v) {
                 m->ignoreHwMemoryLimits = v;

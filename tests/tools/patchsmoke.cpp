@@ -42,7 +42,7 @@ int main(int argc, char** argv) {
     droid::LoadOptions lopts;
     int failed = 0;
     for (int i = 1; i < argc; i++) {
-        // --ignore-mem: the plugin's experimental "ignore hardware memory
+        // --ignore-mem: the plugin's experimental "ignore memory
         // limits" setting (#13); applies to the patches that follow it.
         if (std::string(argv[i]) == "--ignore-mem") {
             lopts.ignoreMemoryLimits = true;
