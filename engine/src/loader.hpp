@@ -27,6 +27,7 @@ struct CompiledPatch {
     unsigned ramUsed = 0;                       // filled by RAM accounting (Task 7)
 };
 
-LoadResult compilePatch(const std::string& text, MasterType master, CompiledPatch& out);
+LoadResult compilePatch(const std::string& text, MasterType master, CompiledPatch& out,
+                        const LoadOptions& opts = {});
 
 } // namespace droid

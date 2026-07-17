@@ -47,9 +47,9 @@ Operand Engine::makeOperand(const Atom& a) const {
     return o;
 }
 
-LoadResult Engine::load(const std::string& patchText) {
+LoadResult Engine::load(const std::string& patchText, const LoadOptions& opts) {
     CompiledPatch cp;
-    LoadResult res = compilePatch(patchText, master_, cp);
+    LoadResult res = compilePatch(patchText, master_, cp, opts);
 
     // Implementation coverage check (kept out of compilePatch: Forge parity there).
     for (auto& cc : cp.circuits)

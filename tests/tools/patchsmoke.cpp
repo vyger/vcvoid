@@ -7,7 +7,7 @@
 #include <sstream>
 #include <string>
 
-static bool smoke(const std::string& path) {
+static bool smoke(const std::string& path, const droid::LoadOptions& lopts) {
     std::ifstream f(path);
     if (!f) {
         std::printf("FAIL %s: cannot open\n", path.c_str());
@@ -23,7 +23,7 @@ static bool smoke(const std::string& path) {
         master = droid::MasterType::Master18;
 
     droid::Engine e(master);
-    droid::LoadResult r = e.load(text);
+    droid::LoadResult r = e.load(text, lopts);
     for (const auto& w : r.warnings)
         std::printf("  warn %s: %s\n", path.c_str(), w.c_str());
     if (!r.ok) {
@@ -39,8 +39,16 @@ static bool smoke(const std::string& path) {
 }
 
 int main(int argc, char** argv) {
+    droid::LoadOptions lopts;
     int failed = 0;
-    for (int i = 1; i < argc; i++)
-        if (!smoke(argv[i])) failed++;
+    for (int i = 1; i < argc; i++) {
+        // --ignore-mem: the plugin's experimental "ignore memory
+        // limits" setting (#13); applies to the patches that follow it.
+        if (std::string(argv[i]) == "--ignore-mem") {
+            lopts.ignoreMemoryLimits = true;
+            continue;
+        }
+        if (!smoke(argv[i], lopts)) failed++;
+    }
     return failed;
 }

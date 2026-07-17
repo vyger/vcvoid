@@ -61,6 +61,11 @@ struct DroidMasterBase : Module {
     // Set on the engine thread by onSampleRateChange; consumed by the widget's
     // step() on the UI thread, which is the only thread allowed to reload.
     std::atomic<bool> timingDirty{false};
+    // Experimental (#13): load patches over the hardware limits (RAM budget,
+    // 64 000-byte size cap) — the limit errors downgrade to warnings. Persisted;
+    // read on whatever thread calls loadPatchFile (bool torn read tolerable,
+    // same as the timing fields).
+    bool ignoreHwMemoryLimits = false;
 
     // Master type + I/O geometry (set once by the subclass constructor).
     droid::MasterType masterType_;
@@ -380,9 +385,11 @@ public:
             }
             std::stringstream ss; ss << f.rdbuf(); text = ss.str();
         }
+        droid::LoadOptions lopts;
+        lopts.ignoreMemoryLimits = ignoreHwMemoryLimits;
         auto fresh = std::make_unique<droid::Engine>(
             masterType_, effectiveRate);
-        droid::LoadResult r = fresh->load(text);
+        droid::LoadResult r = fresh->load(text, lopts);
         if (r.ok) {
             adaptiveHz = vcvoid::adaptiveTickHz(r.ramUsed);
             if (timingMode == TimingMode::Adaptive) {
@@ -401,7 +408,7 @@ public:
                 // that invariant ever break.
                 if (effectiveRate != fresh->tickRateHz()) {
                     fresh = std::make_unique<droid::Engine>(masterType_, effectiveRate);
-                    r = fresh->load(text);
+                    r = fresh->load(text, lopts);
                 }
             }
         }
@@ -965,6 +972,8 @@ public:
         json_object_set_new(root, "targetHz", json_real(targetHz));
         json_object_set_new(root, "timingMode",
             json_string(timingMode == TimingMode::Adaptive ? "adaptive" : "fixed"));
+        json_object_set_new(root, "ignoreHwMemoryLimits",
+            json_boolean(ignoreHwMemoryLimits));
         json_object_set_new(root, "circuitState", snapshotToJson(lastSnapshot));
         return root;
     }
@@ -982,6 +991,10 @@ public:
             if (const char* s = json_string_value(j))
                 if (std::strcmp(s, "adaptive") == 0)
                     timingMode = TimingMode::Adaptive;
+        // Restore BEFORE the patch load below: an over-budget patch saved with
+        // the limits ignored must reload the same way on Rack reopen.
+        if (json_t* j = json_object_get(root, "ignoreHwMemoryLimits"))
+            ignoreHwMemoryLimits = json_boolean_value(j);
         // Load the saved circuit state BEFORE the patch load below, so that
         // loadPatchFile (with no live engine yet) restores it into the fresh
         // engine — the Rack-reopen mirror of the hot-reload transfer.
@@ -1147,6 +1160,21 @@ struct DroidMasterBaseWidget : ModuleWidget {
                     m->targetHz = DroidMasterBase::kTickRates[i - 1];
                 }
                 m->applyTiming(APP->engine->getSampleRate());
+            }));
+        menu->addChild(new MenuSeparator);
+        menu->addChild(createMenuLabel("Experimental"));
+        menu->addChild(createBoolMenuItem("Ignore memory limits", "",
+            [m]() { return m->ignoreHwMemoryLimits; },
+            [m](bool v) {
+                m->ignoreHwMemoryLimits = v;
+                // Re-evaluate immediately: an over-budget patch either loads
+                // now or goes back to a hard load error.
+                std::string path;
+                {
+                    std::lock_guard<std::mutex> lock(m->engineMutex);
+                    path = m->patchPath;
+                }
+                if (!path.empty()) m->loadPatchFile(path);
             }));
     }
 };

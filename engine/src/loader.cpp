@@ -74,13 +74,19 @@ bool validRegister(const RegId& r, MasterType master,
 }
 } // namespace
 
-LoadResult compilePatch(const std::string& text, MasterType master, CompiledPatch& out) {
+LoadResult compilePatch(const std::string& text, MasterType master, CompiledPatch& out,
+                        const LoadOptions& opts) {
     LoadResult res;
     out = CompiledPatch{};
 
     if (stripPatch(text).size() > 64000) {
-        res.errors.push_back({0, "patch exceeds the maximum size of 64000 bytes"});
-        return res;
+        if (opts.ignoreMemoryLimits) {
+            res.warnings.push_back("patch exceeds the maximum size of 64000 bytes"
+                                   " (loaded anyway: hardware memory limits ignored)");
+        } else {
+            res.errors.push_back({0, "patch exceeds the maximum size of 64000 bytes"});
+            return res;
+        }
     }
     ParseResult pr = parsePatch(text);
     res.errors = pr.errors;
@@ -198,8 +204,16 @@ LoadResult compilePatch(const std::string& text, MasterType master, CompiledPatc
             res.errors.push_back({lines[0], "Patch cable " + name + " is never used as an output"});
     std::sort(out.cableNames.begin(), out.cableNames.end());
 
-    out.ramUsed = computeRam(out, master, res.errors);
+    std::vector<LoadError> ramErrors;
+    out.ramUsed = computeRam(out, master, ramErrors);
     res.ramUsed = out.ramUsed;
+    if (opts.ignoreMemoryLimits) {
+        for (auto& e : ramErrors)
+            res.warnings.push_back("line " + std::to_string(e.line) + ": " + e.message +
+                                   " (loaded anyway: hardware memory limits ignored)");
+    } else {
+        res.errors.insert(res.errors.end(), ramErrors.begin(), ramErrors.end());
+    }
     res.ok = res.errors.empty();
     return res;
 }
