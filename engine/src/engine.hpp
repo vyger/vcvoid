@@ -28,7 +28,7 @@ class Engine {
 public:
     explicit Engine(MasterType master = MasterType::Master16,
                     float tickRateHz = 6000.0f, uint32_t seed = 1);
-    LoadResult load(const std::string& patchText);
+    LoadResult load(const std::string& patchText, const LoadOptions& opts = {});
     bool loaded() const { return loaded_; }
     void tick();
     uint64_t tickCount() const { return state_.tick; }

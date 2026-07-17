@@ -110,3 +110,57 @@ TEST(ram_over_budget) {
         if (e.message.find("exceeds the available memory") != std::string::npos) found = true;
     CHECK(found);
 }
+
+// Experimental "ignore hardware memory limits" (#13): with the option set, the
+// same over-budget patch compiles ok — overflows downgrade to warnings, and
+// ramUsed still reports the true (over-budget) footprint.
+TEST(ram_over_budget_ignored) {
+    std::string patch;
+    for (int i = 0; i < 7; i++) patch += "[cvlooper]\n";
+    CompiledPatch cp;
+    LoadOptions opts;
+    opts.ignoreMemoryLimits = true;
+    auto r = compilePatch(patch, MasterType::Master16, cp, opts);
+    CHECK(r.ok);
+    CHECK(r.errors.empty());
+    bool warned = false;
+    for (auto& w : r.warnings)
+        if (w.find("exceeds the available memory") != std::string::npos) warned = true;
+    CHECK(warned);
+    CHECK(r.ramUsed > 112867);   // still the honest footprint
+}
+
+// The 64 000-byte patch-size cap is a hardware limit too: hard error normally,
+// warning under ignoreMemoryLimits (the patch must still parse and run).
+TEST(patch_size_cap_ignored) {
+    // Pad past 64 000 bytes with a valid copy chain (stripPatch removes
+    // comments/whitespace, so the padding must be real circuit text; each
+    // cable is written once and read once so the patch stays well-formed).
+    std::string patch = "[copy]\n input = I1\n output = _C0\n";
+    int n = 0;
+    while (stripPatch(patch).size() <= 64000) {   // the limit applies post-strip
+        for (int i = 0; i < 100; i++) {
+            patch += "[copy]\n input = _C" + std::to_string(n) +
+                     "\n output = _C" + std::to_string(n + 1) + "\n";
+            n++;
+        }
+    }
+    patch += "[copy]\n input = _C" + std::to_string(n) + "\n output = O1\n";
+    CompiledPatch cp;
+    auto hard = compilePatch(patch, MasterType::Master16, cp);
+    CHECK(!hard.ok);
+    bool sizeErr = false;
+    for (auto& e : hard.errors)
+        if (e.message.find("maximum size") != std::string::npos) sizeErr = true;
+    CHECK(sizeErr);
+
+    LoadOptions opts;
+    opts.ignoreMemoryLimits = true;
+    auto soft = compilePatch(patch, MasterType::Master16, cp, opts);
+    bool sizeWarn = false;
+    for (auto& w : soft.warnings)
+        if (w.find("maximum size") != std::string::npos) sizeWarn = true;
+    CHECK(sizeWarn);
+    for (auto& e : soft.errors)
+        CHECK(e.message.find("maximum size") == std::string::npos);
+}

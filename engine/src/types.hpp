@@ -18,4 +18,12 @@ struct LoadResult {
     unsigned ramUsed = 0;                // bytes, Forge-compatible accounting
 };
 
+// Experimental load switches (context-menu "Experimental" section, #13).
+struct LoadOptions {
+    // Downgrade the hardware memory limits — the RAM-budget walk and the
+    // 64 000-byte patch-size cap — from load errors to warnings. ramUsed still
+    // reports the honest footprint.
+    bool ignoreMemoryLimits = false;
+};
+
 } // namespace droid
