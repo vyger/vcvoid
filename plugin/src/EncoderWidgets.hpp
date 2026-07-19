@@ -172,11 +172,15 @@ inline void drawEncoderRingSquare(NVGcontext* vg, Vec center, float half, float 
                                   const RingDrawState& rs) {
     float pitch = half / 4.f;
     float w = std::max(0.f, std::min(1.f, std::max(rs.overlay, rs.lOverlay)));
-    auto drawCell = [&](int c, int r, float cr, float cg, float cb) {
+    // underlay: raise every channel to at least the white-overlay level. Value
+    // cells pass false — they keep their hue and pulse brighter instead (see
+    // below), matching hardware.
+    auto drawCell = [&](int c, int r, float cr, float cg, float cb, bool underlay = true) {
         Vec p = center.plus(Vec((c - 4) * pitch, (r - 4) * pitch));
+        float u = underlay ? w : 0.f;
         nvgBeginPath(vg);
         nvgRect(vg, p.x - cell * 0.5f, p.y - cell * 0.5f, cell, cell);
-        nvgFillColor(vg, nvgRGBAf(std::max(cr, w), std::max(cg, w), std::max(cb, w), 1.f));
+        nvgFillColor(vg, nvgRGBAf(std::max(cr, u), std::max(cg, u), std::max(cb, u), 1.f));
         nvgFill(vg);
     };
 
@@ -244,14 +248,21 @@ inline void drawEncoderRingSquare(NVGcontext* vg, Vec center, float half, float 
                     if (gk >= 16 && gk <= 16 + steps) { base = c; lvl = kFill; }
                 }
             }
+            bool valueCell = lvl > kBg;
             if (k == lit) {
                 // Value dot: full-brightness colour; bright white at the
                 // bipolar zero position (hardware: "the center is bright white").
                 if (rs.bipolar && steps == 0) { base = {1.f, 1.f, 1.f}; }
                 else if (rs.bipolar) base = negSide ? nc : c;
                 lvl = 1.f;
+                valueCell = true;
             }
-            drawCell(ord[k][0], ord[k][1], base.r * lvl, base.g * lvl, base.b * lvl);
+            // White overlay, per hardware (menu-4 fixture observation): the
+            // value display keeps its HUE and pulses BRIGHTER, while only the
+            // background cells whiten underneath.
+            if (valueCell) lvl += (1.f - lvl) * w;
+            drawCell(ord[k][0], ord[k][1],
+                     base.r * lvl, base.g * lvl, base.b * lvl, !valueCell);
         }
     }
 
