@@ -47,6 +47,17 @@ public:
 
         handlePresets(s, p);
 
+        // Ring colours/fill are bank-wide; the led<N> white overlay is per lane.
+        // All display state is written ONLY while selected (issue #15): on
+        // hardware the ring belongs to the selected overlay circuit, so an
+        // unselected bank must not paint over it (previously every bank wrote
+        // ringDisplay each tick and the last bank in patch order owned the ring).
+        float colorV = in("color").connected() ? in("color").value(s)
+                                               : ec::kDefaultRingColor;
+        float negV = in("negativecolor").connected() ? in("negativecolor").value(s)
+                                                     : colorV;
+        bool fill = std::lround(in("ledfill").value(s)) != 0;
+
         for (int i = 0; i < count_; i++) {
             EncoderState* enc = s.controllers.encoder(firstGlobal_ + i);
             long detents = enc ? enc->pendingDetents : 0;
@@ -55,7 +66,20 @@ public:
             if (selected) state_[i].applyMovement(p, detents);
             state_[i].applySnap(p, dt);
             float emitted = state_[i].smoothStep(p, dt);
-            if (enc) enc->ringDisplay = ec::clampf(state_[i].pos, 0.0f, 1.0f);  // panel-only
+            if (selected && enc) {
+                enc->ringDisplay = ec::clampf(state_[i].pos, 0.0f, 1.0f);  // legacy readback
+                // mode 0 = "the encoder is unused, its LEDs are off" (manual
+                // mode table) — leave ring.active false; the led overlay is
+                // still honored (an explicitly wired led<N> is user intent).
+                if (p.discrete >= 2 || p.mode != 0) {
+                    enc->ring.active = true;
+                    ec::ringDisplayValue(state_[i], p, enc->ring.bipolar, enc->ring.value);
+                    enc->ring.fill = fill;
+                    enc->ring.color = colorV;
+                    enc->ring.negColor = negV;
+                }
+                enc->ring.overlay = ec::clampf(in("led", i + 1).value(s), 0.0f, 1.0f);
+            }
 
             out("output", i + 1).set(s, state_[i].output(p, emitted));
             out("button", i + 1).set(s, (selected && pushed) ? 1.0f : 0.0f);

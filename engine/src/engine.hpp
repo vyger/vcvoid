@@ -118,6 +118,12 @@ public:
         const EncoderState* es = state_.controllers.encoder(global1);
         return es ? es->ringDisplay : 0.0f;
     }
+    // Full select-gated ring image (issue #15); RingDisplay{} (inactive) when
+    // nothing selected drives the encoder or the index is bad.
+    RingDisplay encoderRingInfo(int global1) const {
+        const EncoderState* es = state_.controllers.encoder(global1);
+        return es ? es->ring : RingDisplay{};
+    }
     float encoderStepLed(int global1) const {
         const EncoderState* es = state_.controllers.encoder(global1);
         return es ? es->stepLed : 0.0f;

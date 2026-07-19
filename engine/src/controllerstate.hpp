@@ -21,10 +21,38 @@ namespace droid {
 //     as the touch button's LED in the M4" (encoquencer.md). Brightness 0..1 +
 //     DROID colour value; a negative colour is the white played-step sentinel
 //     (see SeqCore::kLedWhite). Panel-only, like ringDisplay.
+// What the currently SELECTED encoder/encoderbank/encoquencer circuit shows on
+// the 32-LED ring (panel-only; issue #15, verified against hardware photos of
+// the four-menu fixture). Written each tick by the selected circuit only;
+// beginTick() clears it, so with nothing selected the ring goes dark (the
+// L-register white overlay still rides the generic leds[] path).
+//   style 0 (encoder/encoderbank): the full 32-cell value ring. Unipolar zero
+//     at BOTTOM-center sweeping clockwise (left side up, top, right side down);
+//     bipolar zero at TOP-center — positive clockwise down the right side in
+//     `color`, negative counterclockwise down the left in `negColor`, the zero
+//     dot bright white. `fill` = ledfill (LEDs zero..value at half brightness);
+//     unlit cells glow the colour dimly (real hardware background glow).
+//   style 1 (encoquencer): the legacy 25-cell gauge from the bottom-left corner
+//     (encoquencer.md "LED visualization"; the bottom-middle cells stay the
+//     step LED). value is the gauge position, colour fields unused.
+//   overlay: white whole-ring overlay from the circuit's `led` param (0..1),
+//     select-gated — distinct from the always-on L-register overlay.
+struct RingDisplay {
+    bool    active = false;
+    uint8_t style = 0;
+    bool    bipolar = false;
+    bool    fill = true;
+    float   value = 0.0f;      // unipolar 0..1, bipolar -1..1
+    float   color = 0.0f;      // DROID colour value (droidcolor.hpp)
+    float   negColor = 0.0f;
+    float   overlay = 0.0f;
+};
+
 struct EncoderState {
     long  pendingDetents = 0;
     bool  pushed = false;
     float ringDisplay = 0.0f;
+    RingDisplay ring;          // select-gated display (issue #15); see above
     float stepLed = 0.0f;
     float stepLedColor = 0.0f;
 };
@@ -146,6 +174,9 @@ public:
     DisplayState* display(int db8e1);
     const DisplayState* display(int db8e1) const;
 
+    // Called by the Engine before every tick: clears the select-gated ring
+    // display so a deselected circuit's image can't linger (issue #15).
+    void beginTick();
     // Called by the Engine after every tick: drains accumulated detents.
     void endTick();
 

@@ -19,7 +19,14 @@ struct DroidE4 : ChainModule {
 
     uint32_t detent[4] = {};   // monotonic per-encoder detent counters (widget ++/--)
     bool push[4] = {};         // per-encoder push level (widget sets on press)
-    float ring[4] = {};        // last downstream ring value 0..1 (widget draws)
+    // Select-gated ring image (issue #15): flags bit0 active / bit1 bipolar /
+    // bit2 fill / bit3 legacy encoquencer gauge; value, DROID colours, and the
+    // select-gated white `led`-param overlay — see chain.hpp DownstreamBlock.
+    uint8_t ringFlags[4] = {};
+    float ringValue[4] = {};
+    float ringColor[4] = {};
+    float ringNegColor[4] = {};
+    float ringOverlay[4] = {};
     float ringLed[4] = {};     // last downstream L-register white overlay 0..1
     float stepLed[4] = {};     // encoquencer step LED (middle-three bottom cells): brightness
     float stepLedColor[4] = {};// ... DROID colour value (<0 = white played-step marker)
@@ -36,7 +43,11 @@ struct DroidE4 : ChainModule {
 
     void applyDownstream(const droid::chain::DownstreamBlock& b, float) override {
         for (int i = 0; i < 4; i++) {
-            ring[i]         = b.ring[i];
+            ringFlags[i]    = b.ringFlags[i];
+            ringValue[i]    = b.ringValue[i];
+            ringColor[i]    = b.ringColor[i];
+            ringNegColor[i] = b.ringNegColor[i];
+            ringOverlay[i]  = b.ringOverlay[i];
             ringLed[i]      = b.leds[i];
             stepLed[i]      = b.encStepLed[i];
             stepLedColor[i] = b.encStepLedColor[i];
@@ -57,11 +68,22 @@ struct E4RingWidget : Widget {
     float half = 0.f;   // centre -> side LED-centre row (px)
     float cell = 0.f;   // LED square side (px)
     void draw(const DrawArgs& args) override {
-        float v  = module ? module->ring[idx]         : 0.f;
-        float ov = module ? module->ringLed[idx]      : 0.f;
-        float sb = module ? module->stepLed[idx]      : 0.f;
-        float sc = module ? module->stepLedColor[idx] : 0.f;
-        drawValueRingSquare(args.vg, box.size.div(2), half, cell, v, ov, sb, sc);
+        RingDrawState rs;
+        if (module) {
+            uint8_t f = module->ringFlags[idx];
+            rs.active      = f & 1;
+            rs.bipolar     = f & 2;
+            rs.fill        = f & 4;
+            rs.legacyGauge = f & 8;
+            rs.value       = module->ringValue[idx];
+            rs.color       = module->ringColor[idx];
+            rs.negColor    = module->ringNegColor[idx];
+            rs.overlay     = module->ringOverlay[idx];
+            rs.lOverlay    = module->ringLed[idx];
+            rs.stepLed     = module->stepLed[idx];
+            rs.stepLedColor = module->stepLedColor[idx];
+        }
+        drawEncoderRingSquare(args.vg, box.size.div(2), half, cell, rs);
     }
 };
 

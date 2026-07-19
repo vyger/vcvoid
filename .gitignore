@@ -18,3 +18,6 @@ docs/superpowers/
 docs/uat/results/
 manual/images/
 NOTES.md
+# local-only rack-specific test patches
+patches/e4-menus-full-rack.ini
+patches/e4-menus-full-rack-m18.ini

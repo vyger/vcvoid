@@ -99,7 +99,22 @@ public:
             if (!(in("sharewithnext").value(s) >= kGateHighThreshold))
                 out("output").set(s, state_.output(p, emitted));
         }
-        if (enc) enc->ringDisplay = ec::clampf(state_.pos, 0.0f, 1.0f);  // panel-only
+        // Ring display, select-gated like the button/LEDs (issue #15): on
+        // hardware the ring belongs to the selected overlay circuit. mode 0
+        // (non-discrete) keeps the LEDs off per the manual's mode table.
+        if (selected && enc) {
+            enc->ringDisplay = ec::clampf(state_.pos, 0.0f, 1.0f);  // legacy readback
+            if (p.discrete >= 2 || p.mode != 0) {
+                enc->ring.active = true;
+                ec::ringDisplayValue(state_, p, enc->ring.bipolar, enc->ring.value);
+                enc->ring.fill = std::lround(in("ledfill").value(s)) != 0;
+                enc->ring.color = in("color").connected() ? in("color").value(s)
+                                                          : ec::kDefaultRingColor;
+                enc->ring.negColor = in("negativecolor").connected()
+                    ? in("negativecolor").value(s) : enc->ring.color;
+            }
+            enc->ring.overlay = ec::clampf(in("led").value(s), 0.0f, 1.0f);
+        }
 
         // --- button output (select-gated) -----------------------------------
         out("button").set(s, (selected && pushed) ? 1.0f : 0.0f);

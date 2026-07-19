@@ -144,6 +144,20 @@ struct DownstreamBlock {                  // one module's LED/gate-out state, fr
     // (header/text as NUL-terminated ASCII truncated to fit; value+numbermode
     // when dispIsText == 0). Pixels are rendered Rack-side.
     float ring[kMaxEncodersPerModule] = {};
+    // Issue #15: the full select-gated ring image (EncoderState::RingDisplay),
+    // mirroring hardware. ringFlags bits: 0 = active (a selected circuit drives
+    // the ring; clear = ring dark), 1 = bipolar (zero at top-center instead of
+    // bottom-center), 2 = ledfill (light zero..value), 3 = style 1 (legacy
+    // encoquencer 25-cell gauge — render ringValue like the old ring[] dot).
+    // ringValue is unipolar 0..1 / bipolar -1..1; the colours are DROID colour
+    // values (droidcolor.hpp); ringOverlay is the select-gated white overlay
+    // from the circuit's `led` param (the always-on L-register overlay rides
+    // leds[] as before).
+    uint8_t ringFlags[kMaxEncodersPerModule] = {};
+    float ringValue[kMaxEncodersPerModule] = {};
+    float ringColor[kMaxEncodersPerModule] = {};
+    float ringNegColor[kMaxEncodersPerModule] = {};
+    float ringOverlay[kMaxEncodersPerModule] = {};
     // encoquencer step LED (the middle-three ring cells below each encoder,
     // EncoderState.stepLed/-Color): brightness 0..1 + DROID colour value, where
     // a negative colour renders white (the played-step marker).
