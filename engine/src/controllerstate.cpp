@@ -126,6 +126,13 @@ const DisplayState* ControllerState::display(int db8e1) const {
     return &displays_[db8e1 - 1];
 }
 
+void ControllerState::beginTick() {
+    // Ring ownership is re-established every tick by whichever circuit is
+    // selected; clearing here (not endTick) lets the master read the image
+    // after tick() returns (issue #15).
+    for (auto& e : encoders_) e.ring = RingDisplay{};
+}
+
 void ControllerState::endTick() {
     for (auto& e : encoders_) e.pendingDetents = 0;
 }

@@ -168,6 +168,33 @@ struct State {
     }
 };
 
+// Default ring colour when the `color` param is unconnected. SPEC-GAP: the
+// manual marks `color` as a smart default without naming it; blue matches the
+// documented "blue LED gauge" of the fader/encoder value displays.
+constexpr float kDefaultRingColor = 1.2f;   // blue (droidcolor table)
+
+// Ring-display value for the E4/DB8E 32-LED ring (panel-only; issue #15).
+// Returns the dot value and whether the ring renders bipolar (zero at
+// top-center) — see controllerstate.hpp RingDisplay for the geometry contract.
+// SPEC-GAP: the manual doesn't describe the ring image of the infinity modes
+// (3/4/5); we wrap the position so the dot keeps moving with the value.
+inline void ringDisplayValue(const State& st, const Params& p,
+                             bool& bipolar, float& v) {
+    if (p.discrete >= 2) {
+        bipolar = false;
+        v = float(st.index(p)) / float(p.discrete - 1);
+        return;
+    }
+    switch (p.mode) {
+        case 2:  bipolar = true;  v = 2.0f * applyNotch(st.pos, p.notch) - 1.0f; break;
+        case 5:  bipolar = true;  v = st.pos - 2.0f * std::floor((st.pos + 1.0f) * 0.5f); break;
+        case 3: case 4:
+                 bipolar = false; v = st.pos - std::floor(st.pos); break;
+        case 6:  bipolar = false; v = st.pos; break;
+        default: bipolar = false; v = applyNotch(st.pos, p.notch); break;   // 0,1
+    }
+}
+
 // Clamp an override value (logical units) into the mode/discrete range.
 inline float clampOverride(const Params& p, float v) {
     if (p.discrete >= 2) {

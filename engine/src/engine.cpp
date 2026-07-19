@@ -127,6 +127,7 @@ void Engine::tick() {
         while (state_.midi.in[p].pop(e) && state_.midi.tickCount[p] < kMidiQueueCap)
             state_.midi.tickEv[p][state_.midi.tickCount[p]++] = e;
     }
+    state_.controllers.beginTick();   // clear select-gated ring display (issue #15)
     if (!profiling_) {
         for (auto& c : circuits_) c->tick(state_);
     } else {

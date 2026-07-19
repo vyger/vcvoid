@@ -871,6 +871,17 @@ public:
                 for (uint8_t n = 1; n <= cm->encoders; n++) {
                     int g = ++enc2;
                     b.ring[n - 1]            = engine->encoderRing(g);
+                    // Select-gated ring image (issue #15): flags/value/colours
+                    // straight from the engine's RingDisplay.
+                    droid::RingDisplay rd = engine->encoderRingInfo(g);
+                    b.ringFlags[n - 1] = (rd.active  ? 1u : 0u)
+                                       | (rd.bipolar ? 2u : 0u)
+                                       | (rd.fill    ? 4u : 0u)
+                                       | (rd.style == 1 ? 8u : 0u);
+                    b.ringValue[n - 1]    = rd.value;
+                    b.ringColor[n - 1]    = rd.color;
+                    b.ringNegColor[n - 1] = rd.negColor;
+                    b.ringOverlay[n - 1]  = rd.overlay;
                     b.encStepLed[n - 1]      = engine->encoderStepLed(g);
                     b.encStepLedColor[n - 1] = engine->encoderStepLedColor(g);
                 }

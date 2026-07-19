@@ -127,62 +127,139 @@ inline void drawValueRing(NVGcontext* vg, Vec center, float radius, float value,
     }
 }
 
+// Everything one E4/DB8E encoder ring displays (issue #15). Mirrors the chain's
+// per-encoder ring fields; the widget owns nothing but the geometry.
+struct RingDrawState {
+    bool  active = false;       // a selected circuit drives the ring
+    bool  bipolar = false;      // zero at top-center instead of bottom-center
+    bool  fill = true;          // ledfill: light zero..value at half brightness
+    bool  legacyGauge = false;  // style 1: encoquencer 25-cell gauge render
+    float value = 0.f;          // unipolar 0..1 / bipolar -1..1
+    float color = 0.f;          // DROID colour values (droidcolor.hpp)
+    float negColor = 0.f;
+    float overlay = 0.f;        // select-gated white overlay (`led` param)
+    float lOverlay = 0.f;       // always-on L-register white overlay
+    float stepLed = 0.f;        // encoquencer step LED (middle-three bottom cells)
+    float stepLedColor = 0.f;
+};
+
 // Draw a 32-LED value ring arranged on a SQUARE outline of small square LEDs —
 // the layout baked into the E4 faceplate art (9 LED cells per side, corners
-// shared = 32 unique cells). Cell roles follow encoquencer.md "LED
-// visualization":
-//   - the middle three cells of the BOTTOM row are the step/gate LED — they act
-//     as one light with "the same function as the touch button's LED in the M4".
-//     `stepLed` (0..1) is its brightness, `stepLedColor` the DROID colour value
-//     (negative = white, the played-step marker; droidcolor.hpp).
-//   - the two cells either side of those are unused (dark).
-//   - the remaining 25 cells are the VALUE gauge: `value` (0..1) lights exactly
-//     one of them (the DROID value dot). The gauge starts at the BOTTOM-LEFT
-//     corner ("a blue LED gauge starting from the bottom left") and runs
-//     clockwise — up the left side, across the top, down the right side — to the
-//     bottom-right corner.
-// `overlay` (0..1) is the white L-register brightness added to every cell.
+// shared = 32 unique cells). Verified against hardware photos of the four-menu
+// fixture (issue #15):
+//   - unipolar: zero at the BOTTOM-CENTER cell, value sweeps a full turn
+//     clockwise (up the left side, across the top, down the right side);
+//     value 1.0 lands back at bottom-center with the whole ring filled.
+//   - bipolar: zero at the TOP-CENTER cell; positive fills clockwise down the
+//     right side in `color`, negative counterclockwise down the left side in
+//     `negColor`; the dot at zero renders bright white.
+//   - `fill`: cells between zero and the value at half brightness, the value
+//     cell at full brightness; fill off = dot only.
+//   - background: every other cell glows the colour dimly (real hardware glow).
+//   - white overlays (L register + select-gated led param) ride underneath:
+//     each channel is raised to at least the overlay level.
+//   - legacyGauge (encoquencer): the documented 25-cell gauge from the
+//     bottom-left corner, white dot, bottom-middle cells reserved for the step
+//     LED (encoquencer.md "LED visualization").
+//   - inactive: all cells dark except the overlays (hardware: nothing selected
+//     drives the ring).
 //   center — widget-local centre of the ring
 //   half   — distance from centre to a side's row of LED CENTRES (= 4 * pitch)
 //   cell   — side length of each square LED, in px
 // Panel-only helper; used by E4 and DB8E (both faceplates bake the same square
-// ring: 9 cells per side, 62.6 px pitch, 44 px cells). The DB8E has no
-// encoquencer step LED (its encoder cannot be used by it) — defaults keep those
-// cells dark.
-inline void drawValueRingSquare(NVGcontext* vg, Vec center, float half, float cell,
-                                float value, float overlay,
-                                float stepLed = 0.f, float stepLedColor = 0.f) {
+// ring: 9 cells per side, 62.6 px pitch, 44 px cells).
+inline void drawEncoderRingSquare(NVGcontext* vg, Vec center, float half, float cell,
+                                  const RingDrawState& rs) {
     float pitch = half / 4.f;
-    float ov = std::max(0.f, std::min(1.f, overlay));
+    float w = std::max(0.f, std::min(1.f, std::max(rs.overlay, rs.lOverlay)));
     auto drawCell = [&](int c, int r, float cr, float cg, float cb) {
         Vec p = center.plus(Vec((c - 4) * pitch, (r - 4) * pitch));
         nvgBeginPath(vg);
         nvgRect(vg, p.x - cell * 0.5f, p.y - cell * 0.5f, cell, cell);
-        nvgFillColor(vg, nvgRGBAf(std::max(cr, ov), std::max(cg, ov), std::max(cb, ov), 1.f));
+        nvgFillColor(vg, nvgRGBAf(std::max(cr, w), std::max(cg, w), std::max(cb, w), 1.f));
         nvgFill(vg);
     };
 
-    // Value gauge: 25 cells (col,row on the 9x9 perimeter grid), bottom-left
-    // corner -> up the left column -> top row -> down the right column ->
-    // bottom-right corner.
-    const int NG = 25;
-    int gcol[NG], grow[NG];
-    int idx = 0;
-    for (int r = 8; r >= 0; r--) { gcol[idx] = 0; grow[idx] = r; idx++; }  // left column, upward
-    for (int c = 1; c <= 7; c++) { gcol[idx] = c; grow[idx] = 0; idx++; }  // top row, rightward
-    for (int r = 0; r <= 8; r++) { gcol[idx] = 8; grow[idx] = r; idx++; }  // right column, downward
-    // idx == 25 here; corners belong to the columns.
-    int lit = (int)std::round(std::max(0.f, std::min(1.f, value)) * (NG - 1));
-    for (int k = 0; k < NG; k++) {
-        float b = (k == lit) ? 1.f : 0.f;
-        drawCell(gcol[k], grow[k], b, b, b);
+    const float kBg = 0.10f;    // background glow level (unlit cells)
+    const float kFill = 0.45f;  // fill level (zero..value)
+
+    if (rs.legacyGauge || !rs.active) {
+        // 25-cell gauge (encoquencer.md): bottom-left corner -> up the left
+        // column -> top row -> down the right column -> bottom-right corner;
+        // white dot at the value, no fill/colour. Inactive rings draw the same
+        // path with no dot (all dark but the overlays + step LED).
+        const int NG = 25;
+        int gcol[NG], grow[NG];
+        int idx = 0;
+        for (int r = 8; r >= 0; r--) { gcol[idx] = 0; grow[idx] = r; idx++; }  // left column, upward
+        for (int c = 1; c <= 7; c++) { gcol[idx] = c; grow[idx] = 0; idx++; }  // top row, rightward
+        for (int r = 0; r <= 8; r++) { gcol[idx] = 8; grow[idx] = r; idx++; }  // right column, downward
+        int lit = rs.active
+            ? (int)std::round(std::max(0.f, std::min(1.f, rs.value)) * (NG - 1)) : -1;
+        for (int k = 0; k < NG; k++) {
+            float b = (k == lit) ? 1.f : 0.f;
+            drawCell(gcol[k], grow[k], b, b, b);
+        }
+        for (int c : {1, 2, 6, 7}) drawCell(c, 8, 0.f, 0.f, 0.f);   // unused bottom cells
+        for (int c : {3, 4, 5}) drawCell(c, 8, 0.f, 0.f, 0.f);      // step cells (override below)
+    } else {
+        // Full 32-cell hardware ring, clockwise from BOTTOM-CENTER:
+        // index 0 = (4,8), 16 = top-center (4,0).
+        static const int8_t ord[32][2] = {
+            {4,8},{3,8},{2,8},{1,8},{0,8},                       // bottom, leftward
+            {0,7},{0,6},{0,5},{0,4},{0,3},{0,2},{0,1},{0,0},     // left column, upward
+            {1,0},{2,0},{3,0},{4,0},{5,0},{6,0},{7,0},{8,0},     // top row, rightward
+            {8,1},{8,2},{8,3},{8,4},{8,5},{8,6},{8,7},{8,8},     // right column, downward
+            {7,8},{6,8},{5,8},                                   // bottom, leftward to start
+        };
+        droid::color::RGB c = droid::color::fromValue(rs.color);
+        droid::color::RGB nc = droid::color::fromValue(rs.negColor);
+
+        int lit;              // dot cell index in ord[]
+        int steps = 0;        // bipolar: cells from zero
+        bool negSide = false; // bipolar: value below zero
+        if (!rs.bipolar) {
+            float v = std::max(0.f, std::min(1.f, rs.value));
+            lit = (int)std::round(v * 31.f);
+        } else {
+            float v = std::max(-1.f, std::min(1.f, rs.value));
+            negSide = v < 0.f;
+            steps = (int)std::round(std::fabs(v) * 16.f);
+            lit = negSide ? 16 - steps : (16 + steps) % 32;
+        }
+
+        for (int k = 0; k < 32; k++) {
+            // Which half a cell belongs to (bipolar): 1..15 = negative (left)
+            // side, the rest positive; bottom-center (0) belongs to both ends.
+            bool cellNeg = rs.bipolar && k >= 1 && k <= 15;
+            droid::color::RGB base = cellNeg ? nc : c;
+            float lvl = kBg;
+            if (rs.fill) {
+                if (!rs.bipolar) {
+                    if (k <= lit) lvl = kFill;
+                } else if (negSide) {
+                    if (k >= 16 - steps && k <= 16) { base = nc; lvl = kFill; }
+                } else {
+                    int gk = (k == 0) ? 32 : k;   // bottom-center = end of + sweep
+                    if (gk >= 16 && gk <= 16 + steps) { base = c; lvl = kFill; }
+                }
+            }
+            if (k == lit) {
+                // Value dot: full-brightness colour; bright white at the
+                // bipolar zero position (hardware: "the center is bright white").
+                if (rs.bipolar && steps == 0) { base = {1.f, 1.f, 1.f}; }
+                else if (rs.bipolar) base = negSide ? nc : c;
+                lvl = 1.f;
+            }
+            drawCell(ord[k][0], ord[k][1], base.r * lvl, base.g * lvl, base.b * lvl);
+        }
     }
 
-    // Unused bottom cells (either side of the step LED): overlay only.
-    for (int c : {1, 2, 6, 7}) drawCell(c, 8, 0.f, 0.f, 0.f);
-
-    // Step/gate LED: the middle three bottom cells, one light.
-    droid::color::RGB sc = droid::color::fromValue(stepLedColor);
-    float sb = std::max(0.f, std::min(1.f, stepLed));
-    for (int c : {3, 4, 5}) drawCell(c, 8, sc.r * sb, sc.g * sb, sc.b * sb);
+    // Step/gate LED override (encoquencer, middle-three bottom cells acting as
+    // one light). Only when lit — the cells are ordinary ring cells otherwise.
+    float sb = std::max(0.f, std::min(1.f, rs.stepLed));
+    if (sb > 0.f) {
+        droid::color::RGB sc = droid::color::fromValue(rs.stepLedColor);
+        for (int c : {3, 4, 5}) drawCell(c, 8, sc.r * sb, sc.g * sb, sc.b * sb);
+    }
 }

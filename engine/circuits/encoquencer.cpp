@@ -53,6 +53,9 @@ public:
             bool changed = adjustByDetents(s, fm, step, e->pendingDetents);
             if (changed && fm == 0) { cur_.gate[step] = true; onCvEdited(s, step); }  // gate auto-on + compose audition
             e->ringDisplay = storedPos(s, fm, step);          // panel-only readout
+            e->ring.active = true;                            // claim the ring (issue #15);
+            e->ring.style = 1;                                // 25-cell gauge render
+            e->ring.value = e->ringDisplay;
         }
         wasSelected_ = true;
     }

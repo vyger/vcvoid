@@ -26,7 +26,12 @@ struct DroidDB8E : ChainModule {
 
     uint32_t detent = 0;   // monotonic encoder detent counter (widget ++/--)
     bool push = false;     // encoder push level (widget sets on press)
-    float ring = 0.f;      // last downstream ring value 0..1 (widget draws)
+    // Select-gated ring image (issue #15; see chain.hpp DownstreamBlock).
+    uint8_t ringFlags = 0;
+    float ringValue = 0.f;
+    float ringColor = 0.f;
+    float ringNegColor = 0.f;
+    float ringOverlay = 0.f;
     float ringLed = 0.f;   // last downstream L-register white overlay 0..1
 
     // OLED content mirrored from the downstream disp* fields (fixed-size, no heap).
@@ -52,7 +57,11 @@ struct DroidDB8E : ChainModule {
     void applyDownstream(const droid::chain::DownstreamBlock& b, float sampleTime) override {
         for (int i = 0; i < 8; i++)                       // L1.1-L1.8 = the 8 button LEDs
             lights[BUTTON_LIGHTS + i].setBrightnessSmooth(b.leds[i], sampleTime);
-        ring = b.ring[0];
+        ringFlags    = b.ringFlags[0];
+        ringValue    = b.ringValue[0];
+        ringColor    = b.ringColor[0];
+        ringNegColor = b.ringNegColor[0];
+        ringOverlay  = b.ringOverlay[0];
         ringLed = b.leds[8];                              // L1.9 = the encoder ring overlay (un-shared from button 1)
         std::memcpy(dispHeader, b.dispHeader, sizeof dispHeader);
         std::memcpy(dispText, b.dispText, sizeof dispText);
@@ -146,9 +155,20 @@ struct DB8ERingWidget : Widget {
     float half = 0.f;   // centre -> side LED-centre row (px)
     float cell = 0.f;   // LED square side (px)
     void draw(const DrawArgs& args) override {
-        float v  = module ? module->ring    : 0.f;
-        float ov = module ? module->ringLed : 0.f;
-        drawValueRingSquare(args.vg, box.size.div(2), half, cell, v, ov);
+        RingDrawState rs;
+        if (module) {
+            uint8_t f = module->ringFlags;
+            rs.active      = f & 1;
+            rs.bipolar     = f & 2;
+            rs.fill        = f & 4;
+            rs.legacyGauge = f & 8;
+            rs.value       = module->ringValue;
+            rs.color       = module->ringColor;
+            rs.negColor    = module->ringNegColor;
+            rs.overlay     = module->ringOverlay;
+            rs.lOverlay    = module->ringLed;
+        }
+        drawEncoderRingSquare(args.vg, box.size.div(2), half, cell, rs);
     }
 };
 
