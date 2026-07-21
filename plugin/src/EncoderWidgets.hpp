@@ -1,6 +1,7 @@
 #pragma once
 #include "plugin.hpp"
 #include "droidcolor.hpp"
+#include "EncoderGesture.hpp"
 #include <cmath>
 #include <algorithm>
 
@@ -17,18 +18,20 @@
 //     module publishes upstream; the master diffs it into turn events.
 
 // Endless (infinite-rotation) encoder. The module owns a monotonic uint32_t
-// detent counter (wraps) and a bool push level; the widget mutates them via
+// detent counter (wraps) and an EncoderGesture; the widget mutates them via
 // these pointers.
 //
-// Turn vs push (issue 1 fix): a turn is a left-press + vertical drag, so the
-// press alone cannot mean "push". We treat a press as an OPTIMISTIC push, then
-// reclassify it as a turn — clearing `pushed` — the instant the knob is actually
-// dragged. A press/release with no drag therefore stays a momentary push, while
-// turning no longer registers as a push (which previously lit the whole ring
-// white for the drag's duration via the default-LED-from-button rule).
+// Turn vs push: both start with the same left press, so the press alone
+// cannot mean "push". The first fix here published the press optimistically
+// and cleared it on the first drag event — too late, because the engine's
+// toggle circuits fire on the rising edge a UI frame before the drag arrives
+// (every turn also clicked). Classification is now
+// DEFERRED inside EncoderGesture: nothing is published until the gesture is
+// a click (synthetic pulse at release), a turn (never a press; withheld
+// travel replayed), or a deliberate hold (real push level, survives turning).
 struct DroidEndlessEncoder : OpaqueWidget {
-    uint32_t* detentCount = nullptr;   // module-owned monotonic counter (wraps)
-    bool* pushed = nullptr;            // module-owned push level
+    uint32_t* detentCount = nullptr;           // module-owned monotonic counter (wraps)
+    vcvoid::EncoderGesture* gesture = nullptr; // module-owned click/turn/push classifier
     float accum = 0.f;                 // sub-detent drag accumulator (px)
     static constexpr float kPxPerDetent = 4.f;   // sensitivity (feel; tune in Rack)
     // Visual detents per full revolution for the rotation indicator (feel only;
@@ -37,8 +40,10 @@ struct DroidEndlessEncoder : OpaqueWidget {
 
     void onDragMove(const DragMoveEvent& e) override {
         // Vertical drag = rotation (Rack convention): mouse up (dy < 0) = increase.
+        // The gesture withholds sub-threshold travel and replays it once the
+        // drag is classified as a turn, so no detents are lost to the deferral.
         float dy = -e.mouseDelta.y;
-        if (dy != 0.f && pushed) *pushed = false;   // movement means turn, not push
+        if (gesture) dy = gesture->move(dy);
         accum += dy;
         while (accum >= kPxPerDetent)  { if (detentCount) (*detentCount)++; accum -= kPxPerDetent; }
         while (accum <= -kPxPerDetent) { if (detentCount) (*detentCount)--; accum += kPxPerDetent; }
@@ -46,18 +51,18 @@ struct DroidEndlessEncoder : OpaqueWidget {
     }
     void onButton(const ButtonEvent& e) override {
         // OpaqueWidget::onButton consumes the left press, enabling DragStart.
-        if (e.button == GLFW_MOUSE_BUTTON_LEFT && pushed) {
-            if (e.action == GLFW_PRESS)   *pushed = true;    // optimistic; onDragMove clears if turned
-            if (e.action == GLFW_RELEASE) *pushed = false;
+        if (e.button == GLFW_MOUSE_BUTTON_LEFT && gesture) {
+            if (e.action == GLFW_PRESS)   gesture->press();
+            if (e.action == GLFW_RELEASE) gesture->release();
         }
         OpaqueWidget::onButton(e);
     }
     void onDragEnd(const DragEndEvent& e) override {
         // Belt-and-suspenders: a mouse RELEASE outside the widget box never
-        // reaches onButton, which would leave *pushed stuck true. onDragEnd is
-        // always delivered to the widget that started the drag, so clear here
-        // too. Backward-compatible with E4 (points the same pushed pointer).
-        if (pushed) *pushed = false;
+        // reaches onButton, which would leave the gesture stuck pressed.
+        // onDragEnd is always delivered to the widget that started the drag,
+        // so release here too (a second release after onButton's is a no-op).
+        if (gesture) gesture->release();
         OpaqueWidget::onDragEnd(e);
     }
 

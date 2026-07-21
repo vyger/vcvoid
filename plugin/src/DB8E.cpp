@@ -25,7 +25,10 @@ struct DroidDB8E : ChainModule {
     enum LightId { ENUMS(BUTTON_LIGHTS, 8), LIGHTS_LEN };
 
     uint32_t detent = 0;   // monotonic encoder detent counter (widget ++/--)
-    bool push = false;     // encoder push level (widget sets on press)
+    // Encoder click/turn/push classifier (EncoderGesture.hpp): the widget
+    // feeds it press/move/release on the UI thread; process() steps its
+    // timers and fillUpstream publishes its level() as the push bit.
+    vcvoid::EncoderGesture gest;
     // Select-gated ring image (issue #15; see chain.hpp DownstreamBlock).
     uint8_t ringFlags = 0;
     float ringValue = 0.f;
@@ -51,7 +54,7 @@ struct DroidDB8E : ChainModule {
         b.modelId = droid::chain::MDB8E;
         b.detentCount[0] = detent;
         b.buttons = packButtonParams(BUTTON_PARAMS, 8);   // 8 face buttons -> bits 0-7
-        if (push) b.buttons |= (1u << 8);                 // encoder push -> bit 8 (Task 2 contract)
+        if (gest.level()) b.buttons |= (1u << 8);         // encoder push -> bit 8 (Task 2 contract)
     }
 
     void applyDownstream(const droid::chain::DownstreamBlock& b, float sampleTime) override {
@@ -75,7 +78,10 @@ struct DroidDB8E : ChainModule {
                   && (b.dispHeader[0] || b.dispText[0] || b.dispValue != 0.f || b.dispIsText);
     }
 
-    void process(const ProcessArgs& args) override { relay(args.sampleTime); }
+    void process(const ProcessArgs& args) override {
+        gest.step(args.sampleTime);
+        relay(args.sampleTime);
+    }
 };
 
 // 128x64 OLED. Pragmatic render (SPEC design §4): black background, a header
@@ -219,7 +225,7 @@ struct DroidDB8EWidget : VcvoidModuleWidget {
             enc->box.pos = Vec(346.5f * sx - kd / 2.f, 2404.f * sy - kd / 2.f);
             if (module) {
                 enc->detentCount = &module->detent;
-                enc->pushed = &module->push;
+                enc->gesture = &module->gest;
             }
             addChild(enc);
         }

@@ -18,7 +18,10 @@ struct DroidE4 : ChainModule {
     enum LightId { LIGHTS_LEN };
 
     uint32_t detent[4] = {};   // monotonic per-encoder detent counters (widget ++/--)
-    bool push[4] = {};         // per-encoder push level (widget sets on press)
+    // Per-encoder click/turn/push classifier (EncoderGesture.hpp): the widget
+    // feeds it press/move/release on the UI thread; process() steps its
+    // timers and fillUpstream publishes its level() as the push bit.
+    vcvoid::EncoderGesture gest[4];
     // Select-gated ring image (issue #15): flags bit0 active / bit1 bipolar /
     // bit2 fill / bit3 legacy encoquencer gauge; value, DROID colours, and the
     // select-gated white `led`-param overlay — see chain.hpp DownstreamBlock.
@@ -38,7 +41,7 @@ struct DroidE4 : ChainModule {
         for (int i = 0; i < 4; i++) b.detentCount[i] = detent[i];
         b.buttons = 0;
         for (int i = 0; i < 4; i++)
-            if (push[i]) b.buttons |= (1u << i);
+            if (gest[i].level()) b.buttons |= (1u << i);
     }
 
     void applyDownstream(const droid::chain::DownstreamBlock& b, float) override {
@@ -54,7 +57,10 @@ struct DroidE4 : ChainModule {
         }
     }
 
-    void process(const ProcessArgs& args) override { relay(args.sampleTime); }
+    void process(const ProcessArgs& args) override {
+        for (auto& g : gest) g.step(args.sampleTime);
+        relay(args.sampleTime);
+    }
 };
 
 // Value-ring display bound to one encoder's ring[i] (+ L-register overlay).
@@ -138,7 +144,7 @@ struct DroidE4Widget : VcvoidModuleWidget {
             enc->box.pos  = Vec(kcx - kd / 2.f, kcy - kd / 2.f);
             if (module) {
                 enc->detentCount = &module->detent[i];
-                enc->pushed = &module->push[i];
+                enc->gesture = &module->gest[i];
             }
             addChild(enc);
         }
