@@ -25,9 +25,9 @@ verification_note: "Headless: clock the circuit and assert output/offbeats per s
 > **"Allow experimental circuits"** in the master module's context menu.
 > See [the experimental circuits index](index.md).
 
-This circuit plays a rhythm that you *write out* rather than describe with
-numbers. Each clock advances one character of a text pattern; characters that
-are not rests emit a trigger.
+This circuit plays a rhythm that you *write out* in the patch rather than define
+via controllers. Each clock advances one character of a text pattern; characters
+that are not rests emit a trigger.
 
 ```droid
 [trigseq]
@@ -37,9 +37,9 @@ are not rests emit a trigger.
 ```
 
 That patch fires on the 1st, 5th and 7th of every eight clocks. The rhythm is
-visible in the patch file at a glance — which is the whole point, and the thing
-[`euklid`](../euklid.md) (which can only distribute beats *evenly*) and
-[`sequencer`](../sequencer.md) (which needs one jack per step) cannot do.
+visible in the patch file at a glance and is declared statically. It is similar
+to, but distinct from, [`euklid`](../euklid.md) (which can only distribute beats
+*evenly*) and [`sequencer`](../sequencer.md) (which needs one jack per step).
 
 ## Rests and triggers
 
@@ -59,7 +59,7 @@ these are the same eight-step rhythm:
 ```droid
     pattern = "x...x.x."
     pattern = "*---*-*-"
-    pattern = "k___k_s_"
+    pattern = "k___k_k_"
     pattern = "1 . . 1 . 1 . ."     # NO — see below
 ```
 
@@ -179,8 +179,7 @@ Notes:
 A typical instance costs about **70 bytes**: 32 for the circuit, 20 for `clock`,
 8 for the `pattern` jack, 4 for `output`, and 6 for the text itself. The text is
 charged as a pointer and a length, so a two-character pattern and an
-eighteen-character pattern cost exactly the same. Compare with
-[`sequencer`](../sequencer.md), which spends that much on a couple of steps.
+eighteen-character pattern cost exactly the same.
 
 ## Notes
 
@@ -194,7 +193,40 @@ eighteen-character pattern cost exactly the same. Compare with
   steps, as [`euklid`](../euklid.md) has. It was deliberately left out of the
   first version because its meaning under `chaintonext` — rotate this instance,
   or the whole chained sequence? — deserves its own decision rather than a
-  guess. If you want it, say so.
+  guess.
+- **Possible future addition:** multiple outputs based on a class of `trigger`
+  characters. Example:
+  ```droid
+  [trigseq]
+    clock       = G1
+    pattern     = "A...AB..A.B.ABBB"
+    output1     = G3
+    output2     = G4
+    offbeats    = G5
+  ```
+  This patch would produce 3 distinct rhythms on the different outputs. `A`
+  triggers would go to `output1`, `B` triggers to `output2`, and rests would go
+  to `offbeats`. The mapping of symbol to output would be defined by the order
+  in which they appear in the string — or, as an alternative worth considering,
+  declared explicitly:
+
+  ```droid
+  [trigseq]
+    pattern     = "A...AB..A.B.ABBB"
+    symbol1     = "A"
+    symbol2     = "B"
+  ```
+
+  Positional mapping keeps patterns terse, but it is *silently* order-dependent:
+  inserting a `B` ahead of the first `A` swaps which output each symbol drives,
+  so editing a rhythm can repatch the drums. Explicit symbols are wordier and
+  immune to that.
+
+  WARNING: this would break the behavior of any patches using the old behavior
+  so tread carefully — today every non-rest character is documented as
+  equivalent, so an existing `"k___k_k_"` would stop being one rhythm the moment
+  symbols carry meaning. Gating the split on a second output being patched would
+  keep old patches intact.
 
 ## Inputs
 
