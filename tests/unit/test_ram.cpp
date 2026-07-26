@@ -90,6 +90,42 @@ TEST(ram_fraction_divisor) {
 // exactly, `/ 12`'s inverse is 12.0 and a literal 12 COLLAPSES onto it, whereas
 // a literal 13 stays distinct. The `+ 3` pads the count so the ±2 difference
 // crosses a 16-byte alignment boundary (before this fix both patches tied).
+// Text parameters (#12). The Forge represents a quoted string as an AtomText,
+// which is NOT an AtomNumber — so it is charged three ways our old stub got
+// wrong (numTexts was hardcoded to 0):
+//   1. countTexts() counts text atom OCCURRENCES (not unique texts) and the
+//      stuff block adds numTexts*4 + ALIGN_UP(numTexts*2, 4) = 6 bytes each
+//      (patch.cpp:795-801) — a 4-byte pointer plus a 2-byte length.
+//   2. countUniqueConstants skips it (patch.cpp:1107 tests isNumber()), so a
+//      text must not seed +n/-n constants.
+//   3. JackDeduplicator's 0/1 special case tests isNumber() too
+//      (jackdeduplicator.cpp:71-79), so a simple text input costs 8, never 4 —
+//      even though OUR parser gives text number 1 the numeric value 1.0.
+TEST(ram_text_parameter_counted) {
+    // x7 864 + display base 56 + text jack (simple, text -> 8)
+    // constants: seed{0,1}=2 -> 8   texts: 1 occurrence -> 6
+    // stuff = ALIGN_UP(8 + 6, 16) = 16
+    // 864 + 56 + 8 + 16 = 944
+    // (The pre-fix stub gave 940: jack wrongly optimized to 4 for text number
+    // 1.0, a spurious -1 constant, and the text itself charged nothing.)
+    CHECK(ramOf("[display]\n text = \"hello\"\n") == 944);
+}
+
+TEST(ram_text_charged_per_occurrence) {
+    // The same string twice interns to ONE text number but is TWO atoms, and
+    // the Forge charges per atom (countTexts iterates atoms, not the pool).
+    // 864 + 2*(56 + 8) = 992
+    // texts: 2 -> 2*4 + ALIGN_UP(4,4) = 12; constants 8
+    // stuff = ALIGN_UP(8 + 12, 16) = 32   => 1024
+    CHECK(ramOf("[display]\n text = \"hello\"\n"
+                "[display]\n text = \"hello\"\n") == 1024);
+}
+
+TEST(ram_no_text_unchanged) {
+    // A patch with no text atoms must be byte-identical to before the fix.
+    CHECK(ramOf("[display]\n") == 936);
+}
+
 TEST(ram_fraction_inverse_double_precision) {
     unsigned collapses = ramOf("[copy]\n input = I1 / 12\n output = O1\n"
                                "[copy]\n input = I2 * 12 + 3\n output = O2\n");

@@ -73,7 +73,11 @@ def load_existing():
 def main():
     existing = load_existing()
     rows = []
-    for f in sorted(CIRCUITS.glob("*.md")):
+    # Firmware circuits first, then vcvoid-only experimental ones (#12). Both
+    # live in one circuits: map so status tooling keeps working; the
+    # `experimental: true` field is what distinguishes them, so a firmware
+    # completion count stays computable.
+    for f in sorted(CIRCUITS.glob("*.md")) + sorted((CIRCUITS / "experimental").glob("*.md")):
         if f.name == "index.md":
             continue
         fm = parse_frontmatter(f)
@@ -86,6 +90,11 @@ def main():
         name = fm["circuit"]
         diff = fm.get("impl_difficulty", "hard")
         if diff == "not-feasible":
+            continue
+        # Experimental circuits are not part of the firmware implementation
+        # backlog: ranking them would renumber every firmware circuit and make
+        # "the next circuit to implement" ambiguous. Tracked, but unranked.
+        if fm.get("experimental") == "true":
             continue
         key = (BINDING_ORDER.get(fm.get("controller_binding"), 9),
                DIFF_ORDER.get(diff, 9),
@@ -115,12 +124,15 @@ def main():
                 notes = f'"{gate.split(": ", 1)[1]}"'
         out.append(f"  {name}:")
         out.append(f"    status: {status}")
+        if fm.get("experimental") == "true":
+            out.append("    experimental: true")
         out.append(f"    difficulty: {diff}")
         out.append(f"    binding: {fm.get('controller_binding', 'unknown')}")
         if diff != "not-feasible":
             out.append(f"    verification: {fm.get('verification', 'unknown')}")
             out.append(f"    spec_gap: {fm.get('spec_gap', 'false')}")
-            out.append(f"    rank: {rank_of.get(name, 9999)}")
+            if name in rank_of:
+                out.append(f"    rank: {rank_of[name]}")
         out.append(f"    depends_on: {old.get('depends_on', '[]')}")
         out.append(f"    notes: {notes}")
     LEDGER.write_text("\n".join(out) + "\n")

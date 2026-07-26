@@ -1,0 +1,43 @@
+# `outputsignal` (euklid semantics): instead of passing the clock through, the
+# given value is sent to the output for the WHOLE active step — held across the
+# clock's low phase until the next clock. offbeats behaves symmetrically on
+# rest steps. The value is read live, not sampled at the step boundary: I2
+# drives it here and a mid-step change is visible immediately.
+# Pattern "x." alternates emit / rest every step.
+experimental
+patch <<<
+[trigseq]
+    clock        = I1
+    pattern      = "x."
+    outputsignal = I2
+    output       = O1
+    offbeats     = O2
+>>>
+@0 set I2 0.5
+@0 expect O1 0
+@0 expect O2 0
+# step 1 ('x'): output held at 0.5 across clock high AND low
+@1 set I1 1
+@1 expect O1 0.5
+@1 expect O2 0
+@2 set I1 0
+@2 expect O1 0.5
+@2 expect O2 0
+# live tracking: changing outputsignal mid-step moves the output at once
+@3 set I2 0.25
+@3 expect O1 0.25
+@3 expect O2 0
+# step 2 ('.'): offbeats held, output silent
+@4 set I1 1
+@4 expect O1 0
+@4 expect O2 0.25
+@5 set I1 0
+@5 expect O1 0
+@5 expect O2 0.25
+# step 3 ('x') again
+@6 set I1 1
+@6 expect O1 0.25
+@6 expect O2 0
+@7 set I1 0
+@7 expect O1 0.25
+@7 expect O2 0

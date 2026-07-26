@@ -1,0 +1,53 @@
+# Transport (euklid convention):
+#   * nothing is emitted before the first clock;
+#   * `reset` ARMS a restart that the NEXT clock consumes — it never emits a
+#     trigger of its own;
+#   * reset is applied before the clock within a tick, so a simultaneous
+#     reset+clock lands on step 1.
+# Pattern "x.." emits only on step 1, which makes the restart unambiguous:
+# an out-of-phase sequence that gets reset fires on the very next clock.
+experimental
+patch <<<
+[trigseq]
+    clock    = I1
+    reset    = I2
+    pattern  = "x.."
+    output   = O1
+    offbeats = O2
+>>>
+# no clock yet: both outputs silent even though step 1 would emit
+@0 expect O1 0
+@0 expect O2 0
+# step 1 -> emit
+@1 set I1 1
+@1 expect O1 1
+@2 set I1 0
+# step 2 -> rest
+@3 set I1 1
+@3 expect O1 0
+@3 expect O2 1
+@4 set I1 0
+# a reset alone emits NOTHING (it only arms the restart)
+@5 set I2 1
+@5 expect O1 0
+@5 expect O2 0
+@6 set I2 0
+@6 expect O1 0
+@6 expect O2 0
+# the next clock consumes the armed restart: back to step 1 -> emit
+@7 set I1 1
+@7 expect O1 1
+@7 expect O2 0
+@8 set I1 0
+# step 2 -> rest again, confirming the restart really moved the position
+@9 set I1 1
+@9 expect O1 0
+@9 expect O2 1
+@10 set I1 0
+# simultaneous reset + clock on the same tick lands on step 1 (reset first)
+@11 set I2 1
+@11 set I1 1
+@11 expect O1 1
+@11 expect O2 0
+@12 set I1 0
+@12 set I2 0

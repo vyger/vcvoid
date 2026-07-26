@@ -160,6 +160,7 @@ Start at **`manual/README.md`**. Layout:
 | `manual/hardware.md` | 6–14 | All controllers, G8/X7 expanders, MASTER18, R2M/R2C bridge, internals, firmware upgrade, calibration/maintenance, specs. |
 | `manual/scales.md` | 15 | All 108 scales (0–107) with notes and scale-degree fills. |
 | `manual/circuits/` | 16 | **Core reference** — one file per circuit (76). Entry point: `manual/circuits/index.md`. |
+| `manual/circuits/experimental/` | — | **Not DROID.** vcvoid-only experimental circuits (`trigseq`), gated behind a per-module toggle. See [`docs/adr/0001-experimental-circuits.md`](docs/adr/0001-experimental-circuits.md). |
 | `manual/images/` | — | `page-NNN.png` full-page renders (`NNN` = PDF page); local-only, git-ignored, optional (derived from the source PDF). |
 
 ### Finding a circuit

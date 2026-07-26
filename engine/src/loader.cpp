@@ -106,6 +106,14 @@ LoadResult compilePatch(const std::string& text, MasterType master, CompiledPatc
         }
         if (cdef->deprecated)
             res.warnings.push_back("circuit '" + sec.name + "' is deprecated");
+        // Experimental circuits (#12) exist only in vcvoid — they are not DROID
+        // firmware and the Forge does not know them. Refused unless the module
+        // opted in, so a patch built here stays hardware-compatible by default.
+        if (cdef->experimental && !opts.allowExperimental)
+            res.errors.push_back({sec.line,
+                "Circuit '" + sec.name + "' is experimental (vcvoid only, not "
+                "available on DROID hardware). Enable \"Allow experimental "
+                "circuits\" in the module's context menu to load this patch."});
         // vcotuner + sinfonionlink use MASTER18-only hardware (Forge parity:
         // droidfirmware.cpp circuitNeedsMaster18).
         if (master == MasterType::Master16 &&

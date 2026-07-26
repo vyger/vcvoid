@@ -66,6 +66,10 @@ struct DroidMasterBase : Module {
     // read on whatever thread calls loadPatchFile (bool torn read tolerable,
     // same as the timing fields).
     bool ignoreHwMemoryLimits = false;
+    // Experimental (#12): allow vcvoid-only circuits (e.g. trigseq) to load.
+    // Off by default so a patch built here stays hardware-compatible; same
+    // threading note as ignoreHwMemoryLimits above.
+    bool allowExperimentalCircuits = false;
 
     // Master type + I/O geometry (set once by the subclass constructor).
     droid::MasterType masterType_;
@@ -387,6 +391,7 @@ public:
         }
         droid::LoadOptions lopts;
         lopts.ignoreMemoryLimits = ignoreHwMemoryLimits;
+        lopts.allowExperimental = allowExperimentalCircuits;
         auto fresh = std::make_unique<droid::Engine>(
             masterType_, effectiveRate);
         droid::LoadResult r = fresh->load(text, lopts);
@@ -985,6 +990,8 @@ public:
             json_string(timingMode == TimingMode::Adaptive ? "adaptive" : "fixed"));
         json_object_set_new(root, "ignoreHwMemoryLimits",
             json_boolean(ignoreHwMemoryLimits));
+        json_object_set_new(root, "allowExperimentalCircuits",
+            json_boolean(allowExperimentalCircuits));
         json_object_set_new(root, "circuitState", snapshotToJson(lastSnapshot));
         return root;
     }
@@ -1006,6 +1013,10 @@ public:
         // the limits ignored must reload the same way on Rack reopen.
         if (json_t* j = json_object_get(root, "ignoreHwMemoryLimits"))
             ignoreHwMemoryLimits = json_boolean_value(j);
+        // Likewise for experimental circuits: a patch using trigseq must reload
+        // on Rack reopen instead of failing with the gate error (#12).
+        if (json_t* j = json_object_get(root, "allowExperimentalCircuits"))
+            allowExperimentalCircuits = json_boolean_value(j);
         // Load the saved circuit state BEFORE the patch load below, so that
         // loadPatchFile (with no live engine yet) restores it into the fresh
         // engine — the Rack-reopen mirror of the hot-reload transfer.
@@ -1180,6 +1191,20 @@ struct DroidMasterBaseWidget : ModuleWidget {
                 m->ignoreHwMemoryLimits = v;
                 // Re-evaluate immediately: an over-budget patch either loads
                 // now or goes back to a hard load error.
+                std::string path;
+                {
+                    std::lock_guard<std::mutex> lock(m->engineMutex);
+                    path = m->patchPath;
+                }
+                if (!path.empty()) m->loadPatchFile(path);
+            }));
+        menu->addChild(createBoolMenuItem("Allow experimental circuits", "",
+            [m]() { return m->allowExperimentalCircuits; },
+            [m](bool v) {
+                m->allowExperimentalCircuits = v;
+                // Re-evaluate immediately, like the memory-limits item: a patch
+                // using an experimental circuit either loads now or goes back
+                // to the gate's load error.
                 std::string path;
                 {
                     std::lock_guard<std::mutex> lock(m->engineMutex);

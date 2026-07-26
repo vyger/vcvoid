@@ -1,0 +1,77 @@
+{
+  "_comment": [
+    "vcvoid-only EXPERIMENTAL circuits — see docs/adr/0001-experimental-circuits.md.",
+    "These do not exist in DROID firmware and are unknown to the Droid Forge.",
+    "Schema is the Forge's droidfirmware.json circuit schema, so the same file",
+    "feeds BOTH consumers: tools/jackgen/jackgen.py (engine jack tables) and",
+    "tools/droidcheck/build.sh (merged into the validator's embedded firmware).",
+    "Adding an experimental circuit = one entry here + one engine/circuits/*.cpp.",
+    "Docs live in manual/circuits/experimental/<name>.md (experimental: true)."
+  ],
+  "circuits": {
+    "trigseq": {
+      "category": "sequencing",
+      "title": "Declarative trigger sequencer",
+      "description": "Plays a rhythm written as text: each clock advances one character, '.' ' ' '-' '_' are rests, every other character emits. Chain instances with chaintonext for longer sequences.",
+      "ramsize": 32,
+      "inputs": [
+        {
+          "name": "clock",
+          "short": "c",
+          "type": "gate",
+          "default": "unpatched",
+          "ramhint": "trigger_input",
+          "description": "Patch a clock signal here. Each trigger advances the pattern by one character. Classified as a gate input: the gate length is preserved when forwarded to output and offbeats."
+        },
+        {
+          "name": "reset",
+          "short": "r",
+          "type": "trigger",
+          "default": null,
+          "ramhint": "trigger_input",
+          "description": "A trigger here restarts the pattern; the restart is consumed by the next clock."
+        },
+        {
+          "name": "pattern",
+          "short": "p",
+          "type": "text",
+          "default": "unpatched",
+          "ramhint": "input",
+          "description": "The rhythm, as a quoted text. '.', space, '-' and '_' are rests; every other character emits a trigger. The pattern cannot be changed while the patch is running."
+        },
+        {
+          "name": "outputsignal",
+          "short": "os",
+          "type": "cv",
+          "default": "unpatched",
+          "ramhint": "input",
+          "description": "Usually trigseq lets the input clock through on active steps. If this parameter is used, its value is sent to the output for the whole active step instead."
+        },
+        {
+          "name": "chaintonext",
+          "short": "cn",
+          "type": "gate",
+          "default": "unpatched",
+          "ramhint": "input",
+          "description": "If you set this input to 1, the next trigseq circuit's pattern is appended to this one, forming a longer sequence."
+        }
+      ],
+      "outputs": [
+        {
+          "name": "output",
+          "short": "o",
+          "type": "gate",
+          "ramhint": "output",
+          "description": "Emits on active steps. The gate length and voltage are taken from the input clock, unless outputsignal is used."
+        },
+        {
+          "name": "offbeats",
+          "short": "ob",
+          "type": "gate",
+          "ramhint": "output",
+          "description": "Emits on rest steps — the exact complement of output."
+        }
+      ]
+    }
+  }
+}

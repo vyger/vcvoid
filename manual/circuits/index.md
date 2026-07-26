@@ -295,3 +295,12 @@ These remain documented but should be avoided in new patches:
 - [`notchedpot`](notchedpot.md) — Helper circuit for pots
 - [`switchedpot`](switchedpot.md) — Overlay pot with multiple functions
 - [`togglebutton`](togglebutton.md) — Create on/off buttons
+
+## Experimental circuits (vcvoid only)
+
+⚠️ **Not DROID.** These exist only in vcvoid — no firmware has them, the Forge
+does not know them, and patches using them will not run on hardware. They load
+only when "Allow experimental circuits" is enabled on the master module. See
+[experimental/index.md](experimental/index.md).
+
+- [`trigseq`](experimental/trigseq.md) — Declarative trigger sequencer: write the rhythm as text

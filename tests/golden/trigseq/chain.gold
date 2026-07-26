@@ -1,0 +1,53 @@
+# chaintonext = 1 appends the next trigseq's pattern to this one, forming one
+# longer sequence (sequencer's chaining model, NOT motoquencer's parallel
+# linktonext). The head owns clock/reset/outputs; the follower declares only
+# its pattern. The chain ends at the first instance whose chaintonext is not
+# set — here the second — and the combined 6-step sequence is "x." + "x.x."
+# i.e. emit on steps 1, 3 and 5.
+experimental
+patch <<<
+[trigseq]
+    clock       = I1
+    pattern     = "x."
+    chaintonext = 1
+    output      = O1
+    offbeats    = O2
+
+[trigseq]
+    pattern     = "x.x."
+>>>
+# step 1 (head, 'x')
+@1 set I1 1
+@1 expect O1 1
+@1 expect O2 0
+@2 set I1 0
+# step 2 (head, '.')
+@3 set I1 1
+@3 expect O1 0
+@3 expect O2 1
+@4 set I1 0
+# step 3 (follower, 'x')
+@5 set I1 1
+@5 expect O1 1
+@5 expect O2 0
+@6 set I1 0
+# step 4 (follower, '.')
+@7 set I1 1
+@7 expect O1 0
+@7 expect O2 1
+@8 set I1 0
+# step 5 (follower, 'x')
+@9 set I1 1
+@9 expect O1 1
+@9 expect O2 0
+@10 set I1 0
+# step 6 (follower, '.')
+@11 set I1 1
+@11 expect O1 0
+@11 expect O2 1
+@12 set I1 0
+# wraps to step 1 of the head
+@13 set I1 1
+@13 expect O1 1
+@13 expect O2 0
+@14 set I1 0

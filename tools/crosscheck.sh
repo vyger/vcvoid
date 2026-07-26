@@ -19,7 +19,15 @@ for gold in $(find tests/golden -name '*.gold' | sort); do
     fi
     ini="$TMP/$(basename "$gold" .gold).ini"
     awk '/^patch <<</{flag=1;next} /^>>>$/{flag=0} flag' "$gold" > "$ini"
-    if "$DROIDCHECK" "$ini" > "$TMP/out.txt" 2>&1; then
+    # A golden marked `experimental` uses vcvoid-only circuits, which the Forge
+    # rightly rejects by default — validate those with the flag so the rest of
+    # the structural checking (jacks, duplicate outputs, registers) still runs.
+    if grep -q '^experimental$' "$gold"; then
+        set -- --experimental "$ini"
+    else
+        set -- "$ini"
+    fi
+    if "$DROIDCHECK" "$@" > "$TMP/out.txt" 2>&1; then
         echo "PASS $gold"
     else
         # Recorded divergence: the Forge flags obsolete circuits (togglebutton,

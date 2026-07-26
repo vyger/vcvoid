@@ -26,7 +26,25 @@ the ledger and makes commits, so never infer it from conversation.
   is resolved.
 - `next`: pick the lowest-`rank` entry with `status: todo` whose `depends_on`
   are all `done`. If none exists, report "no unblocked todo circuits" and STOP
-  (this is the /loop termination signal).
+  (this is the /loop termination signal). Experimental circuits carry no
+  `rank`, so `next` never selects one — they are always named explicitly.
+- **Experimental circuits** (ledger `experimental: true`, e.g. `trigseq`) are
+  vcvoid-only: not DROID firmware, unknown to the Forge. Everything below still
+  applies, with these differences — see
+  `docs/adr/0001-experimental-circuits.md`:
+  - spec lives at `manual/circuits/experimental/<name>.md` (frontmatter
+    `experimental: true`), not `manual/circuits/<name>.md`;
+  - the jack table comes from `engine/experimental.json` (the Forge's own
+    circuit schema — name, ramsize, category, inputs/outputs with type, short,
+    ramhint, default). Add the entry there and run `make gen`; rerun
+    `tools/droidcheck/build.sh` so droidcheck picks it up too;
+  - every golden needs the `experimental` header directive, EXCEPT one that
+    asserts the refusal (`expect_load_error ... is experimental`) with the
+    directive deliberately absent;
+  - `tools/crosscheck.sh` passes `--experimental` for directive-marked
+    goldens automatically; `build/patchsmoke --experimental` for patches.
+  - a NEW experimental circuit is a product decision, not an implementation
+    task: only create one when the user has explicitly asked for it.
 - Set the entry to `status: in-progress` (do not commit this — it's working
   state; the final commit sets the end state).
 
@@ -39,8 +57,9 @@ the ledger and makes commits, so never infer it from conversation.
   for shapes.
 - Follow `see_also` links when semantics depend on another circuit or on
   basics.md concepts (taptempo, presets, overlays).
-- Check `engine/gen/` jack tables exist for the circuit (they do for all 76;
-  if a Forge update changed them, run `make gen`). Existing ≠ correct: if any
+- Check `engine/gen/` jack tables exist for the circuit (they do for all 76
+  firmware circuits; if a Forge update changed them, or you added an
+  experimental circuit to the overlay, run `make gen`). Existing ≠ correct: if any
   documented jack name has a digit as the last character of its full or short
   form (e.g. `log2`), or the firmware JSON lists array jacks comma-separated
   rather than space-separated, verify `findJack()` actually resolves it (quick

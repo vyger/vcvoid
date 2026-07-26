@@ -1766,3 +1766,36 @@ circuits:
       up/down, slope-vs-edge distinction, the manual's 1.9->2.1 V step
       example, hand-computed exponential-filter slope trace, per-clock-tick
       slope."
+  trigseq:
+    status: done
+    experimental: true
+    difficulty: easy
+    binding: master-only
+    verification: headless
+    spec_gap: false
+    depends_on: []
+    notes: "EXPERIMENTAL (vcvoid only, #12) — not DROID firmware, refused at
+      load unless LoadOptions.allowExperimental. Declared in
+      engine/experimental.json (Forge schema; feeds both jackgen and
+      droidcheck). Text-driven: `pattern` is read ONCE from the input's literal
+      binding (encoder.cpp primary() idiom) via EngineState::texts — text is a
+      compile-time constant on hardware, so the pattern cannot change while
+      running. Not packed into a bitfield: the master already holds a text as
+      pointer+length (6 bytes, charged regardless of length), so packing would
+      add storage and impose a step ceiling with no hardware basis. Rests are
+      '.', ' ', '-', '_'; every other char emits (0 and | included) — no
+      validation, per the firmware's clamp-or-accept house style. Transport,
+      clock passthrough and outputsignal are euklid's contract verbatim;
+      chaining is sequencer's chaintonext (concatenate), dynamic, with the
+      monotone step counter folding modulo the current total length. Empty
+      pattern = zero steps (inert standalone, transparent in a chain).
+      Stateless (no dontsave). Known limit: the patch format caps any text at
+      18 characters (DB8E_MAX_TEXT_LENGTH, from master:db8elink.h), so one
+      instance plays at most 18 steps in a Forge-valid patch — the engine does
+      not enforce this (it enforces no text length today, display included);
+      chain for longer. Golden coverage: placement, every rest char vs a set of
+      firing chars, clock voltage/gate-length passthrough, offbeats complement,
+      outputsignal held + live-tracked, reset arming + simultaneous
+      reset+clock + silence before first clock, 18-step pattern, empty pattern
+      standalone and in-chain, chain order/head-ownership/both stop conditions/
+      dynamic break with modulo fold, load-error gate, exact RAM (944)."

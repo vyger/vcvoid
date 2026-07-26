@@ -1,0 +1,12 @@
+# The experimental gate (#12). This golden deliberately OMITS the
+# `experimental` header line, so the patch loads with allowExperimental=false —
+# the default a user gets until they flip "Allow experimental circuits" in the
+# module's context menu. The load must fail, and the message must name the
+# circuit so it can be found in a long patch.
+expect_load_error Circuit 'trigseq' is experimental
+patch <<<
+[trigseq]
+    clock   = I1
+    pattern = "x...x.x."
+    output  = O1
+>>>

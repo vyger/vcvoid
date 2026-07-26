@@ -1,0 +1,70 @@
+# trigseq core: each clock advances one character of `pattern`. Non-rest
+# characters emit; on an emitting step the clock is passed through to `output`
+# with its EXACT voltage and gate length, on a rest step to `offbeats`.
+# Pattern "x...x.x." = 8 steps, emitting on steps 1, 5 and 7 (1-based), i.e.
+# indices 0, 4 and 6. The clock high level is 0.7 to prove the voltage is
+# copied rather than normalized.
+# I1=clock, O1=output, O2=offbeats. Each step = one clock pulse (high, low).
+experimental
+patch <<<
+[trigseq]
+    clock    = I1
+    pattern  = "x...x.x."
+    output   = O1
+    offbeats = O2
+>>>
+# nothing before the first clock
+@0 expect O1 0
+@0 expect O2 0
+# step 1: 'x' -> output
+@1 set I1 0.7
+@1 expect O1 0.7
+@1 expect O2 0
+@2 set I1 0
+@2 expect O1 0
+@2 expect O2 0
+# step 2: '.' -> offbeats
+@3 set I1 0.7
+@3 expect O1 0
+@3 expect O2 0.7
+@4 set I1 0
+# step 3: '.'
+@5 set I1 0.7
+@5 expect O1 0
+@5 expect O2 0.7
+@6 set I1 0
+# step 4: '.'
+@7 set I1 0.7
+@7 expect O1 0
+@7 expect O2 0.7
+@8 set I1 0
+# step 5: 'x' -> output
+@9 set I1 0.7
+@9 expect O1 0.7
+@9 expect O2 0
+@10 set I1 0
+# step 6: '.'
+@11 set I1 0.7
+@11 expect O1 0
+@11 expect O2 0.7
+@12 set I1 0
+# step 7: 'x' -> output
+@13 set I1 0.7
+@13 expect O1 0.7
+@13 expect O2 0
+@14 set I1 0
+# step 8: '.'
+@15 set I1 0.7
+@15 expect O1 0
+@15 expect O2 0.7
+@16 set I1 0
+# wraps: step 1 again -> output
+@17 set I1 0.7
+@17 expect O1 0.7
+@17 expect O2 0
+@18 set I1 0
+# step 2 again -> offbeats
+@19 set I1 0.7
+@19 expect O1 0
+@19 expect O2 0.7
+@20 set I1 0

@@ -43,6 +43,11 @@ struct GoldFile {
     unsigned seed = 1;
     bool hasExpectRam = false;
     unsigned expectRam = 0;
+    // `experimental` header line: load with LoadOptions.allowExperimental (#12).
+    // Required per file rather than implied by the circuit, so that the refusal
+    // path is provable in the same format (a golden WITHOUT the directive plus
+    // expect_load_error).
+    bool experimental = false;
     std::string expectLoadError;   // empty = expect successful load
     std::string expectWarning;
     // SD-card fixtures: `midifile <n> <hexbytes>` header lines (repeatable —
