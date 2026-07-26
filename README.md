@@ -78,9 +78,7 @@ exist *only here*, not in DROID firmware and not in the Forge. A patch using one
 Today there is one: [`trigseq`](manual/circuits/experimental/trigseq.md), a
 declarative trigger sequencer that plays a rhythm you write as text —
 `pattern = "x...x.x."`. See
-[the experimental index](manual/circuits/experimental/index.md) and
-[ADR 0001](docs/adr/0001-experimental-circuits.md) for the reasoning and the
-guard rails.
+[the experimental index](manual/circuits/experimental/index.md).
 
 ### Claude Code
 
