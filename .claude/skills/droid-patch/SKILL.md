@@ -27,13 +27,35 @@ that when the user intends to run the patch on hardware. Only default to
 
 Before writing anything non-trivial, check:
 
-- `manual/circuits/index.md` — the master table of all 76 circuits (name,
+- `manual/circuits/index.md` — the master table of all 76 firmware circuits (name,
   function, category, RAM cost, tags) and the **jack-type legend** (`CV`,
   `pitch`, `0..1`, `gate`, `trigger`, `integer`, `stepped`, `text`,
   `☞ smart`). Don't guess a circuit's jacks — read `manual/circuits/<name>.md`
   for its Inputs/Outputs tables and worked examples.
 - `manual/basics.md` §5 — the full text-syntax reference this skill
   summarizes (register table, error codes, number formats, abbreviations).
+
+## Experimental circuits — opt-in only, never by default
+
+`manual/circuits/experimental/` documents **vcvoid-only** circuits (today:
+`trigseq`). They are NOT DROID: no firmware has them, the Forge rejects them,
+and a patch using one **will not run on hardware**.
+
+**Never use one unless the user explicitly asks for it in this turn** — by
+name, or by asking for "an experimental patch". A request like "write me a
+trigger sequence" is NOT such a request: use `euklid`, `sequencer` or
+`algoquencer`. When in doubt, write the hardware-compatible patch and mention
+that an experimental circuit exists.
+
+If the user does ask, the patch must carry a header comment saying it is
+experimental and hardware-incompatible, and you must tell them both of these:
+
+- the master module needs **"Allow experimental circuits"** enabled in its
+  context menu, or the patch will refuse to load;
+- validation needs the flag: `droidcheck --experimental patch.ini`
+  (and `build/patchsmoke --experimental patch.ini`).
+
+`patches/mine-02-trigseq-drums.ini` is the worked example to follow.
 
 ## Core syntax
 

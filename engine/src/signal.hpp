@@ -4,6 +4,7 @@
 #include "midi.hpp"
 #include <cstdint>
 #include <functional>
+#include <string>
 #include <vector>
 
 namespace droid {
@@ -37,6 +38,13 @@ struct MasterSettings {
     bool requestClearAll = false; // ... likewise clearall
 };
 
+// The loaded patch's interned text table (manual/basics.md §5.8; slot 0 == "").
+// A text-typed jack carries the text NUMBER as its value, so a circuit that
+// needs the string itself — trigseq's `pattern` — resolves it through here.
+// Owned by the Engine and stable for the life of a loaded patch; null when no
+// patch is loaded. Circuits must treat it as read-only.
+using TextTable = std::vector<std::string>;
+
 struct EngineState {
     RegisterFile regs;
     MasterSettings master;        // [droid] global settings seam
@@ -44,6 +52,7 @@ struct EngineState {
     MidiState midi;              // M5 MIDI seam: queues + per-tick snapshot
     ProbeState probe;            // MASTER18 I1 frequency probe (adapter-fed)
     FileProvider fileProvider;   // SD-card file source (adapter-installed)
+    const TextTable* texts = nullptr;   // patch text table (engine-installed)
     std::vector<float> cables;   // indexed by cable id
     uint64_t tick = 0;
     uint32_t rngState = 1;       // xorshift32; circuits draw from this

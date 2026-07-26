@@ -24,6 +24,7 @@ bool parseAtomToken(const std::string& tok, Atom& out, std::vector<std::string>&
     if (tok.size() >= 2 && tok.front() == '"' && tok.back() == '"') {
         int idx = internText(tok.substr(1, tok.size() - 2), texts);
         out = Atom::num(float(idx), true);
+        out.isText = true;   // RAM accounting charges texts, not constants (ram.cpp)
         return true;
     }
     float v;

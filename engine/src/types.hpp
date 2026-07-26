@@ -24,6 +24,12 @@ struct LoadOptions {
     // 64 000-byte patch-size cap — from load errors to warnings. ramUsed still
     // reports the honest footprint.
     bool ignoreMemoryLimits = false;
+
+    // Allow vcvoid-only EXPERIMENTAL circuits (#12) to load. Off by default:
+    // an experimental circuit does not exist on DROID hardware and is unknown
+    // to the Forge, so a patch using one is refused unless the user opts in.
+    // See docs/adr/0001-experimental-circuits.md.
+    bool allowExperimental = false;
 };
 
 } // namespace droid

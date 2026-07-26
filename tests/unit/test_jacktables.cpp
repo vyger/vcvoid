@@ -98,7 +98,13 @@ TEST(jacktables_digit_ending_array_base) {
 }
 
 TEST(jacktables_globals) {
-    CHECK(kNumCircuits == 76);
+    // 76 firmware circuits (blue-7) + vcvoid's experimental overlay (#12).
+    // The firmware count is the parity-relevant one and must not drift; the
+    // generator asserts it independently on the firmware half.
+    unsigned firmware = 0;
+    for (unsigned i = 0; i < kNumCircuits; i++)
+        if (!kCircuits[i].experimental) firmware++;
+    CHECK(firmware == 76);
     CHECK(kAvailableMemory[0] == 112867);
     CHECK(kAvailableMemory[1] == 109015);
     CHECK(kInitialJacktableSize == 168);

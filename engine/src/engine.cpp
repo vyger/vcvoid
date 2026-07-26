@@ -80,6 +80,10 @@ LoadResult Engine::load(const std::string& patchText, const LoadOptions& opts) {
 
     declaredControllers_ = cp.controllers;
     texts_ = cp.texts;
+    // Publish the table to circuits (trigseq's `pattern`). texts_ is stable for
+    // the life of the load and is not reassigned until the next load, which
+    // rebuilds every circuit anyway.
+    state_.texts = &texts_;
     drivenRegs_.clear();
     for (auto& cc : cp.circuits)
         for (auto& p : cc.params)

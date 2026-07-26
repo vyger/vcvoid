@@ -25,8 +25,12 @@
 // WOULD create is fromSource=true in ours (including the -1 of `X - REG`, whose
 // Forge form6 emits a literal AtomNumber(-1)). See parser.cpp header note.
 //
-// Stuff block (patch.cpp:795-801, numTexts=0 in M1):
-//   ALIGN_UP(numConstants*4 + numCables*8 + 0, 16)
+// Stuff block (patch.cpp:795-801):
+//   ALIGN_UP(numConstants*4 + numCables*8 + numTexts*4 + ALIGN_UP(numTexts*2,4), 16)
+// i.e. 6 bytes per TEXT ATOM OCCURRENCE (a 4-byte pointer + a 2-byte length);
+// the characters themselves live in the patch buffer and are never charged, so
+// a 4-character and a 40-character pattern cost the same. countTexts()
+// (patch.cpp:1143) walks atoms, so a repeated string is charged per use.
 //
 // Budget walk (patch.cpp:787-813): iterate circuits in patch order; if
 // used_so_far + thisCircuitMem + stuff > availableMemory, record a problem on
@@ -56,7 +60,11 @@ static unsigned jackCost(const CompiledParam& p) {
         case gen::RamHint::Output:        return 4;
         case gen::RamHint::Input:
             if (p.simple) {
-                if (p.a.kind == Atom::Kind::Number &&
+                // The 0/1 optimization tests isNumber() in the Forge
+                // (jackdeduplicator.cpp:71-79); a text is an AtomText, so it
+                // never qualifies — even though our parser gives text number 1
+                // the numeric value 1.0.
+                if (!p.a.isText && p.a.kind == Atom::Kind::Number &&
                     (p.a.number == 0.0f || p.a.number == 1.0f))
                     return 4;   // 0/1 special optimization
                 return 8;       // simple input
@@ -82,6 +90,7 @@ unsigned computeRam(const CompiledPatch& p, MasterType master,
         for (auto& pp : cc.params)
             for (const Atom* a : {&pp.a, &pp.b, &pp.c}) {
                 if (a->kind != Atom::Kind::Number || !a->fromSource) continue;
+                if (a->isText) continue;   // AtomText is not an AtomNumber (patch.cpp:1107)
                 // For a fraction (`X / d`) the Forge stores the folded value as a
                 // DOUBLE `1.0 / (double)d` (jackassignmentinput.cpp:249) and counts
                 // n, -n, 1/n, -1/n off that double. Our runtime `number` is the
@@ -98,7 +107,15 @@ unsigned computeRam(const CompiledPatch& p, MasterType master,
                 }
             }
 
-    unsigned numTexts = 0;   // M1: text parameters unsupported
+    // Text atoms: countTexts() (patch.cpp:1143) counts OCCURRENCES, not unique
+    // texts — the same string written twice is two atoms and costs twice, even
+    // though both intern to one text number.
+    unsigned numTexts = 0;
+    for (auto& cc : p.circuits)
+        for (auto& pp : cc.params)
+            for (const Atom* a : {&pp.a, &pp.b, &pp.c})
+                if (a->isText) numTexts++;
+
     unsigned stuff = alignUp((unsigned)constants.size() * 4 +
                              (unsigned)p.cableNames.size() * 8 +
                              numTexts * 4 + alignUp(numTexts * 2, 4), 16);

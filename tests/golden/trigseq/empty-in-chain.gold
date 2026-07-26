@@ -1,0 +1,42 @@
+# An empty pattern is TRANSPARENT in a chain: it contributes zero steps, so the
+# chain length is the sum of the non-empty instances and the sequence steps
+# straight past it. Commenting a phrase out therefore shortens the sequence
+# cleanly instead of inserting a mystery rest.
+#
+# "x." + "" + ".x" = 4 steps: emit, rest, rest, emit. If the empty instance
+# contributed a rest step the emits would land on 1 and 5 instead of 1 and 4,
+# so the wrap at step 5 is what pins this.
+experimental
+patch <<<
+[trigseq]
+    clock       = I1
+    pattern     = "x."
+    chaintonext = 1
+    output      = O1
+
+[trigseq]
+    pattern     = ""
+    chaintonext = 1
+
+[trigseq]
+    pattern     = ".x"
+>>>
+@1 set I1 1
+@1 expect O1 1
+@2 set I1 0
+@3 set I1 1
+@3 expect O1 0
+@4 set I1 0
+@5 set I1 1
+@5 expect O1 0
+@6 set I1 0
+@7 set I1 1
+@7 expect O1 1
+@8 set I1 0
+# wraps after 4 steps, not 5
+@9 set I1 1
+@9 expect O1 1
+@10 set I1 0
+@11 set I1 1
+@11 expect O1 0
+@12 set I1 0

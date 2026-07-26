@@ -1,0 +1,66 @@
+# Where a chain STOPS. Two independent facts, one patch each:
+#
+# A: the chain ends at a peer that is not a trigseq. The head sets
+#    chaintonext = 1 but the next circuit is a [copy], so the sequence is just
+#    the head's own 2-step pattern "x." — emit, rest, emit, rest.
+#
+# B: the chain ends where chaintonext is not set. Three trigseqs in a row; only
+#    the first sets it, so the sequence is "x." + "x" = 3 steps and the THIRD
+#    instance's pattern (which would emit on every step) never plays.
+#    Its silence is what proves the boundary.
+experimental
+patch <<<
+[trigseq]
+    clock       = I1
+    pattern     = "x."
+    chaintonext = 1
+    output      = O1
+
+[copy]
+    input       = 0
+    output      = O2
+>>>
+
+patch <<<
+[trigseq]
+    clock       = I2
+    pattern     = "x."
+    chaintonext = 1
+    output      = O3
+
+[trigseq]
+    pattern     = "x"
+
+[trigseq]
+    pattern     = "xxxx"
+>>>
+# --- A: clock I1, 4 steps of a 2-step sequence -> emit, rest, emit, rest
+@1 set I1 1
+@1 expect O1 1
+@2 set I1 0
+@3 set I1 1
+@3 expect O1 0
+@4 set I1 0
+@5 set I1 1
+@5 expect O1 1
+@6 set I1 0
+@7 set I1 0
+# --- B: clock I2, 3-step sequence "x." + "x" -> emit, rest, emit, then wrap
+@21 set I2 1
+@21 expect O3 1
+@22 set I2 0
+@23 set I2 1
+@23 expect O3 0
+@24 set I2 0
+@25 set I2 1
+@25 expect O3 1
+@26 set I2 0
+# wrap: step 1 of the head again — if the third instance were in the chain,
+# this step would be one of its 'x' characters and the pattern would differ
+# from here on; the next rest at step 2 confirms the 3-step loop.
+@27 set I2 1
+@27 expect O3 1
+@28 set I2 0
+@29 set I2 1
+@29 expect O3 0
+@30 set I2 0

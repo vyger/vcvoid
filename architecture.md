@@ -192,6 +192,31 @@ docs (`manual/circuits/*.md`) supply the *semantics* the hand-written
 Over-budget or invalid patches **refuse to load** with a Forge-style error
 (the hardware blinks LEDs; we show the message + line number).
 
+Two documented escapes from fidelity exist, both per-module, both off by
+default, both in the master's *Experimental* context-menu section:
+`LoadOptions.ignoreMemoryLimits` (#13) downgrades the RAM/patch-size limits to
+warnings, and `LoadOptions.allowExperimental` (#12) permits experimental
+circuits — see below.
+
+### Experimental circuits (vcvoid only)
+
+An **experimental circuit** exists in vcvoid but in no DROID firmware, and the
+Forge does not know it. They are declared in `engine/experimental.json`
+using the Forge's own circuit schema, and that one file feeds both consumers:
+
+- `tools/jackgen/jackgen.py` merges it with the vendored `droidfirmware.json`
+  and emits a single `kCircuits` table with `experimental` set on overlay
+  entries (the 76-circuit assertion still covers the firmware half);
+- `tools/droidcheck/build.sh` merges it into the validator's embedded firmware
+  and generates the name list droidcheck gates on.
+
+`compilePatch` refuses an experimental circuit unless `allowExperimental` is
+set, with a line-localised error naming the circuit and the menu item. Docs live
+under `manual/circuits/experimental/` (`experimental: true` frontmatter); the
+ledger tracks them without ranking them; goldens opt in with the `experimental`
+directive; `droidcheck --experimental` validates them. Rationale and costs:
+[ADR 0001](docs/adr/0001-experimental-circuits.md).
+
 ## The Rack plugin (`plugin/`)
 
 Built with the Rack SDK + Makefile workflow (`RACK_DIR`, `make`, `make

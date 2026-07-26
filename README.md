@@ -67,6 +67,19 @@ page renders (diagrams, tables, worked figures), download the **blue-7 DROID
 manual** from Der Mann mit der Maschine (shop.dermannmitdermaschine.de →
 Downloads) — it is intentionally not redistributed here.
 
+### Experimental circuits
+
+vcvoid can also run a small number of **experimental circuits** — circuits that
+exist *only here*, not in DROID firmware and not in the Forge. A patch using one
+**will not run on DROID hardware**, so they are refused by default: enable
+**"Allow experimental circuits"** in the master's context menu (under
+*Experimental*) to load such a patch. The setting is saved with your Rack patch.
+
+Today there is one: [`trigseq`](manual/circuits/experimental/trigseq.md), a
+declarative trigger sequencer that plays a rhythm you write as text —
+`pattern = "x...x.x."`. See
+[the experimental index](manual/circuits/experimental/index.md).
+
 ### Claude Code
 
 As a bonus, if you use [Claude Code](https://claude.com/claude-code) you can

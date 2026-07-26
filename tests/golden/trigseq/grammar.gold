@@ -1,0 +1,70 @@
+# Pattern grammar: '.', ' ' (space), '-' and '_' are RESTS; every other
+# character emits. There is no validation and no error path, so '0' and '|'
+# emit like any other non-rest character (documented in the manual page).
+#
+# A: all four rest characters in one pattern -> output silent for 4 steps,
+#    offbeats fires on every one of them.
+# B: a representative set of emitting characters -> output fires on all of
+#    them, offbeats silent.
+# Both share the clock I1 so the two patterns advance in lockstep.
+experimental
+patch <<<
+[trigseq]
+    clock    = I1
+    pattern  = ". -_"
+    output   = O1
+    offbeats = O2
+>>>
+
+patch <<<
+[trigseq]
+    clock    = I1
+    pattern  = "xX*1o0|"
+    output   = O3
+    offbeats = O4
+>>>
+# step 1: A '.' rest, B 'x' emit
+@1 set I1 1
+@1 expect O1 0
+@1 expect O2 1
+@1 expect O3 1
+@1 expect O4 0
+@2 set I1 0
+# step 2: A ' ' rest, B 'X' emit
+@3 set I1 1
+@3 expect O1 0
+@3 expect O2 1
+@3 expect O3 1
+@3 expect O4 0
+@4 set I1 0
+# step 3: A '-' rest, B '*' emit
+@5 set I1 1
+@5 expect O1 0
+@5 expect O2 1
+@5 expect O3 1
+@5 expect O4 0
+@6 set I1 0
+# step 4: A '_' rest, B '1' emit
+@7 set I1 1
+@7 expect O1 0
+@7 expect O2 1
+@7 expect O3 1
+@7 expect O4 0
+@8 set I1 0
+# step 5: A wraps to '.', B 'o' emit
+@9 set I1 1
+@9 expect O1 0
+@9 expect O2 1
+@9 expect O3 1
+@9 expect O4 0
+@10 set I1 0
+# step 6: B '0' emits — a zero character is NOT a rest
+@11 set I1 1
+@11 expect O3 1
+@11 expect O4 0
+@12 set I1 0
+# step 7: B '|' emits — a bar line is NOT a separator, it is a step
+@13 set I1 1
+@13 expect O3 1
+@13 expect O4 0
+@14 set I1 0

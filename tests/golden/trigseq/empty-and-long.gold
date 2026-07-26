@@ -1,0 +1,91 @@
+# Two edge cases of "the string defines everything":
+#
+# A: an EMPTY pattern contributes zero steps. Standalone the circuit is inert —
+#    output and offbeats stay 0 no matter how many clocks arrive (and, crucially,
+#    nothing divides by zero).
+#
+# B: a LONG pattern plays in full. 18 characters is the longest a text can be in
+#    the patch format (the Forge rejects more: DB8E_MAX_TEXT_LENGTH in
+#    main/tuning.h, "from master:db8elink.h"), so this is the longest single
+#    instance a Forge-valid patch can hold — use chaintonext beyond it. Emits on
+#    1, 10 and 18: first, middle, last, so a truncation bug at any plausible
+#    boundary changes the result. Step 19 wraps back to step 1.
+experimental
+patch <<<
+[trigseq]
+    clock    = I1
+    pattern  = ""
+    output   = O1
+    offbeats = O2
+>>>
+
+patch <<<
+[trigseq]
+    clock    = I1
+    pattern  = "x........x.......x"
+    output   = O3
+>>>
+# --- A stays silent throughout; --- B: step 1 emits
+@1 set I1 1
+@1 expect O1 0
+@1 expect O2 0
+@1 expect O3 1
+@2 set I1 0
+# steps 2..9 are rests (tick 2n-1 = step n)
+@3 set I1 1
+@3 expect O1 0
+@3 expect O2 0
+@3 expect O3 0
+@4 set I1 0
+@5 set I1 1
+@5 expect O3 0
+@6 set I1 0
+@7 set I1 1
+@8 set I1 0
+@9 set I1 1
+@10 set I1 0
+@11 set I1 1
+@12 set I1 0
+@13 set I1 1
+@14 set I1 0
+@15 set I1 1
+@16 set I1 0
+@17 set I1 1
+@17 expect O3 0
+@18 set I1 0
+# step 10 -> emit (the 10th character)
+@19 set I1 1
+@19 expect O3 1
+@19 expect O1 0
+@20 set I1 0
+# steps 11..17 are rests
+@21 set I1 1
+@21 expect O3 0
+@22 set I1 0
+@23 set I1 1
+@24 set I1 0
+@25 set I1 1
+@26 set I1 0
+@27 set I1 1
+@28 set I1 0
+@29 set I1 1
+@30 set I1 0
+@31 set I1 1
+@32 set I1 0
+@33 set I1 1
+@33 expect O3 0
+@34 set I1 0
+# step 18 -> emit (the last character)
+@35 set I1 1
+@35 expect O3 1
+@36 set I1 0
+# step 19 wraps to the first character -> emit
+@37 set I1 1
+@37 expect O3 1
+@38 set I1 0
+# step 20 -> rest
+@39 set I1 1
+@39 expect O3 0
+@39 expect O1 0
+@39 expect O2 0
+@40 set I1 0

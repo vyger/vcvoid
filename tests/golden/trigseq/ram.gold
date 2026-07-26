@@ -1,0 +1,27 @@
+# trigseq RAM accounting (manual/circuits/experimental/trigseq.md: ram_bytes 32).
+# Hand-computed Forge accounting on a MASTER (typeOfMaster()==16 always adds
+# the X7's 864 bytes, attached or not):
+#   x7                 864
+#   trigseq base        32
+#   clock  (trigger_input)      20
+#   pattern (simple text input)  8   <- a text is an AtomText, so the 0/1
+#                                       optimization never applies even though
+#                                       text number 1 has the numeric value 1.0
+#   output (output)              4
+#   constants           16   (seeded {0.0, 1.0} = 8, plus the text's 6 bytes
+#                             -> ALIGN_UP(8 + 6, 16) = 16)
+#   -----------------------
+#   total              944
+# The circuit itself is 32 + 20 + 8 + 4 + 6 = 70 bytes — the figure quoted in
+# the manual page.
+experimental
+expect_ram 944
+patch <<<
+[trigseq]
+    clock   = I1
+    pattern = "x...x.x."
+    output  = O1
+>>>
+@1 set I1 1
+@1 expect O1 1
+@2 set I1 0

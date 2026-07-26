@@ -46,6 +46,7 @@ GoldFile parse(const std::string& path) {
         else if (word == "tickrate") ls >> g.tickrate;
         else if (word == "seed")     ls >> g.seed;
         else if (word == "expect_ram") { ls >> g.expectRam; g.hasExpectRam = true; }
+        else if (word == "experimental") g.experimental = true;
         else if (word == "expect_load_error") { std::string rest; std::getline(ls, rest);
             size_t b = rest.find_first_not_of(' '); g.expectLoadError = unquote(rest.substr(b == std::string::npos ? 0 : b)); }
         else if (word == "expect_warning") { std::string rest; std::getline(ls, rest);

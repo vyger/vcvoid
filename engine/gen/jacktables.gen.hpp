@@ -25,6 +25,7 @@ struct CircuitDef {
     const char* name;
     unsigned ramSize;        // base RAM, bytes
     bool deprecated;
+    bool experimental;       // vcvoid-only circuit; not DROID firmware, not in the Forge
     const JackDef* jacks;    // inputs first, then outputs
     unsigned numJacks;
 };

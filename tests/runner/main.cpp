@@ -82,7 +82,9 @@ static bool runFile(const std::string& path) {
             return true;
         });
     }
-    droid::LoadResult r = e.load(g.patch);
+    droid::LoadOptions lopts;
+    lopts.allowExperimental = g.experimental;   // `experimental` header line (#12)
+    droid::LoadResult r = e.load(g.patch, lopts);
 
     if (!g.expectLoadError.empty()) {
         if (r.ok) { std::printf("FAIL %s: expected load error, but load succeeded\n", path.c_str()); return false; }
