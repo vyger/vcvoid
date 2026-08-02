@@ -149,6 +149,20 @@ rate is 93 kB/s, which is a lot of MIDI for a receiver to parse; if a receiver
 starts lagging, lower `updaterate` before reducing the number of controllers —
 resolution in *time* is usually what you can spare.
 
+Measured in vcvoid (2026-08-02, eight controllers, rate swept 100 → 1600):
+**25,600 messages/second — 76.8 kB/s — carried without a single dropped or
+delayed update** through VCV Rack's internal loopback MIDI port, with the
+engine holding its full tick rate throughout.
+
+**Virtual MIDI buses are the exception, and they fail early.** The same test
+over the macOS **IAC Driver** saturates at roughly **2,000 messages/second** —
+about 170 updates/s across eight controllers, well under the default. Past that
+the receiver does not degrade gracefully: the value freezes at whatever arrived
+last and then jumps, because the messages are being discarded rather than
+queued. If you are testing this circuit through a virtual bus rather than real
+USB and the received CV stalls, that is the bus, not this circuit — lower
+`updaterate` until it tracks, or route through a port that isn't IAC.
+
 ## Memory
 
 `midihirescc` costs 264 bytes plus the usual per-parameter cost. That base is
