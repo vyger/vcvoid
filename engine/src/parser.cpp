@@ -5,10 +5,9 @@
 
 namespace droid {
 
-namespace {
-
 // Intern a text into the 1-based table (slot 0 == ""); the empty string is 0.
-// Returns the text number to use as the atom's numeric value.
+// Returns the text number to use as the atom's numeric value. Declared in
+// parser.hpp: the loader interns derived auto-headers into the same table.
 int internText(const std::string& content, std::vector<std::string>& texts) {
     if (content.empty()) return 0;
     for (size_t k = 1; k < texts.size(); ++k)
@@ -16,6 +15,8 @@ int internText(const std::string& content, std::vector<std::string>& texts) {
     texts.push_back(content);
     return int(texts.size() - 1);
 }
+
+namespace {
 
 // One value token: quoted text / number / register / cable name. A double-quoted
 // token (tokenizeExpr keeps the quotes) interns to the text table and becomes an

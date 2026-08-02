@@ -121,8 +121,29 @@ public:
         if (changed) changedUntil_ = (long)s.tick + trig;
 
         // --- outputs ---------------------------------------------------------
-        out("output").set(s, value_ + in("offset").value(s));
+        float outValue = value_ + in("offset").value(s);
+        out("output").set(s, outValue);
         out("changed").set(s, (long)s.tick < changedUntil_ ? 1.0f : 0.0f);
+
+        // --- DB8E screen (issue #19) -----------------------------------------
+        // nudge.md: "updates the display whenever you nudge or reset to the start
+        // value by pressing both buttons at once. It displays the output value."
+        // Trigger-driven, NOT value-change-driven: `offset` is an ordinary CV
+        // input, and a modulated offset changing the output is not a nudge.
+        // A rejected write stays pending so it lands once the screen frees up.
+        //
+        // "If you use integer numbers for `amount` and `startvalue` and an integer
+        // value is selected ... the display simply shows that number. If your
+        // nudged value might be a non-integer fraction, the display automatically
+        // switches to its value display mode, where you can use the buttons of the
+        // DB8E to tweak the number format" -> numbermode 1 (integer, no decimals)
+        // for a whole number, else 0 (the DB8E's own user-selectable format).
+        if (changed) dispPending_ = true;
+        if (selected && dispPending_) {
+            bool whole = std::fabs(outValue - std::round(outValue)) < 1e-6f;
+            if (ui::showCircuitValue(*this, s, outValue, whole ? 1 : 0))
+                dispPending_ = false;
+        }
         if (selected) {
             float up = 0.0f, down = 0.0f;
             if (minSet && maxSet && mx > mn) {
@@ -177,6 +198,7 @@ private:
     int   prevPreset_ = 0;
     bool  prevUp_ = false, prevDown_ = false, prevBoth_ = false;
     long  changedUntil_ = 0;
+    bool  dispPending_ = false;   // a nudge waiting to reach the DB8E
     bool  caPrev_ = false, clPrev_ = false, spPrev_ = false, lpPrev_ = false;
 };
 

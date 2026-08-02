@@ -142,6 +142,17 @@ public:
             for (int i = 1; i <= N; i++)
                 out("led", i).set(s, active_[i] ? 1.0f : 0.0f);
 
+        // --- DB8E screen (issue #19) -----------------------------------------
+        // buttongroup.md: "In most cases `buttongroup` does not use the display
+        // ... There is one exception, however: If `maxactive` is 1 *and* you use
+        // the `output` jack, the value of the output is being displayed." Anything
+        // else would just restate the LEDs.
+        if (maxA == 1 && out("output").connected()) {
+            bool moved = disp_.changed(sum);
+            if (selected && moved && ui::showCircuitValue(*this, s, sum))
+                disp_.accept(sum);
+        }
+
         out("buttonpress").set(s,      (long)s.tick < bpUntil_ ? 1.0f : 0.0f);
         out("longpress").set(s,        (long)s.tick < lpUntil_ ? 1.0f : 0.0f);
         out("selectionchanged").set(s, (long)s.tick < scUntil_ ? 1.0f : 0.0f);
@@ -174,6 +185,8 @@ private:
         prevPreset_ = ui::clampPreset(std::lround(in("preset").value(s)), 15);
         inited_ = true;
     }
+
+    ui::DisplayBaseline disp_;   // last output value put on the DB8E
 
     void limits(EngineState& s, int& minA, int& maxA) {
         maxA = (int)std::lround(in("maxactive").value(s));

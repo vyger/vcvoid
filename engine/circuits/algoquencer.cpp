@@ -160,7 +160,19 @@ public:
 
         fireDueRolls(s, trigTicks);
         writeOutputs(s, selected, trigTicks);
+
+        // --- DB8E screen (issue #19) -----------------------------------------
+        // algoquencer.md: "the `algoquencer` will show a manual change of the
+        // pattern length with the `lengthbutton` in the display. Currently no
+        // further information is displayed." So this is the ONE trigger — not
+        // the playing position, not the pattern — and the body is the new
+        // length as a plain integer. A rejected write stays pending.
+        if (selected && dispPending_ &&
+            ui::showCircuitValue(*this, s, float(cur_.iLen), 1))
+            dispPending_ = false;
     }
+
+    bool dispPending_ = false;   // a length change waiting to reach the DB8E
 
     // --- persistent state (DROIDSTA.BIN contract) ---------------------------
     // The edited pattern (steps/accents/alternate/length/mute/offset) + the 16
@@ -324,6 +336,7 @@ private:
             if (lenMode) {
                 cur_.iLen = i + 1;
                 cur_.lenTouched = true;
+                dispPending_ = true;   // DB8E: show the new length (issue #19)
             } else if (accMode) {
                 cur_.accents[i] = !cur_.accents[i];
             } else if (altMode) {

@@ -1,0 +1,41 @@
+# button: the DB8E shows the state, but only for 3- and 4-state buttons.
+# Spec: button.md "the `button` circuit automatically displays it's state,
+# whenever `states = 3` or `states = 4`. This visual feedback makes it easer to
+# select one of the four states than just guessing the brightness of the LED."
+# A 2-state button stays silent — its LED already says everything.
+#
+# SPEC-GAP: shown as the STATE INDEX (0..states-1) in integer number mode, not
+# the `output` value; button.md says "it's state", and telling four states apart
+# is the stated purpose. See engine/circuits/button.cpp.
+#
+# B1.1 is a 4-state button, B1.2 a 2-state one.
+#   t1: press B1.1 -> state 1
+#   t3: press B1.1 -> state 2
+#   t5: press B1.2 (2 states) -> no write; the screen still reads 2
+tickrate 100
+patch <<<
+[p2b8]
+[db8e]
+
+[button]
+    button = B1.1
+    states = 4
+    output = O1
+
+[button]
+    button = B1.2
+    states = 2
+    output = O2
+>>>
+@0 expectdisplay D1 off
+@1 set B1.1 1
+@1 expectdisplay D1 value 1 tol 1e-6
+@1 expectdisplay D1 mode 1
+@2 set B1.1 0
+@3 set B1.1 1
+@3 expectdisplay D1 value 2 tol 1e-6
+@4 set B1.1 0
+@5 set B1.2 1
+@5 expectdisplay D1 value 2 tol 1e-6
+@6 set B1.2 0
+@6 expectdisplay D1 value 2 tol 1e-6

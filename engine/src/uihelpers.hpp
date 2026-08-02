@@ -72,6 +72,25 @@ inline DisplayState* targetDisplay(Circuit& c, EngineState& s) {
     return s.controllers.display(n);
 }
 
+// Change baseline for circuit-tier display writes. Holds the last value that
+// actually LANDED on the screen, and swallows the first tick's value so a patch
+// that is merely loaded (or has its state restored) never activates the display
+// on its own — on hardware the screen only wakes when you operate something.
+//
+// On a REJECTED write the caller must NOT call accept(), so the change stays
+// pending and re-attempts every tick until the current owner's linger expires —
+// delay-not-discard, exactly as the [display] circuit does with its own
+// baseline.
+struct DisplayBaseline {
+    float sent = 0.0f;
+    bool  seeded = false;
+    bool changed(float value) {
+        if (!seeded) { seeded = true; sent = value; return false; }
+        return std::fabs(value - sent) > 1e-6f;
+    }
+    void accept(float value) { sent = value; }
+};
+
 // Circuit-tier screen write (hardware.md §6.12 "Circuits with user interaction":
 // "When you operate a control that changes a circuit's state, you rather want to
 // see that state and not the raw value of the control"). Used by the circuits the
@@ -87,11 +106,13 @@ inline DisplayState* targetDisplay(Circuit& c, EngineState& s) {
 //     encoder turned later must be able to take the screen back once the higher
 //     tier's linger has expired.
 // The caller decides WHEN there is something to show (i.e. what counts as user
-// interaction for that circuit) and owns the "last displayed value" baseline —
+// interaction for that circuit) and owns the "last displayed value" baseline
+// (DisplayBaseline above, or a pending flag for the trigger-driven circuits) —
 // on a rejected write the caller must leave its baseline untouched so the write
 // keeps re-attempting until it lands, exactly as [display] does.
 // Returns true iff the write was accepted.
-inline bool showCircuitValue(Circuit& c, EngineState& s, float value) {
+inline bool showCircuitValue(Circuit& c, EngineState& s, float value,
+                             uint8_t numbermode = 0) {
     DisplayState* d = targetDisplay(c, s);
     if (!d) return false;
     bool accepted = (d->owner == &c) ||
@@ -100,12 +121,17 @@ inline bool showCircuitValue(Circuit& c, EngineState& s, float value) {
                      kTierCircuit >= d->ownerTier);
     if (!accepted) return false;
     d->active = true;
-    d->headerText = floorText(c.in("header").value(s));
+    // An explicit `header` wins; otherwise the title the Engine derived from the
+    // `output` target at load (Circuit::autoHeaderText, 0 = none).
+    d->headerText = c.in("header").connected() ? floorText(c.in("header").value(s))
+                                               : c.autoHeaderText;
     d->isText = false;
     d->value = value;
-    // No numbermode/fontsize jacks on these circuits: leave the DB8E's own
-    // user-selected format alone (0 = "use the buttons on the DB8E").
-    d->numbermode = 0;
+    // These circuits have no numbermode/fontsize jacks. The default 0 leaves the
+    // DB8E's own user-selected format alone ("use the buttons on the DB8E"); a
+    // caller passes a mode only where the manual pins one (nudge's integer
+    // display, display.md's numbermode table).
+    d->numbermode = numbermode;
     d->fontsize = 0;
     d->owner = &c;
     d->ownerTier = kTierCircuit;

@@ -156,19 +156,25 @@ public:
         // driven by the OUTPUT changing, the same idiom [display] uses for its
         // `value` — which covers the turn itself plus everything a turn sets in
         // motion (the `smooth` tail, `snapto` pulling the value home) without
-        // needing a separate "was this tick a detent" rule. dispSent_ is seeded
-        // at init from the starting output, so a patch that is merely loaded and
-        // never touched leaves the screen off, as on hardware.
+        // needing a separate "was this tick a detent" rule. DisplayBaseline
+        // swallows the first tick, so a patch that is merely loaded and never
+        // touched leaves the screen off, as on hardware.
         //
         // Select-gated like the ring and the button: on hardware the screen
         // belongs to the currently selected overlay circuit.
         //
-        // On a REJECTED write dispSent_ deliberately does not advance, so the
-        // circuit keeps re-attempting until the current owner's linger expires
-        // (delay-not-discard, symmetric with display.cpp).
-        if (selected && std::fabs(outValue - dispSent_) > 1e-6f &&
-            ui::showCircuitValue(*this, s, outValue))
-            dispSent_ = outValue;
+        // On a REJECTED write the baseline deliberately does not advance, so
+        // the circuit keeps re-attempting until the current owner's linger
+        // expires (delay-not-discard, symmetric with display.cpp).
+        // changed() runs unconditionally so the baseline tracks even while
+        // deselected; only the WRITE is select-gated. A change that happened
+        // while deselected therefore stays pending and lands when the circuit
+        // is selected again — the catch-up [display] documents for its own
+        // `select` ("it immediately sends its current value to catch up with
+        // any change it missed").
+        bool moved = disp_.changed(outValue);
+        if (selected && moved && ui::showCircuitValue(*this, s, outValue))
+            disp_.accept(outValue);
     }
 
     // Persisted: the virtual position + all 16 presets + current preset slot.
@@ -189,7 +195,6 @@ public:
         ec::Params p = readParams(s);
         state_.smoothed = state_.logical(p);
         prevLogical_ = state_.smoothed;
-        dispSent_ = state_.output(p, state_.smoothed);   // restored state != interaction
     }
 
 private:
@@ -200,9 +205,6 @@ private:
         for (int i = 0; i < 16; i++) preset_[i] = state_.pos;
         prevPreset_ = ui::clampPreset(std::lround(in("preset").value(s)), 15);
         prevLogical_ = state_.logical(p);
-        // Seed the DB8E baseline from the starting output: an untouched patch
-        // must not activate the screen on its first tick.
-        dispSent_ = state_.output(p, state_.smoothed);
         inited_ = true;
     }
 
@@ -288,7 +290,7 @@ private:
     float preset_[16] = {};
     int  prevPreset_ = 0;
     float prevLogical_ = 0.0f;
-    float dispSent_ = 0.0f;   // last output value put on the DB8E (see tick())
+    ui::DisplayBaseline disp_;   // last output value put on the DB8E
     long movementAccum_ = 0, upPending_ = 0, downPending_ = 0;
     long nextEmitTick_ = 0, upUntil_ = 0, downUntil_ = 0, vcUntil_ = 0;
     bool caPrev_ = false, clPrev_ = false, spPrev_ = false, lpPrev_ = false;

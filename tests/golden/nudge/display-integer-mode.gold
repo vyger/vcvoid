@@ -1,0 +1,41 @@
+# nudge: the DB8E shows the output when you nudge, in integer mode for a whole
+# number. Spec: nudge.md "updates the display whenever you nudge or reset to the
+# start value by pressing both buttons at once. It displays the output value. If
+# you use integer numbers for `amount` and `startvalue` and an integer value is
+# selected ... the display simply shows that number. If your nudged value might
+# be a non-integer fraction, the display automatically switches to its value
+# display mode" (numbermode 0 = the DB8E's own user-selectable format).
+#
+# Activation is the nudge itself, NOT a value change: `offset` is an ordinary CV
+# input, and a moving offset is not a nudge.
+#   t1: nudge up   -> 3 + 2 = 5, whole -> mode 1
+#   t3: nudge up   -> 7
+#   t5: offset 0.5 moves the output to 7.5 with no button press -> no write
+#   t7: nudge down -> 5 + 0.5 = 5.5, not whole -> mode 0
+tickrate 100
+patch <<<
+[p2b8]
+[db8e]
+
+[nudge]
+    buttonup   = B1.1
+    buttondown = B1.2
+    startvalue = 3
+    amount     = 2
+    offset     = I1
+    output     = O1
+>>>
+@0 expectdisplay D1 off
+@1 set B1.1 1
+@1 expectdisplay D1 value 5 tol 1e-6
+@1 expectdisplay D1 mode 1
+@2 set B1.1 0
+@3 set B1.1 1
+@3 expectdisplay D1 value 7 tol 1e-6
+@4 set B1.1 0
+@5 set I1 0.5
+@5 expectdisplay D1 value 7 tol 1e-6
+@6 expectdisplay D1 value 7 tol 1e-6
+@7 set B1.2 1
+@7 expectdisplay D1 value 5.5 tol 1e-6
+@7 expectdisplay D1 mode 0
