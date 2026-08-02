@@ -24,13 +24,16 @@ const std::string& Engine::textForNumber(float v) const {
 // `Output O1` for a register target. Derived here, at load, because it has to
 // intern a string into the text table — circuits only ever see it const.
 //
-// SPEC-GAP: the manual gives the register form by example only and never spells
-// out the cable form beyond "the name of this cable"; library mode lists cables
-// WITHOUT the leading underscore (`VOICE_1_PITCH`), which is the only evidence
-// for stripping it, and says nothing about how an over-long name is trimmed for
-// the 128-px screen. Targets other than an `O` register or a cable (a gate, an
-// `N` normalization) get no header rather than a guessed wording.
-// patches/tmp-autoheader-probe.ini exists to settle all three against hardware.
+// CONFIRMED against hardware (issue #19, via patches/tmp-autoheader-probe.ini):
+//   `output = O1`      -> "Output O1"
+//   `output = _CUTOFF` -> "CUTOFF"   (leading underscore dropped)
+//   no `output` jack   -> no header at all, just the value
+// An over-long name is cut hard at 17 characters with no ellipsis
+// (_FILTER_RESONANCE_AMOUNT -> "FILTER_RESONANCE_"); that cut lives at the
+// screen (chain::kDb8eHeaderChars), not here, so the text table keeps the real
+// name. Still a SPEC-GAP: targets other than an `O` register or a cable (a
+// gate, an `N` normalization) are unmeasured and get no header rather than a
+// guessed wording.
 static int deriveAutoHeader(const CompiledCircuit& cc, std::vector<std::string>& texts) {
     // Only circuits that can actually show a header get one derived: otherwise
     // every `[copy] output = O1` in every patch would intern a dead string.

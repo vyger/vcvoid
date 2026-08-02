@@ -9,14 +9,17 @@
 #                                library-mode listing's VOICE_1_PITCH)
 #   B -> O2        (register) -> header "Output O2"
 #   C -> _DECAY but with an explicit header -> the explicit text wins
+#   D -> no `output` jack at all -> no header, just the value
 #
 # The circuits are select-gated so exactly one owns the screen per tick and the
 # assertions cannot race: I2 picks which one is live.
 #
-# SPEC-GAP: derived from the manual's wording plus the library-mode example, not
-# from hardware. patches/tmp-autoheader-probe.ini captures the real strings; a
-# target that is neither a cable nor an O register gets no header rather than a
-# guessed wording (see deriveAutoHeader in engine/src/engine.cpp).
+# Both forms are CONFIRMED against hardware (issue #19). A name longer than 17
+# characters is cut hard, no ellipsis, but that cut lives at the screen
+# (chain::kDb8eHeaderChars) — the engine's text table keeps the real name, which
+# is why this golden asserts the full string. A target that is neither a cable
+# nor an O register is unmeasured and gets no header rather than a guessed
+# wording (see deriveAutoHeader in engine/src/engine.cpp).
 tickrate 100
 patch <<<
 [e4]
@@ -44,6 +47,12 @@ patch <<<
     header   = "MY OWN TITLE"
     output   = _DECAY
 
+[encoder]
+    encoder  = E1.4
+    smooth   = 0
+    select   = I2
+    selectat = 3
+
 # Cables need a reader or the patch will not load.
 [mixer]
     input1 = _CUTOFF
@@ -62,3 +71,7 @@ patch <<<
 @3 turn E1.3 96
 @3 expectdisplay D1 value 1.0 tol 1e-6
 @3 expectdisplay D1 header "MY OWN TITLE"
+@4 set I2 3
+@4 turn E1.4 48
+@4 expectdisplay D1 value 0.5 tol 1e-6
+@4 expectdisplay D1 header ""

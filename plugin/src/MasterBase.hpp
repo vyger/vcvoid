@@ -911,7 +911,16 @@ public:
                 // has headerText/bodyText 0 -> "" and value 0 (block was zeroed).
                 if (id == MDB8E) {
                     if (const droid::DisplayState* ds = engine->displayState(++db8e)) {
-                        copyDisplayText(b.dispHeader, engine->textForNumber(float(ds->headerText)));
+                        // The header is cut to kDb8eHeaderChars, hard, no
+                        // ellipsis — measured on hardware (issue #19: a cable
+                        // named _FILTER_RESONANCE_AMOUNT shows as
+                        // "FILTER_RESONANCE_"). Truncation belongs here and not
+                        // in the engine: the engine's text table holds the real
+                        // name, and how much of it fits is a property of the
+                        // screen, like the font sizing beside it.
+                        copyDisplayText(b.dispHeader,
+                            engine->textForNumber(float(ds->headerText)).substr(
+                                0, droid::chain::kDb8eHeaderChars));
                         b.dispIsText = ds->isText ? 1 : 0;
                         if (ds->isText)
                             copyDisplayText(b.dispText, engine->textForNumber(float(ds->bodyText)));
