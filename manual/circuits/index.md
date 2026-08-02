@@ -303,4 +303,5 @@ does not know them, and patches using them will not run on hardware. They load
 only when "Allow experimental circuits" is enabled on the master module. See
 [experimental/index.md](experimental/index.md).
 
+- [`midihirescc`](experimental/midihirescc.md) — 14-bit (hi-res) MIDI CC output: one jack per controller, both bytes sent together
 - [`trigseq`](experimental/trigseq.md) — Declarative trigger sequencer: write the rhythm as text

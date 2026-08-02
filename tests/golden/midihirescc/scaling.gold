@@ -1,0 +1,36 @@
+# midihirescc value mapping: the 0.0..1.0 input is resolved to 0..16383 by
+# round(v * 16383) and clamped, the same construction midiout uses for `volume`.
+# Clamping (not wrapping) means an A*B+C overshoot saturates at the extremes
+# instead of aliasing to the opposite end.
+#
+#   1.0  -> 16383 -> MSB 127, LSB 127
+#   0.5  ->  8192 -> MSB  64, LSB   0   (8191.5 rounds away from zero)
+#   2.0  -> clamped to 16383
+#  -1.0  -> clamped to 0
+#   0.1  ->  1638 -> MSB  12, LSB 102
+# updaterate defaults to 500/s = one update per 2 ticks at tickrate 1000, so the
+# changes are spaced two ticks apart.
+tickrate 1000
+x7 1
+experimental
+patch <<<
+[midihirescc]
+    usb      = 1
+    hirescc8 = I1
+>>>
+@2 set I1 1
+@2 expectmidi usb cc 1 40 127
+@2 expectmidi usb cc 1 8 127
+@4 set I1 0.5
+@4 expectmidi usb cc 1 40 0
+@4 expectmidi usb cc 1 8 64
+@6 set I1 2
+@6 expectmidi usb cc 1 40 127
+@6 expectmidi usb cc 1 8 127
+@8 set I1 -1
+@8 expectmidi usb cc 1 40 0
+@8 expectmidi usb cc 1 8 0
+@10 set I1 0.1
+@10 expectmidi usb cc 1 40 102
+@10 expectmidi usb cc 1 8 12
+@11 expectmidi usb none

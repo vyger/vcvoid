@@ -1,0 +1,25 @@
+# midihirescc RAM accounting (manual/circuits/experimental/midihirescc.md:
+# ram_bytes 264). Hand-computed Forge accounting on a MASTER (typeOfMaster()==16
+# always adds the X7's 864 bytes, attached or not):
+#   x7                            864
+#   midihirescc base              264   <- 31 slots x (14-bit value + last-emit
+#                                          tick + seeded flag) plus port mask,
+#                                          channel, rate and byte order
+#   hirescc8 = I1 (simple input)    8
+#   hirescc9 = I2 * 0.5 (A*B+C)    16
+#   constants                      16   (seeded {0.0, 1.0} plus +0.5/-0.5 = 4
+#                                        constants x 4 = 16 -> ALIGN_UP(16,16))
+#   ------------------------------------
+#   total                        1168
+# The base is charged whether one slot is used or all 31 — the per-controller
+# state is fixed-size, which the manual page says out loud.
+tickrate 1000
+x7 1
+experimental
+expect_ram 1168
+patch <<<
+[midihirescc]
+    hirescc8 = I1
+    hirescc9 = I2 * 0.5
+>>>
+@1 set I1 0.1

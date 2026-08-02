@@ -25,6 +25,14 @@ experimental circuits, written in the Forge's own firmware-file schema. One file
 feeds both consumers (the engine's generated jack tables and droidcheck's
 embedded firmware), so the two can never disagree about what exists.
 
+**Hi-res CC pair** — the two MIDI messages that carry one 14-bit continuous
+controller: a *coarse* byte on controller `n` and a *fine* byte on controller
+`n + 32`, defined for `n` = 0…31 only. In vcvoid the pair is also a unit of
+emission: both bytes leave in one update, adjacent on the wire, never
+interleaved with another controller's. "MSB/LSB" is the same distinction in
+MIDI's own words. See
+[`midihirescc`](manual/circuits/experimental/midihirescc.md).
+
 **Golden** — a `.gold` file: patch text plus expected register values at
 specific engine ticks. The project's primary test seam; assertions are made at
 the patch boundary, never against circuit internals.

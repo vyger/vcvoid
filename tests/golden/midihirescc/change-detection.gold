@@ -1,0 +1,34 @@
+# midihirescc change detection + updaterate. The circuit emits only when the
+# RESOLVED 14-bit value moves, rate-limited to updaterate updates per second and
+# per controller — this is the bandwidth win over patches/lfo-cc-midi.ini, which
+# has to resend everything unconditionally because midiout's cctrigger has no
+# change detection.
+#
+# updaterate = 50 at tickrate 1000 is a minimum interval of 20 ticks (the same
+# construction as midiout/cc.gold). 0.1 -> 1638 (MSB 12, LSB 102);
+# 0.2 -> 3277 (MSB 25, LSB 77); 0.5 -> 8192 (MSB 64, LSB 0).
+tickrate 1000
+x7 1
+experimental
+patch <<<
+[midihirescc]
+    usb        = 1
+    channel    = 1
+    updaterate = 50
+    hirescc8   = I1
+>>>
+@0 set I1 0.1
+@0 expectmidi usb none
+@10 expectmidi usb none
+@11 set I1 0.2
+@11 expectmidi usb none
+@19 expectmidi usb none
+@20 expectmidi usb cc 1 40 77
+@20 expectmidi usb cc 1 8 25
+@21 expectmidi usb none
+@30 set I1 0.2
+@30 expectmidi usb none
+@40 set I1 0.5
+@40 expectmidi usb cc 1 40 0
+@40 expectmidi usb cc 1 8 64
+@41 expectmidi usb none

@@ -1,0 +1,31 @@
+# midihirescc: the headline property — both bytes of a controller leave in ONE
+# update, so a pair is never interleaved with another controller's pair. Two
+# slots move on the same tick; the wire must read LSB,MSB, LSB,MSB in slot order
+# (patches/lfo-cc-midi.ini can only achieve this by hand-ordering slots across
+# two midiout circuits).
+#
+# hirescc8 -> CC#8 (MSB) + CC#40 (LSB); hirescc9 -> CC#9 + CC#41.
+# 0.1 -> round(0.1*16383) = 1638 -> MSB 12, LSB 102.
+# 0.2 -> round(0.2*16383) = 3277 -> MSB 25, LSB  77.
+# updaterate defaults to 500/s; at tickrate 1000 that is one update per 2 ticks,
+# so a change at t=1 (baseline tick 0) is emitted at t=2.
+tickrate 1000
+x7 1
+experimental
+patch <<<
+[midihirescc]
+    usb      = 1
+    channel  = 1
+    hirescc8 = I1
+    hirescc9 = I2
+>>>
+@0 expectmidi usb none
+@1 set I1 0.1
+@1 set I2 0.2
+@1 expectmidi usb none
+@2 expectmidi usb cc 1 40 102
+@2 expectmidi usb cc 1 8 12
+@2 expectmidi usb cc 1 41 77
+@2 expectmidi usb cc 1 9 25
+@2 expectmidi usb none
+@3 expectmidi usb none

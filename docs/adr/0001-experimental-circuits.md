@@ -85,6 +85,20 @@ exists only in vcvoid, and gate it at patch load.
 
 ## Notes
 
+**Numbered jacks in the overlay must start at 1.** The Forge's own model ignores
+`start_at`: `DroidFirmware::findJack` validates an array jack by generating
+`prefix1 … prefix<count>`, so a block declared `start_at: 8, count: 24` is
+accepted by the engine as `hirescc8 … hirescc31` and by droidcheck as
+`hirescc1 … hirescc24`. That is exactly the drift this ADR exists to prevent,
+and it is silent — `crosscheck.sh` only sees the jack names the goldens happen
+to use. The overlay may therefore use `{prefix, count}` freely but must leave
+`start_at` at 1, and any circuit numbering its jacks by an external quantity has
+to make that quantity start at 1 too. (This is a Forge limitation, not one of
+ours: the firmware's own `start_at: 0` jack, `calibrator`'s `tune0`, is
+mis-validated the same way.) Discovered while adding
+[`midihirescc`](../../manual/circuits/experimental/midihirescc.md), whose jack
+number *is* a MIDI controller number.
+
 The first experimental circuit, [`trigseq`](../../manual/circuits/experimental/trigseq.md),
 also forced a related finding worth recording: the Forge charges 6 bytes per
 *text atom occurrence* (a pointer plus a length) and excludes texts from

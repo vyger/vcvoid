@@ -1,0 +1,24 @@
+# midihirescc controller numbering at both ends of the range. The jack number
+# IS the MIDI controller number of the coarse byte and the fine byte is that
+# number plus 32, so hirescc1 -> CC#1 + CC#33 and hirescc31 -> CC#31 + CC#63.
+#
+# The top of the range is also the Forge-parity edge: DroidFirmware::findJack
+# validates array jacks as prefix1 … prefix<count> and ignores start_at, so this
+# golden is what makes `make crosscheck` prove that droidcheck accepts the same
+# jack names the engine does — including the last one.
+# 0.1 -> 1638 -> MSB 12, LSB 102.
+tickrate 1000
+x7 1
+experimental
+patch <<<
+[midihirescc]
+    usb       = 1
+    hirescc1  = I1
+    hirescc31 = I1
+>>>
+@1 set I1 0.1
+@2 expectmidi usb cc 1 33 102
+@2 expectmidi usb cc 1 1 12
+@2 expectmidi usb cc 1 63 102
+@2 expectmidi usb cc 1 31 12
+@2 expectmidi usb none
