@@ -63,6 +63,15 @@ public:
     std::vector<Input> inputs;
     std::vector<Output> outputs;
 
+    // Automatic DB8E header (issue #19): the text number the Engine derived at
+    // load from this circuit's `output` target, used when `header` is omitted —
+    // manual (encoder.md/pot.md/...): "If you omit this, an automatic title is
+    // used. For example if the output of this circuit is fed into an internal
+    // patch cable, the name of this cable is displayed." 0 = none. Derived at
+    // load rather than at tick because it needs to intern a string into the
+    // engine's text table, which circuits only ever see const.
+    int autoHeaderText = 0;
+
 private:
     // Memoized name->slot resolution. in()/out() are called with the same
     // (name, index) pairs every tick; resolving through gen::findJack each

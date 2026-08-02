@@ -1,0 +1,35 @@
+# encoder vs [display]: the [display] circuit outranks a circuit's own screen.
+# Spec: hardware.md §6.12 "When more of these events happen at the same time, the
+# latter one in the upper list takes precedence": Library > [display] > Circuit >
+# Control. Modelled as (a) an ordinary linger block and (b) a tier that decides
+# same-tick collisions, so precedence is an ORDER, not a permanent lockout — an
+# encoder you turn later must still be able to take the screen back.
+#
+#   t0: [display] writes 0.2   -> owner = the display circuit,
+#                                 linger 0.05 s = 5 ticks -> lingerUntil = 5
+#   t1: the knob is turned -> the encoder wants 1425, but 1 < 5 and it is the
+#       lower tier -> blocked; the screen stays on 0.2
+#   t2..t4: still blocked (the encoder keeps re-attempting, baseline unadvanced)
+#   t5: linger expired -> 5 >= 5 -> the encoder is accepted, screen 1425
+tickrate 100
+patch <<<
+[db8e]
+
+[display]
+    value  = I1
+    linger = 0.05
+
+[encoder]
+    encoder      = E1.1
+    smooth       = 0
+    outputscale  = 2650
+    outputoffset = 100
+    output       = O1
+>>>
+@0 set I1 0.2
+@0 expectdisplay D1 value 0.2 tol 1e-6
+@1 turn E1.1 48
+@1 expectdisplay D1 value 0.2 tol 1e-6
+@2 expectdisplay D1 value 0.2 tol 1e-6
+@4 expectdisplay D1 value 0.2 tol 1e-6
+@5 expectdisplay D1 value 1425 tol 1e-3

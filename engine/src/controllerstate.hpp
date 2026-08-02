@@ -91,12 +91,26 @@ struct FaderState {
     float ledColor = 0.0f;
 };
 
+// Display content tiers, from hardware.md §6.12: "Library Mode > [display] >
+// Circuit > Control" — when two sources want the screen AT THE SAME TIME, the
+// higher tier gets it. It is an order, not a lockout: once the winner's linger
+// has expired, a lower tier can take the screen back (that is what makes an
+// encoder you turn later still show up in a patch that also has a [display]).
+// Only the middle two tiers exist headlessly; control-tier (raw pot/fader
+// readout) and library mode are Rack-side.
+enum : uint8_t {
+    kTierControl = 1,   // a moved pot/fader shown raw (Rack-side, reserved)
+    kTierCircuit = 2,   // a user-interaction circuit showing its own value
+    kTierDisplay = 3,   // the [display] circuit
+    kTierLibrary = 4,   // library mode (Rack-side, reserved)
+};
+
 // Per-DB8E symbolic screen content. NOT pixels: header + (text | value+format).
-// Content arbitration implements the [display]-circuit tier only (precedence
-// Library > [display] > circuit > control; the other tiers are Rack/M6 —
-// see plan Global Constraints). Owner + linger give the manual's semantics:
-// a write is accepted iff it comes from the current owner OR the linger
-// window has expired. `useasdefault` content re-asserts after expiry.
+// Content arbitration covers the [display] tier and the circuit tier (see the
+// tier enum above; control/library are Rack-side). Owner + linger give the
+// manual's semantics: a write is accepted iff it comes from the current owner
+// OR the linger window has expired OR it is a same-tick overwrite by an equal
+// or higher tier. `useasdefault` content re-asserts after expiry.
 struct DisplayState {
     bool active = false;          // false until first accepted write
     int headerText = 0;           // text number, 0 = none
@@ -106,6 +120,7 @@ struct DisplayState {
     uint8_t numbermode = 0;
     uint8_t fontsize = 0;
     const void* owner = nullptr;  // opaque circuit identity for linger arbitration
+    uint8_t ownerTier = 0;        // tier of the last accepted write (see enum above)
     uint64_t lingerUntilTick = 0;
     // Tick of the last accepted write. Lets the [display] circuit implement the
     // documented same-tick tie-break (two circuits both changing on one tick:

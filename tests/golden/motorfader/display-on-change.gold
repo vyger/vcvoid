@@ -1,0 +1,49 @@
+# motorfader: the DB8E shows the fader value, including a preset recall.
+# Spec: motorfader.md "automatically updates the display whenever the virtual
+# value of the fader changes (by user interaction)".
+#
+# MEASURED on hardware (issue #19): the parenthetical is not a restriction. A
+# preset recall drives the MOTOR rather than the hand, and it still shows — the
+# reading snaps straight to the recalled value rather than following the motor
+# across. (The first draft of this circuit read "by user interaction" strictly
+# and stayed silent on a recall; hardware says otherwise.)
+#
+# Header comes from the `output` target, an internal cable, so the leading
+# underscore is dropped: "LEVEL".
+#   t0: seeded at startvalue 0.4; nothing moved -> screen off
+#   t1: user moves the fader to 0.8            -> shows 0.8
+#   t2: save that into preset 0 (no value change, so nothing new to show)
+#   t3: user moves to 0.2                      -> shows 0.2
+#   t5: recall preset 0 -> the motor drives the fader back to 0.8 and the
+#       screen follows it in the same tick
+tickrate 100
+patch <<<
+[m4]
+[db8e]
+
+[motorfader]
+    fader      = 1
+    startvalue = 0.4
+    savepreset = I1
+    loadpreset = I2
+    preset     = 0
+    output     = _LEVEL
+
+# The cable needs a reader.
+[copy]
+    input  = _LEVEL
+    output = O1
+>>>
+@0 expectdisplay D1 off
+@1 move F1 0.8
+@1 expectdisplay D1 value 0.8 tol 1e-4
+@1 expectdisplay D1 header "LEVEL"
+@2 set I1 1
+@2 expectdisplay D1 value 0.8 tol 1e-4
+@3 set I1 0
+@3 move F1 0.2
+@3 expectdisplay D1 value 0.2 tol 1e-4
+@5 set I2 1
+@5 expect F1 0.8 tol 1e-4
+@5 expectdisplay D1 value 0.8 tol 1e-4
+@6 expectdisplay D1 value 0.8 tol 1e-4

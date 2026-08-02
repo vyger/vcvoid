@@ -1,0 +1,36 @@
+# encoder: turning the knob shows the value on the DB8E (issue #19).
+# Spec: encoder.md "If you have a DB8E display controller ... the value shows up
+# in the display whenever you turn the encoder. It then shows the updated value
+# of `output` in the display." — so the body is the SCALED output
+# (pos * outputscale + outputoffset), not the raw 0..1 position, and `header`
+# rides along.
+#
+# Scale/offset are the ones from patches/lfo-cc-midi.ini, the patch the hardware
+# video was shot with (header "CC RATE HZ", values in the hundreds).
+#   pos = detents/96 at sensivity 1; smooth = 0 for exact steps.
+#   @0  seed pos 0 -> output 100, but nothing has been TURNED: screen stays off.
+#   @1  +48 -> pos 0.5 -> output 0.5*2650 + 100 = 1425
+#   @2  no turn -> the screen holds the last value (content persists)
+#   @3  -24 -> pos 0.25 -> output 0.25*2650 + 100 = 762.5
+tickrate 100
+patch <<<
+[db8e]
+
+[display]
+    takeovercontrols = 1
+
+[encoder]
+    encoder      = E1.1
+    smooth       = 0
+    outputscale  = 2650
+    outputoffset = 100
+    header       = "CC RATE HZ"
+    output       = O1
+>>>
+@0 expectdisplay D1 off
+@1 turn E1.1 48
+@1 expectdisplay D1 value 1425 tol 1e-3
+@1 expectdisplay D1 header "CC RATE HZ"
+@2 expectdisplay D1 value 1425 tol 1e-3
+@3 turn E1.1 -24
+@3 expectdisplay D1 value 762.5 tol 1e-3

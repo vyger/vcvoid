@@ -21,3 +21,7 @@ NOTES.md
 # local-only rack-specific test patches
 patches/e4-menus-full-rack.ini
 patches/e4-menus-full-rack-m18.ini
+# throwaway hardware-probe patches: written to answer one question against the
+# real rack, then thrown away. The ANSWERS belong in code comments, goldens and
+# the issue — never the scaffolding that produced them.
+patches/tmp-*

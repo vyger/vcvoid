@@ -1,0 +1,49 @@
+# encoder: the DB8E screen is select-gated like the ring and the button.
+# Spec: hardware.md §6.12 "Circuits with user interaction" — the screen shows the
+# state of the circuit you are actually operating; encoder.md's select/selectat
+# route a shared knob to the currently selected overlay circuit, and the ring
+# already follows that (issue #15). The screen must follow it too: a DESELECTED
+# overlay circuit never writes, even when its value keeps moving underneath.
+#
+# Two circuits share E1.1. A (selectat 0) is selected throughout; B (selectat 1)
+# never is, but its value is driven by `override`, so it changes without anyone
+# touching the knob — encoder.md: "override honors select, so if you use select,
+# it does nothing ... while the encoder circuit is not selected".
+# Scales are kept small so the `output` jacks stay inside the +-10 V (+-1.0)
+# clamp and it is the display, not the clamp, that is under test.
+#   t1: turn +48 -> A consumes it (pos 0.5) -> A shows 0.5*0.1 + 0.1 = 0.15
+#   t2: override drives B to 1.0 -> B's own output becomes 1.0, but B is
+#       deselected -> no write; the screen still reads A's 0.15
+#   t3: override drives B to 0.2 -> B's output 0.92 -> still no write
+tickrate 100
+patch <<<
+[db8e]
+
+[encoder]
+    encoder      = E1.1
+    smooth       = 0
+    select       = I2
+    selectat     = 0
+    outputscale  = 0.1
+    outputoffset = 0.1
+    output       = O1
+
+[encoder]
+    encoder      = E1.1
+    smooth       = 0
+    select       = I2
+    selectat     = 1
+    override     = I3
+    outputscale  = 0.1
+    outputoffset = 0.9
+    output       = O2
+>>>
+@0 expectdisplay D1 off
+@1 turn E1.1 48
+@1 expectdisplay D1 value 0.15 tol 1e-6
+@2 set I3 1
+@2 expect O2 1.0 tol 1e-6
+@2 expectdisplay D1 value 0.15 tol 1e-6
+@3 set I3 0.2
+@3 expect O2 0.92 tol 1e-6
+@3 expectdisplay D1 value 0.15 tol 1e-6

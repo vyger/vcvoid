@@ -40,5 +40,105 @@ inline int presetNum(Circuit& c, EngineState& s, float trigValue,
     return clampPreset(std::lround(v), maxIndex);
 }
 
+// --- DB8E screen helpers ---------------------------------------------------
+// Largest DB8E target worth resolving; anything beyond is inert (no such DB8E).
+// Well within int and float-exact, so the cast in floorClamp never overflows.
+inline constexpr int kDisplayTargetMax = 256;
+// Text numbers are 1-based; at/above this is "no such text" (textForNumber
+// returns ""). Float-exact and int-safe so a huge input-math product can't make
+// the cast UB.
+inline constexpr int kTextMax = 1 << 20;
+
+// Range-check-before-cast: a finite-but-out-of-range float cast to a narrow int
+// is UB, and input math (`= I1 * 1e20`) can produce one. Compare AS FLOAT, clamp
+// into [lo, hi], and only ever cast an already-in-range value. Non-finite -> lo.
+inline int floorClamp(float v, int lo, int hi) {
+    if (!std::isfinite(v) || v <= float(lo)) return lo;
+    if (v >= float(hi)) return hi;
+    return (int)std::floor(v);
+}
+
+// Text numbers are 1-based positive integers (0 = empty). <=0 (and non-finite)
+// map to 0 (empty); a large number clamps to kTextMax, which resolves to "" —
+// textForNumber's contract, without a UB cast.
+inline int floorText(float v) { return floorClamp(v, 0, kTextMax); }
+
+// Resolve a circuit's `display` jack to a DB8E screen: 0 => suppressed (never
+// writes), an out-of-range/huge/non-finite target => no such DB8E => inert
+// (not a load error, mirroring G8's absent-hardware tolerance). Default 1.
+inline DisplayState* targetDisplay(Circuit& c, EngineState& s) {
+    int n = floorClamp(c.in("display").value(s), 0, kDisplayTargetMax);
+    if (n == 0) return nullptr;
+    return s.controllers.display(n);
+}
+
+// Change baseline for circuit-tier display writes. Holds the last value that
+// actually LANDED on the screen, and swallows the first tick's value so a patch
+// that is merely loaded (or has its state restored) never activates the display
+// on its own — on hardware the screen only wakes when you operate something.
+//
+// On a REJECTED write the caller must NOT call accept(), so the change stays
+// pending and re-attempts every tick until the current owner's linger expires —
+// delay-not-discard, exactly as the [display] circuit does with its own
+// baseline.
+struct DisplayBaseline {
+    float sent = 0.0f;
+    bool  seeded = false;
+    bool changed(float value) {
+        if (!seeded) { seeded = true; sent = value; return false; }
+        return std::fabs(value - sent) > 1e-6f;
+    }
+    void accept(float value) { sent = value; }
+};
+
+// Circuit-tier screen write (hardware.md §6.12 "Circuits with user interaction":
+// "When you operate a control that changes a circuit's state, you rather want to
+// see that state and not the raw value of the control"). Used by the circuits the
+// manual lists as displaying themselves — encoder, pot, motorfader, ... — to push
+// their own user-facing value plus their `header` onto the DB8E named by their
+// `display` jack.
+//
+// Arbitration mirrors the [display] circuit's (owner / linger / same-tick, see
+// display.cpp) with the two differences the precedence list implies:
+//   * the write carries kTierCircuit, so a [display] circuit writing on the SAME
+//     tick keeps the screen regardless of patch order;
+//   * it installs no linger of its own. Precedence is an order, not a hold: an
+//     encoder turned later must be able to take the screen back once the higher
+//     tier's linger has expired.
+// The caller decides WHEN there is something to show (i.e. what counts as user
+// interaction for that circuit) and owns the "last displayed value" baseline
+// (DisplayBaseline above, or a pending flag for the trigger-driven circuits) —
+// on a rejected write the caller must leave its baseline untouched so the write
+// keeps re-attempting until it lands, exactly as [display] does.
+// Returns true iff the write was accepted.
+inline bool showCircuitValue(Circuit& c, EngineState& s, float value,
+                             uint8_t numbermode = 0) {
+    DisplayState* d = targetDisplay(c, s);
+    if (!d) return false;
+    bool accepted = (d->owner == &c) ||
+                    (s.tick >= d->lingerUntilTick) ||
+                    (d->active && d->lastWriteTick == s.tick &&
+                     kTierCircuit >= d->ownerTier);
+    if (!accepted) return false;
+    d->active = true;
+    // An explicit `header` wins; otherwise the title the Engine derived from the
+    // `output` target at load (Circuit::autoHeaderText, 0 = none).
+    d->headerText = c.in("header").connected() ? floorText(c.in("header").value(s))
+                                               : c.autoHeaderText;
+    d->isText = false;
+    d->value = value;
+    // These circuits have no numbermode/fontsize jacks. The default 0 leaves the
+    // DB8E's own user-selected format alone ("use the buttons on the DB8E"); a
+    // caller passes a mode only where the manual pins one (nudge's integer
+    // display, display.md's numbermode table).
+    d->numbermode = numbermode;
+    d->fontsize = 0;
+    d->owner = &c;
+    d->ownerTier = kTierCircuit;
+    d->lingerUntilTick = s.tick;   // no hold of its own
+    d->lastWriteTick = s.tick;
+    return true;
+}
+
 } // namespace ui
 } // namespace droid

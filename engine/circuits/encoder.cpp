@@ -39,10 +39,19 @@
 //     when the virtual value changes (never while clamped at a limit; on the
 //     snap-to-next in discrete mode). The exact fast-turn gap timing is a
 //     SPEC-GAP simplification of the manual's queueing prose.
-//   * LED ring / color / negativecolor / ledfill / led input / display / header
-//     are panel-only (like pot's LED gauge): not rendered headless. The ring
-//     position is stashed in ControllerState.ringDisplay for a future Rack
-//     adapter but is not golden-observable.
+//   * LED ring / color / negativecolor / ledfill / led input are panel-only
+//     (like pot's LED gauge): not rendered headless. The ring position is
+//     stashed in ControllerState.ringDisplay for the Rack adapter but is not
+//     golden-observable.
+//   * display / header ARE modelled (issue #19): turning the knob puts the
+//     scaled `output` on the DB8E named by `display`, under the circuit tier of
+//     the manual's precedence list — see ui::showCircuitValue and the write at
+//     the end of tick(). SPEC-GAP: the manual's *automatic* header ("if the
+//     output of this circuit is fed into an internal patch cable, the name of
+//     that cable is displayed") is NOT derived — an omitted `header` shows no
+//     header. Deriving it needs a name interned into the text table at load,
+//     which the engine's text table (built once by the parser, published const
+//     to circuits) has no seam for.
 //   * sharewithnext: suppresses this circuit's `output` (handed to the next
 //     encoder circuit). The manual's "operate on the SAME virtual value across
 //     the pair" coupling is NOT modelled headless — each circuit keeps its own
@@ -80,7 +89,7 @@ public:
         handlePresets(s, p);
 
         // --- value update ----------------------------------------------------
-        float emitted, logicalNow;
+        float emitted, logicalNow, outValue;
         long moveDetents = 0;
         if (overridden) {
             ec::Params po = p; po.notch = 0.0f;   // override value is exact
@@ -88,16 +97,18 @@ public:
             state_.pos = overrideToPos(po, v);
             emitted = state_.smoothStep(po, dt);
             logicalNow = state_.logical(po);
+            outValue = state_.output(po, emitted);
             // knob ignored -> no movement triggers
             if (!(in("sharewithnext").value(s) >= kGateHighThreshold))
-                out("output").set(s, state_.output(po, emitted));
+                out("output").set(s, outValue);
         } else {
             if (selected) { state_.applyMovement(p, detents); moveDetents = detents; }
             state_.applySnap(p, dt);
             emitted = state_.smoothStep(p, dt);
             logicalNow = state_.logical(p);
+            outValue = state_.output(p, emitted);
             if (!(in("sharewithnext").value(s) >= kGateHighThreshold))
-                out("output").set(s, state_.output(p, emitted));
+                out("output").set(s, outValue);
         }
         // Ring display, select-gated like the button/LEDs (issue #15): on
         // hardware the ring belongs to the selected overlay circuit. mode 0
@@ -138,6 +149,32 @@ public:
             vcUntil_ = (long)s.tick + trigTicks;
         prevLogical_ = logicalNow;
         out("valuechanged").set(s, (long)s.tick < vcUntil_ ? 1.0f : 0.0f);
+
+        // --- DB8E screen (issue #19) -----------------------------------------
+        // encoder.md: "the value shows up in the display whenever you turn the
+        // encoder. It then shows the updated value of `output`". Activation is
+        // driven by the OUTPUT changing, the same idiom [display] uses for its
+        // `value` — which covers the turn itself plus everything a turn sets in
+        // motion (the `smooth` tail, `snapto` pulling the value home) without
+        // needing a separate "was this tick a detent" rule. DisplayBaseline
+        // swallows the first tick, so a patch that is merely loaded and never
+        // touched leaves the screen off, as on hardware.
+        //
+        // Select-gated like the ring and the button: on hardware the screen
+        // belongs to the currently selected overlay circuit.
+        //
+        // On a REJECTED write the baseline deliberately does not advance, so
+        // the circuit keeps re-attempting until the current owner's linger
+        // expires (delay-not-discard, symmetric with display.cpp).
+        // changed() runs unconditionally so the baseline tracks even while
+        // deselected; only the WRITE is select-gated. A change that happened
+        // while deselected therefore stays pending and lands when the circuit
+        // is selected again — the catch-up [display] documents for its own
+        // `select` ("it immediately sends its current value to catch up with
+        // any change it missed").
+        bool moved = disp_.changed(outValue);
+        if (selected && moved && ui::showCircuitValue(*this, s, outValue))
+            disp_.accept(outValue);
     }
 
     // Persisted: the virtual position + all 16 presets + current preset slot.
@@ -253,6 +290,7 @@ private:
     float preset_[16] = {};
     int  prevPreset_ = 0;
     float prevLogical_ = 0.0f;
+    ui::DisplayBaseline disp_;   // last output value put on the DB8E
     long movementAccum_ = 0, upPending_ = 0, downPending_ = 0;
     long nextEmitTick_ = 0, upUntil_ = 0, downUntil_ = 0, vcUntil_ = 0;
     bool caPrev_ = false, clPrev_ = false, spPrev_ = false, lpPrev_ = false;

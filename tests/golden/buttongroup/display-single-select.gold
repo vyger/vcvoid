@@ -1,0 +1,43 @@
+# buttongroup: the DB8E shows the output value, but only in the one documented
+# case. Spec: buttongroup.md "In most cases `buttongroup` does not use the
+# display ... There is one exception, however: If `maxactive` is 1 *and* you use
+# the `output` jack, the value of the output is being displayed."
+#
+# Group A (maxactive 1, output patched) writes; group B (maxactive 2) never
+# does, even though its own output changes.
+#   t1: A button 2 -> output = value 2 -> shows 0.5
+#   t3: B button 1 -> B's output changes, but B must not write
+#   t5: A button 3 -> shows 0.9
+tickrate 100
+patch <<<
+[p2b8]
+[db8e]
+
+[buttongroup]
+    button1 = B1.1
+    button2 = B1.2
+    button3 = B1.3
+    value1 = 0.1
+    value2 = 0.5
+    value3 = 0.9
+    maxactive = 1
+    output = O1
+
+[buttongroup]
+    button1 = B1.4
+    button2 = B1.5
+    maxactive = 2
+    value1 = 0.25
+    value2 = 0.75
+    output = O2
+>>>
+@0 expectdisplay D1 off
+@1 set B1.2 1
+@1 expectdisplay D1 value 0.5 tol 1e-6
+@2 set B1.2 0
+@3 set B1.4 1
+@3 expect O2 0.25 tol 1e-6
+@3 expectdisplay D1 value 0.5 tol 1e-6
+@4 set B1.4 0
+@5 set B1.3 1
+@5 expectdisplay D1 value 0.9 tol 1e-6

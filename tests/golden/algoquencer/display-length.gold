@@ -1,0 +1,43 @@
+# algoquencer: the DB8E shows an interactive pattern-length change, and nothing
+# else. Spec: algoquencer.md "the `algoquencer` will show a manual change of the
+# pattern length with the `lengthbutton` in the display. Currently no further
+# information is displayed."
+#
+# So the trigger is a step button pressed while `lengthbutton` is held — not the
+# playing position, not a step toggle, not the `length` INPUT (that is not a
+# manual change). The body is the new length as a plain integer (mode 1).
+#   t1..t2: hold lengthbutton, press step 3 -> length 3
+#   t4:     release length mode, toggle step 1 -> a pattern edit, no write
+#   t6..t7: hold lengthbutton, press step 2 -> length 2
+tickrate 100
+patch <<<
+[p2b8]
+[db8e]
+
+[algoquencer]
+    clock        = I1
+    button1      = B1.1
+    button2      = B1.2
+    button3      = B1.3
+    button4      = B1.4
+    lengthbutton = B1.5
+    trigger      = O1
+    lengthoutput = _LEN
+
+[copy]
+    input  = _LEN
+    output = O5
+>>>
+@0 expectdisplay D1 off
+@1 set B1.5 1
+@2 set B1.3 1
+@2 expectdisplay D1 value 3 tol 1e-6
+@2 expectdisplay D1 mode 1
+@3 set B1.3 0
+@3 set B1.5 0
+@4 set B1.1 1
+@4 expectdisplay D1 value 3 tol 1e-6
+@5 set B1.1 0
+@6 set B1.5 1
+@7 set B1.2 1
+@7 expectdisplay D1 value 2 tol 1e-6
