@@ -329,6 +329,16 @@ TEST(chain_patch_uses_midi_detection) {
     m18.load("[midiout]\n    usb = 1\n    gate1 = 1\n    pitch1 = 0\n");
     CHECK(m18.patchUsesMidi() == true);
     CHECK(m18.midiAvailable() == true);
+    // Experimental MIDI circuits count too — midihirescc emits nothing without
+    // a port, which is exactly what the warning exists to tell the user. Found
+    // by UAT (2026-08-02): the detection is a hardcoded name list, so a new
+    // MIDI circuit is silently omitted until it is added here.
+    LoadOptions exp;
+    exp.allowExperimental = true;
+    Engine hires(MasterType::Master16, 6000.f);
+    hires.load("[midihirescc]\n    usb = 1\n    hirescc22 = 0.5\n", exp);
+    CHECK(hires.patchUsesMidi() == true);
+    CHECK(hires.midiAvailable() == false);      // MASTER16, no X7 -> warn
 }
 
 // ISSUE-5: chainOk demotion is debounced against Rack's transient expander

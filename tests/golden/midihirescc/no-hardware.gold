@@ -1,0 +1,19 @@
+# midihirescc with no MIDI hardware in the configuration: a MASTER (16) with no
+# X7 has no MIDI ports at all. The patch still LOADS and the circuit is a silent
+# no-op — the same behaviour as midiout (midiout/x7-absent.gold), midiin and
+# midithrough, rather than a load error.
+tickrate 1000
+x7 0
+experimental
+patch <<<
+[midihirescc]
+    usb      = 1
+    hirescc8 = I1
+>>>
+@1 set I1 0.1
+@2 expectmidi x7usb none
+@2 expectmidi m18usb none
+@3 set I1 0.9
+@4 expectmidi x7usb none
+@4 expectmidi m18usb none
+@4 expectmidi x7trs none

@@ -1766,6 +1766,53 @@ circuits:
       up/down, slope-vs-edge distinction, the manual's 1.9->2.1 V step
       example, hand-computed exponential-filter slope trace, per-clock-tick
       slope."
+  midihirescc:
+    status: done
+    experimental: true
+    difficulty: easy
+    binding: master-only
+    verification: headless
+    spec_gap: false
+    depends_on: []
+    notes: "EXPERIMENTAL (vcvoid only, #20) — not DROID firmware, refused at
+      load unless LoadOptions.allowExperimental. Declared in
+      engine/experimental.json (Forge schema; feeds both jackgen and
+      droidcheck). Exists because firmware midiout sends cc1..8 through
+      frac127() (7 bits) and its only hi-res paths are hardwired to volume
+      (CC#7+#39) and pitchbend; midiout itself cannot be extended (engine/gen
+      is generated from the Forge's firmware JSON and jackgen's overlay refuses
+      a name collision). The jack NUMBER is the controller number — hirescc22
+      = CC#22 MSB + CC#54 LSB — so an unpairable controller is unrepresentable
+      rather than silently downgraded to 7 bits; MIDI defines the n/n+32
+      pairing for n = 0..31 only. Range is 1..31 and MUST start at 1: the Forge
+      ignores start_at entirely (DroidFirmware::findJack, Forge
+      main/droidfirmware.cpp:592-616, generates prefix+i for i = 1..count), so
+      a start_at=8 block would validate as hirescc1..24 in droidcheck while the
+      engine accepted hirescc8..31 — the drift ADR 0001 exists to prevent (the
+      firmware's own start_at=0 jack, calibrator's tune0, is mis-validated the
+      same way). CC#0/Bank Select thus has no jack, which is also the right
+      answer; CC#6 Data Entry and CC#7 Volume (midiout already pairs it) stay
+      reachable and are flagged on the manual page, since holes are not
+      expressible either (one {prefix,count,start_at} block is contiguous, and
+      two blocks sharing a name are unaddressable from C++ since Circuit::in()
+      resolves a bare base name by exact match). Both bytes always emitted from one tick() (adjacent in the port
+      queue, never interleaved) even when only the LSB moved, because a
+      receiver that commits on the MSB would otherwise hold a stale value.
+      lsbfirst is per circuit, default 1 (LSB-first suits a single pending-LSB
+      latch and is the NTX-8CV default; 0 gives the MIDI spec order). Change
+      detection on the resolved 14-bit value, rate-limited by updaterate
+      (default 500/s), with NO initial send: baseline seeded silently on the
+      first tick, so a never-moving input is never transmitted (midiout's
+      initial send exists alongside delayinitialccs, whose hardware-boot
+      rationale vcvoid does not reproduce). USB-only, no trs jack: a DIN cable
+      carries 3125 B/s (midiout.md:386) and one pair is 6 bytes. No
+      select/selectat (they gate only buttons/LEDs in midiout; none here). No
+      MIDI hardware -> silent no-op, patch still loads. Golden coverage: pair
+      adjacency with two slots moving on one tick, both byte orders,
+      change detection + updaterate window + unchanged-value silence, 0..1 ->
+      0..16383 with clamping at both ends, USB port numbering incl. 10 =
+      broadcast with TRS asserted silent, no-hardware no-op, no-initial-send,
+      controller numbering at both range edges (the Forge-parity edge), load-error gate, exact RAM (1168)."
   trigseq:
     status: done
     experimental: true

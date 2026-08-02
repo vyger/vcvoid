@@ -1,0 +1,41 @@
+# midihirescc port selection. The circuit is USB-ONLY — a classical MIDI cable
+# carries 3125 bytes/s (midiout.md line 386) and one pair is 6 bytes, so DIN
+# cannot sustain hi-res updates. There is no `trs` jack, and nothing this
+# circuit emits may ever appear on a TRS port.
+#
+# `usb` uses midiout's port NUMBERING: 1..n counts USB ports in user order (the
+# master's own first, the X7's after), 10 means all of them. On a MASTER18 with
+# an X7 that is 1 = m18usb, 2 = x7usb.
+# 0.1 -> 1638 -> MSB 12, LSB 102, on CC#8/40, CC#9/41 and CC#10/42.
+tickrate 1000
+master 18
+x7 1
+experimental
+patch <<<
+# LABELS: master=18
+[midihirescc]
+    usb      = 1
+    hirescc8 = I1
+
+[midihirescc]
+    usb      = 2
+    hirescc9 = I1
+
+[midihirescc]
+    usb       = 10
+    hirescc10 = I1
+>>>
+@1 set I1 0.1
+@2 expectmidi m18usb cc 1 40 102
+@2 expectmidi m18usb cc 1 8 12
+@2 expectmidi m18usb cc 1 42 102
+@2 expectmidi m18usb cc 1 10 12
+@2 expectmidi m18usb none
+@2 expectmidi x7usb cc 1 41 102
+@2 expectmidi x7usb cc 1 9 12
+@2 expectmidi x7usb cc 1 42 102
+@2 expectmidi x7usb cc 1 10 12
+@2 expectmidi x7usb none
+@2 expectmidi m18trs1 none
+@2 expectmidi m18trs2 none
+@2 expectmidi x7trs none

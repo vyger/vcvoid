@@ -1,0 +1,25 @@
+# midihirescc has NO initial send, unlike midiout's continuous controllers.
+# The baseline is seeded silently on the first tick, so a value that is present
+# from the start and never moves is never transmitted — the receiver keeps
+# whatever it had. Any movement transmits within one update interval.
+#
+# This golden exists to make that a decision rather than an oversight: a later
+# "helpful" initial send has to argue with this file.
+# 0.75 -> 12287 (never sent). 0.9 -> round(0.9*16383) = 14745 -> MSB 115, LSB 25.
+tickrate 1000
+x7 1
+experimental
+patch <<<
+[midihirescc]
+    usb      = 1
+    hirescc8 = I1
+>>>
+@0 set I1 0.75
+@0 expectmidi usb none
+@1 expectmidi usb none
+@100 expectmidi usb none
+@500 expectmidi usb none
+@501 set I1 0.9
+@501 expectmidi usb cc 1 40 25
+@501 expectmidi usb cc 1 8 115
+@502 expectmidi usb none

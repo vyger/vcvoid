@@ -9,6 +9,64 @@
     "Docs live in manual/circuits/experimental/<name>.md (experimental: true)."
   ],
   "circuits": {
+    "midihirescc": {
+      "category": "midi",
+      "title": "14-bit (hi-res) MIDI CC output",
+      "description": "Sends continuous controllers at 14-bit resolution, emitting each MSB/LSB pair atomically from one update. One jack per hi-res-capable controller: hirescc22 drives CC22 (MSB) and CC54 (LSB). USB only.",
+      "ramsize": 264,
+      "inputs": [
+        {
+          "name": "usb",
+          "short": "u",
+          "type": "integer",
+          "default": "1",
+          "ramhint": "input",
+          "description": "Number of the USB port to send on, counting the master's own ports first and the X7's after: 1 is the first USB port, 10 means all USB ports, 0 means none. This circuit does not offer TRS output: 14-bit CCs at a useful update rate do not fit through a classical MIDI cable.",
+          "essential": 0
+        },
+        {
+          "name": "channel",
+          "short": "ch",
+          "type": "integer",
+          "default": "1",
+          "ramhint": "input",
+          "description": "MIDI channel to send on, 1 to 16. Both bytes of a pair always go out on this channel.",
+          "essential": 0
+        },
+        {
+          "name": "lsbfirst",
+          "short": "lf",
+          "type": "gate",
+          "default": "1",
+          "ramhint": "input",
+          "description": "Byte order within a pair. Default 1 sends the LSB before the MSB, which is what receivers that keep a single pending-LSB latch need in order to apply the whole 14-bit value at once. Set to 0 for the MIDI specification's MSB-then-LSB order.",
+          "essential": 0
+        },
+        {
+          "name": "updaterate",
+          "short": "ur",
+          "type": "cv",
+          "default": "500",
+          "ramhint": "input",
+          "description": "Maximum number of updates per second and per controller. A controller is sent only when its 14-bit value actually changes, so a still input costs nothing; this caps how often a moving one may be resent. Zero or negative stops all updates.",
+          "essential": 0
+        },
+        {
+          "prefix": "hirescc",
+          "name": "hirescc1 ... hirescc31",
+          "short": "h",
+          "count": 31,
+          "start_at": 1,
+          "type": "fraction",
+          "default": "unpatched",
+          "ramhint": "input",
+          "description": "A 14-bit controller. The jack number IS the MIDI controller number of the MSB; the LSB is always that number plus 32, as the MIDI standard defines (hirescc8 sends CC8 and CC40). The value 0.0 to 1.0 is resolved internally to 0 to 16383 and clamped. Controller 0 has no jack: it is Bank Select, and MIDI numbers hi-res controllers from 1 here. Controllers 6 (Data Entry, the payload of RPN/NRPN) and 7 (Volume, which midiout already sends as a 14-bit pair) are available but mean something specific to most receivers.",
+          "essential": 1,
+          "essential_count": 1
+        }
+      ],
+      "outputs": []
+    },
     "trigseq": {
       "category": "sequencing",
       "title": "Declarative trigger sequencer",

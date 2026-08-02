@@ -139,8 +139,12 @@ LoadResult Engine::load(const std::string& patchText, const LoadOptions& opts) {
     usesMidi_ = false;
     for (auto& cc : cp.circuits) {
         const char* n = cc.def->name;
+        // Circuits that need a reachable MIDI PORT. midifileplayer is
+        // deliberately absent: it reads a file from the SD card and emits CV,
+        // so it works with no MIDI hardware at all.
         if (!std::strcmp(n, "midiin") || !std::strcmp(n, "midiout") ||
-            !std::strcmp(n, "midithrough")) usesMidi_ = true;
+            !std::strcmp(n, "midithrough") ||
+            !std::strcmp(n, "midihirescc")) usesMidi_ = true;
         auto c = makeCircuit(cc.def->name);
         c->allocateSlots(cc.def);
         c->autoHeaderText = deriveAutoHeader(cc, texts_);

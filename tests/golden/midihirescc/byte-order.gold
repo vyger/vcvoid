@@ -1,0 +1,25 @@
+# midihirescc `lsbfirst`: byte order within a pair, per circuit.
+# Default 1 = LSB then MSB, what a receiver with a single pending-LSB latch
+# needs to apply the whole 14-bit value at once (the NTX-8CV convention).
+# lsbfirst = 0 = MSB then LSB, the MIDI specification's recommended order.
+# Both circuits read the same input, so the two orders are directly comparable:
+# 0.1 -> 1638 -> MSB 12, LSB 102.
+tickrate 1000
+x7 1
+experimental
+patch <<<
+[midihirescc]
+    usb      = 1
+    hirescc8 = I1
+
+[midihirescc]
+    usb      = 1
+    lsbfirst = 0
+    hirescc9 = I1
+>>>
+@1 set I1 0.1
+@2 expectmidi usb cc 1 40 102
+@2 expectmidi usb cc 1 8 12
+@2 expectmidi usb cc 1 9 12
+@2 expectmidi usb cc 1 41 102
+@2 expectmidi usb none

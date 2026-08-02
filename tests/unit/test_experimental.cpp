@@ -98,9 +98,13 @@ TEST(firmware_circuits_are_not_experimental) {
     unsigned experimental = 0;
     for (unsigned i = 0; i < gen::kNumCircuits; i++)
         if (gen::kCircuits[i].experimental) experimental++;
-    CHECK(gen::kNumCircuits == 77);
-    CHECK(experimental == 1);
+    // Stated as "firmware half == 76" rather than a total, so adding the next
+    // experimental circuit does not require editing this line — only the
+    // firmware count is load-bearing (jackgen.py asserts the same 76).
+    CHECK(gen::kNumCircuits - experimental == 76);
+    CHECK(experimental == 2);
     CHECK(gen::findCircuit("euklid") != nullptr);
     CHECK(!gen::findCircuit("euklid")->experimental);
     CHECK(gen::findCircuit("trigseq")->experimental);
+    CHECK(gen::findCircuit("midihirescc")->experimental);
 }
