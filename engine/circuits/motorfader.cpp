@@ -107,6 +107,18 @@ public:
         // --- touch button (select-gated; the plate below the fader, not the
         // fader hold) ---------------------------------------------------------
         out("button").set(s, (selected && f && f->plate) ? 1.0f : 0.0f);
+
+        // --- DB8E screen (issue #19) -----------------------------------------
+        // motorfader.md says the display updates "whenever the virtual value of
+        // the fader changes (by user interaction)". MEASURED on hardware: that
+        // parenthetical is not a restriction — a preset recall, which drives the
+        // motor rather than the hand, IS shown, and the reading snaps straight
+        // to the recalled value rather than following the motor's travel. So
+        // this is a plain value-changed test, the same as pot and encoder, on
+        // the emitted `output`.
+        bool moved = disp_.changed(emit);
+        if (selected && moved && ui::showCircuitValue(*this, s, emit))
+            disp_.accept(emit);
     }
 
     // Called by an upstream feeder (earlier in patch order) before this circuit
@@ -131,6 +143,8 @@ public:
     }
 
 private:
+    ui::DisplayBaseline disp_;   // last output value put on the DB8E
+
     void init(EngineState& s) {
         // fader handle (bare global number; default 1).
         long g = std::lround(in("fader").value(s));

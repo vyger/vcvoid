@@ -1,6 +1,7 @@
 #include "ChainModule.hpp"
 #include "EncoderWidgets.hpp"
 #include "DroidWidgets.hpp"
+#include <cmath>
 #include <cstring>
 
 // DROID DB8E controller: 8 momentary buttons (B<c>.1-8) with 8 button LEDs
@@ -74,8 +75,10 @@ struct DroidDB8E : ChainModule {
         dispNumbermode = b.dispNumbermode;
         dispFontsize = b.dispFontsize;
         dispIsText = b.dispIsText;
-        dispActive = b.modelId == droid::chain::MDB8E
-                  && (b.dispHeader[0] || b.dispText[0] || b.dispValue != 0.f || b.dispIsText);
+        // The engine's own DisplayState::active, not a guess from the content:
+        // an `encoder` parked at output 0 with no header is real content that
+        // the old "any field is non-empty" heuristic read as an idle screen.
+        dispActive = b.modelId == droid::chain::MDB8E && b.dispActive;
     }
 
     void process(const ProcessArgs& args) override {
@@ -130,20 +133,36 @@ struct DB8EDisplay : Widget {
             return;
         }
 
-        // Header line (top).
+        // Header line (top), with the thin rule the hardware draws under it
+        // (see the DB8E capture in issue #19: a small centred caption over a
+        // full-width hairline, then the body).
         if (module->dispHeader[0]) {
             nvgFontSize(vg, 9.5f);
             nvgTextAlign(vg, NVG_ALIGN_CENTER | NVG_ALIGN_TOP);
             nvgText(vg, box.size.x / 2.f, 2.f, module->dispHeader, NULL);
+            float ruleY = std::round(2.f + 9.5f) + 0.5f;
+            nvgBeginPath(vg);
+            nvgMoveTo(vg, 2.f, ruleY);
+            nvgLineTo(vg, box.size.x - 2.f, ruleY);
+            nvgStrokeWidth(vg, 1.f);
+            nvgStrokeColor(vg, fg);
+            nvgStroke(vg);
         }
 
         // Body line (middle): text, or the plain numeric value.
+        //
+        // SPEC-GAP: numbermode formatting (volts/percent/note/gauge/sparkline)
+        // is not implemented; this is the plain fraction. %g's SIGNIFICANT-digit
+        // count is what the hardware appears to use — every value read off the
+        // issue-#19 capture (652.74, 1259.73, 2003.16, 514.97) carries six, as
+        // does the manual's own `0.278` example. %.4g truncated all four of
+        // those to 652.7 / 1260 / 2003 / 515.
         char bodyBuf[32];
         const char* body;
         if (module->dispIsText) {
             body = module->dispText;
         } else {
-            std::snprintf(bodyBuf, sizeof bodyBuf, "%.4g", module->dispValue);
+            std::snprintf(bodyBuf, sizeof bodyBuf, "%.6g", module->dispValue);
             body = bodyBuf;
         }
         nvgFontSize(vg, bodyPx(module->dispFontsize));

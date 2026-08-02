@@ -115,11 +115,13 @@ public:
 
         // --- compute outputs -------------------------------------------------
         float shaped;             // the 0..1 value that drives onchange
+        float outValue;           // the emitted `output` (what the DB8E shows)
         if (disc >= 1) {
             int idx = (int)std::floor(V * (float)disc);
             if (idx < 0) idx = 0; else if (idx > disc - 1) idx = disc - 1;
             shaped = (float)idx;
-            out("output").set(s, (float)idx * scale + offset);
+            outValue = (float)idx * scale + offset;
+            out("output").set(s, outValue);
             // all hemisphere outputs dead in discrete mode
             out("bipolar").set(s, 0.0f);
             out("absbipolar").set(s, 0.0f);
@@ -133,7 +135,8 @@ public:
             float sv = std::pow(V, slope);
             float nv = potshape::applyNotch(sv, in("notch").value(s));
             shaped = nv;
-            out("output").set(s, nv * scale + offset);
+            outValue = nv * scale + offset;
+            out("output").set(s, outValue);
             potshape::Hemispheres h = potshape::hemispheres(nv, scale);
             out("bipolar").set(s, h.bipolar);
             out("absbipolar").set(s, h.absbipolar);
@@ -146,6 +149,17 @@ public:
         if (std::fabs(shaped - prevShaped_) > 1e-6f) onchangeUntil_ = (long)s.tick + trig;
         prevShaped_ = shaped;
         out("onchange").set(s, (long)s.tick < onchangeUntil_ ? 1.0f : 0.0f);
+
+        // --- DB8E screen (issue #19) -----------------------------------------
+        // pot.md: "the `pot` circuit automatically updates the display whenever
+        // the input pot value has changed. It outputs the updated value of
+        // `output`" — explicitly `output` only, never the hemisphere jacks
+        // ("If you use other outputs like `lefthalfinv` etc., these outputs are
+        // not being displayed"). Select-gated, and non-interactive uses are
+        // meant to opt out with `display = 0` (pot.md's own advice).
+        bool moved = disp_.changed(outValue);
+        if (selected && moved && ui::showCircuitValue(*this, s, outValue))
+            disp_.accept(outValue);
     }
 
     // Persisted: the virtual-pot position + all 16 presets + current slot.
@@ -221,6 +235,7 @@ private:
     float prevPhys_ = 0.0f;
     float prevShaped_ = 0.0f;
     long  onchangeUntil_ = 0;
+    ui::DisplayBaseline disp_;   // last output value put on the DB8E
     bool  caPrev_ = false, clPrev_ = false, spPrev_ = false, lpPrev_ = false;
 };
 

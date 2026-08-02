@@ -18,6 +18,11 @@ constexpr int kMaxChainModules = 21;   // 16 controllers + 4 G8 + 1 slack
 constexpr int kMaxPots = 10, kMaxSwitches = 10, kMaxLeds = 32, kGates = 8;
 constexpr int kMaxEncodersPerModule = 4;   // e4 = 4, db8e = 1 (controllers.cpp table)
 constexpr int kMaxFadersPerModule = 4;     // m4 = 4
+// Header characters the DB8E actually shows before cutting the rest — a hard
+// cut, no ellipsis (measured on hardware, issue #19: a cable named
+// _FILTER_RESONANCE_AMOUNT shows as "FILTER_RESONANCE_"). The wire buffer stays
+// 24 chars so the field is unchanged if a later firmware or font shows more.
+constexpr size_t kDb8eHeaderChars = 17;
 
 // Wire values — a stable protocol contract, not table indices.
 enum ModelId : uint8_t { None = 0, MP2B8 = 1, MP4B2 = 2, MP10 = 3, MS10 = 4,
@@ -177,6 +182,11 @@ struct DownstreamBlock {                  // one module's LED/gate-out state, fr
     uint8_t dispNumbermode = 0;
     uint8_t dispFontsize = 0;
     uint8_t dispIsText = 0;
+    // DisplayState::active — has any circuit ever written this screen? Carried
+    // explicitly rather than inferred from the content, because a legitimately
+    // displayed value of exactly 0 with no header is indistinguishable from an
+    // untouched screen (issue #19: an `encoder` sitting at output 0).
+    uint8_t dispActive = 0;
     MidiFrame midi;                       // M5: master -> adapter MIDI (X7 block only)
 };
 struct UpstreamMessage  { uint8_t count = 0; UpstreamBlock  block[kMaxChainModules]; };

@@ -1,0 +1,28 @@
+# encoder: `display = 0` suppresses the DB8E output (issue #19).
+# Spec: encoder.md `display` — "Set this to `0` to suppress any display output
+# from this circuit." Same wording as the [display] circuit's own `display` jack,
+# and the same behaviour: the circuit never writes, so the screen never activates.
+# Also covers the out-of-range target (`display = 4` with one DB8E) being inert
+# rather than a load error, mirroring display.md's targeting rule.
+tickrate 100
+patch <<<
+[db8e]
+
+[encoder]
+    encoder = E1.1
+    smooth  = 0
+    display = 0
+    output  = O1
+
+[encoder]
+    encoder = E1.1
+    smooth  = 0
+    display = 4
+    output  = O2
+>>>
+@0 expectdisplay D1 off
+@1 turn E1.1 48
+@1 expect O1 0.5 tol 1e-4
+@1 expect O2 0.5 tol 1e-4
+@1 expectdisplay D1 off
+@2 expectdisplay D1 off

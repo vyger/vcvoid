@@ -27,6 +27,11 @@ struct ParseResult {
     std::vector<std::string> texts{std::string()};
 };
 
+// Intern a text into a 1-based table (slot 0 == ""); the empty string is 0.
+// Returns the text number. Shared with the loader, which interns the derived
+// DB8E auto-headers into the same table after parsing (issue #19).
+int internText(const std::string& content, std::vector<std::string>& texts);
+
 ParseResult parsePatch(const std::string& text);
 std::string stripPatch(const std::string& text);   // for the 64 000-byte limit
 

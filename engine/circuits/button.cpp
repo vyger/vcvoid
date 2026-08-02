@@ -170,6 +170,14 @@ public:
             out("led").set(s, led);
         }
 
+        // NOTE (issue #19): `button` does drive the DB8E for `states = 3`/`4`,
+        // but NOT as a value — hardware draws a custom layout: a chain of
+        // `states` bubbles joined by short segments, the current one filled
+        // solid, under the usual header. That needs the tagged layout variant in
+        // DisplayState that issue #22 covers, so the circuit stays silent here
+        // rather than putting a bare integer on screen where hardware draws a
+        // diagram. Confirmed on hardware; see #22.
+
         bool longGate = longUsed && selected && nowHigh && heldTicks_ >= thrTicks;
         out("longpress").set(s, longGate ? 1.0f : 0.0f);
         out("shortpress").set(s, (long)s.tick < shortUntil_ ? 1.0f : 0.0f);

@@ -1,0 +1,77 @@
+# encoder: the automatic DB8E header, derived from the `output` target.
+# Spec: encoder.md `header` — "If you omit this, an automatic title is used. For
+# example if the output of this circuit is fed into an internal patch cable, the
+# name of this cable is displayed." hardware.md §6.12 shows the register form in
+# its pot example: a value "for Output O1".
+#
+# Three targets, three encoders on one E4:
+#   A -> _CUTOFF   (cable)    -> header "CUTOFF"   (leading _ dropped, as in the
+#                                library-mode listing's VOICE_1_PITCH)
+#   B -> O2        (register) -> header "Output O2"
+#   C -> _DECAY but with an explicit header -> the explicit text wins
+#   D -> no `output` jack at all -> no header, just the value
+#
+# The circuits are select-gated so exactly one owns the screen per tick and the
+# assertions cannot race: I2 picks which one is live.
+#
+# Both forms are CONFIRMED against hardware (issue #19). A name longer than 17
+# characters is cut hard, no ellipsis, but that cut lives at the screen
+# (chain::kDb8eHeaderChars) — the engine's text table keeps the real name, which
+# is why this golden asserts the full string. A target that is neither a cable
+# nor an O register is unmeasured and gets no header rather than a guessed
+# wording (see deriveAutoHeader in engine/src/engine.cpp).
+tickrate 100
+patch <<<
+[e4]
+[db8e]
+
+[encoder]
+    encoder  = E1.1
+    smooth   = 0
+    select   = I2
+    selectat = 0
+    output   = _CUTOFF
+
+[encoder]
+    encoder  = E1.2
+    smooth   = 0
+    select   = I2
+    selectat = 1
+    output   = O2
+
+[encoder]
+    encoder  = E1.3
+    smooth   = 0
+    select   = I2
+    selectat = 2
+    header   = "MY OWN TITLE"
+    output   = _DECAY
+
+[encoder]
+    encoder  = E1.4
+    smooth   = 0
+    select   = I2
+    selectat = 3
+
+# Cables need a reader or the patch will not load.
+[mixer]
+    input1 = _CUTOFF
+    input2 = _DECAY
+    output = O1
+>>>
+@0 expectdisplay D1 off
+@1 turn E1.1 48
+@1 expectdisplay D1 value 0.5 tol 1e-6
+@1 expectdisplay D1 header "CUTOFF"
+@2 set I2 1
+@2 turn E1.2 24
+@2 expectdisplay D1 value 0.25 tol 1e-6
+@2 expectdisplay D1 header "Output O2"
+@3 set I2 2
+@3 turn E1.3 96
+@3 expectdisplay D1 value 1.0 tol 1e-6
+@3 expectdisplay D1 header "MY OWN TITLE"
+@4 set I2 3
+@4 turn E1.4 48
+@4 expectdisplay D1 value 0.5 tol 1e-6
+@4 expectdisplay D1 header ""

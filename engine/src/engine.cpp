@@ -17,6 +17,52 @@ const std::string& Engine::textForNumber(float v) const {
     return texts_[size_t(n)];
 }
 
+// Automatic DB8E header (issue #19). Every display-tier circuit documents the
+// same smart default for `header`: "If you omit this, an automatic title is
+// used. For example if the output of this circuit is fed into an internal patch
+// cable, the name of this cable is displayed", and hardware.md §6.12 shows
+// `Output O1` for a register target. Derived here, at load, because it has to
+// intern a string into the text table — circuits only ever see it const.
+//
+// CONFIRMED against hardware (measured on a MASTER18 + DB8E, issue #19):
+//   `output = O1`      -> "Output O1"
+//   `output = _CUTOFF` -> "CUTOFF"   (leading underscore dropped)
+//   no `output` jack   -> no header at all, just the value
+// An over-long name is cut hard at 17 characters with no ellipsis
+// (_FILTER_RESONANCE_AMOUNT -> "FILTER_RESONANCE_"); that cut lives at the
+// screen (chain::kDb8eHeaderChars), not here, so the text table keeps the real
+// name. Still a SPEC-GAP: targets other than an `O` register or a cable (a
+// gate, an `N` normalization) are unmeasured and get no header rather than a
+// guessed wording.
+static int deriveAutoHeader(const CompiledCircuit& cc, std::vector<std::string>& texts) {
+    // Only circuits that can actually show a header get one derived: otherwise
+    // every `[copy] output = O1` in every patch would intern a dead string.
+    bool canDisplay = false;
+    for (unsigned j = 0; j < cc.def->numJacks && !canDisplay; j++)
+        canDisplay = !std::strcmp(cc.def->jacks[j].name, "header");
+    if (!canDisplay) return 0;
+
+    const Atom* target = nullptr;
+    for (const auto& p : cc.params) {
+        if (!p.def) continue;
+        // An explicit `header` always wins; nothing to derive.
+        if (!std::strcmp(p.def->name, "header")) return 0;
+        // Scalar `output` only: a bank's output1..N names one element, not the
+        // circuit, and picking the first would mislabel the whole bank (#22).
+        if (!p.def->isInput && p.def->count == 1 && !std::strcmp(p.def->name, "output"))
+            target = &p.a;
+    }
+    if (!target) return 0;
+    if (target->kind == Atom::Kind::Cable) {
+        std::string n = target->cable;
+        if (!n.empty() && n[0] == '_') n.erase(0, 1);
+        return internText(n, texts);
+    }
+    if (target->kind == Atom::Kind::Register && target->reg.type == 'O')
+        return internText("Output " + toString(target->reg), texts);
+    return 0;
+}
+
 Engine::Engine(MasterType master, float tickRateHz, uint32_t seed)
     : master_(master), tickRateHz_(tickRateHz), seed_(seed ? seed : 1) {
     state_.rngState = seed_;
@@ -97,6 +143,7 @@ LoadResult Engine::load(const std::string& patchText, const LoadOptions& opts) {
             !std::strcmp(n, "midithrough")) usesMidi_ = true;
         auto c = makeCircuit(cc.def->name);
         c->allocateSlots(cc.def);
+        c->autoHeaderText = deriveAutoHeader(cc, texts_);
         for (auto& p : cc.params) {
             int slot = c->slotIndex(p.def, p.arrayIndex);
             if (p.def->isInput)
