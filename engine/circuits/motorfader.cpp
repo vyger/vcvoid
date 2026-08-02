@@ -72,13 +72,8 @@ public:
         bool recall = handlePresets(s, notches);
 
         // --- value update & motor command -----------------------------------
-        // userDriven marks the ticks where a value change can only have come
-        // from a hand on the fader: selected, and not a takeover tick (a preset
-        // recall or the first tick after becoming selected both move the MOTOR).
-        bool userDriven = false;
         if (f && selected) {
             bool takeover = !wasSelected_ || recall;
-            userDriven = !takeover;
             float src = takeover ? value_ : f->position;
             fc::Result r = fc::evaluate(src, notches, touched);
             value_ = r.position;
@@ -114,23 +109,16 @@ public:
         out("button").set(s, (selected && f && f->plate) ? 1.0f : 0.0f);
 
         // --- DB8E screen (issue #19) -----------------------------------------
-        // motorfader.md: "automatically updates the display whenever the virtual
-        // value of the fader changes (by user interaction)" — the parenthetical
-        // is the whole point, so motor-commanded moves must stay silent. Hence
-        // userDriven rather than a plain value-changed test.
-        //
-        // SPEC-GAP: ControllerState has no "moved by the user this tick" flag
-        // (moveFader()'s comment claims one, but FaderState has no such field),
-        // so the takeover discriminator stands in for it. A preset recall that
-        // lands on a DIFFERENT value than the fader had is therefore not shown,
-        // which is the literal reading of "by user interaction" but is not
-        // separately confirmed against hardware.
-        // A motor-driven change is ABSORBED into the baseline rather than left
-        // pending: otherwise a preset recall would silently show up one tick
-        // later, on the first tick that happens to qualify as user-driven.
+        // motorfader.md says the display updates "whenever the virtual value of
+        // the fader changes (by user interaction)". MEASURED on hardware: that
+        // parenthetical is not a restriction — a preset recall, which drives the
+        // motor rather than the hand, IS shown, and the reading snaps straight
+        // to the recalled value rather than following the motor's travel. So
+        // this is a plain value-changed test, the same as pot and encoder, on
+        // the emitted `output`.
         bool moved = disp_.changed(emit);
-        if (!userDriven)                                       disp_.accept(emit);
-        else if (moved && ui::showCircuitValue(*this, s, emit)) disp_.accept(emit);
+        if (selected && moved && ui::showCircuitValue(*this, s, emit))
+            disp_.accept(emit);
     }
 
     // Called by an upstream feeder (earlier in patch order) before this circuit

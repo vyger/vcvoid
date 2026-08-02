@@ -170,23 +170,13 @@ public:
             out("led").set(s, led);
         }
 
-        // --- DB8E screen (issue #19) -----------------------------------------
-        // button.md: "automatically displays it's state, whenever `states = 3` or
-        // `states = 4`. This visual feedback makes it easer to select one of the
-        // four states than just guessing the brightness of the LED." Two- and
-        // one-state buttons stay silent: the LED already says everything.
-        //
-        // SPEC-GAP: "it's state" is shown as the STATE INDEX (0..states-1), not
-        // the `output` value, because the stated purpose is telling the four
-        // states apart — an `output` of 0.667 does that worse than a 2. Every
-        // other display-tier circuit words this as "the updated value of
-        // `output`"; this one does not, which is why they differ here.
-        if (st >= 3) {
-            float shown = float(E);
-            bool moved = disp_.changed(shown);
-            if (selected && moved && ui::showCircuitValue(*this, s, shown, 1))
-                disp_.accept(shown);
-        }
+        // NOTE (issue #19): `button` does drive the DB8E for `states = 3`/`4`,
+        // but NOT as a value — hardware draws a custom layout: a chain of
+        // `states` bubbles joined by short segments, the current one filled
+        // solid, under the usual header. That needs the tagged layout variant in
+        // DisplayState that issue #22 covers, so the circuit stays silent here
+        // rather than putting a bare integer on screen where hardware draws a
+        // diagram. Confirmed on hardware; see #22.
 
         bool longGate = longUsed && selected && nowHigh && heldTicks_ >= thrTicks;
         out("longpress").set(s, longGate ? 1.0f : 0.0f);
@@ -210,8 +200,6 @@ public:
     }
 
 private:
-    ui::DisplayBaseline disp_;   // last state index put on the DB8E
-
     void init(EngineState& s) {
         int st = numStates(s);
         state_ = startValue(s, st);
