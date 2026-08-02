@@ -24,7 +24,7 @@ const std::string& Engine::textForNumber(float v) const {
 // `Output O1` for a register target. Derived here, at load, because it has to
 // intern a string into the text table — circuits only ever see it const.
 //
-// CONFIRMED against hardware (issue #19, via patches/tmp-autoheader-probe.ini):
+// CONFIRMED against hardware (measured on a MASTER18 + DB8E, issue #19):
 //   `output = O1`      -> "Output O1"
 //   `output = _CUTOFF` -> "CUTOFF"   (leading underscore dropped)
 //   no `output` jack   -> no header at all, just the value
