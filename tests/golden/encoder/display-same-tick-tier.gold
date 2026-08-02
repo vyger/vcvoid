@@ -1,0 +1,34 @@
+# encoder vs [display], same tick: tier beats patch order.
+# Spec: hardware.md §6.12 precedence list, "when more of these events happen at
+# the same time ... [display] > Circuit".
+#
+# The [display] circuit is FIRST in patch order and the encoder SECOND, so the
+# plain same-tick tie-break (display.md's "patch order wins, later accepted write
+# lands last" — see display/same-tick-tiebreak.gold) would hand the screen to the
+# encoder. It must not: a same-tick write is only accepted over an existing owner
+# when the writer's tier is >= the owner's, and the circuit tier is below the
+# [display] tier.
+#
+#   t1: I1 changes AND the knob is turned on the same tick.
+#       [display] writes 0.7 (owner, tier display, linger 0.01 s = 1 tick),
+#       then the encoder attempts 1425 -> same tick, lower tier -> rejected.
+#   t2: the display circuit's linger has expired and the encoder is still
+#       re-attempting its unchanged pending value -> it lands.
+tickrate 100
+patch <<<
+[db8e]
+
+[display]
+    value = I1
+
+[encoder]
+    encoder      = E1.1
+    smooth       = 0
+    outputscale  = 2650
+    outputoffset = 100
+    output       = O1
+>>>
+@1 set I1 0.7
+@1 turn E1.1 48
+@1 expectdisplay D1 value 0.7 tol 1e-6
+@2 expectdisplay D1 value 1425 tol 1e-3

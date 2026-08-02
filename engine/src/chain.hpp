@@ -177,6 +177,11 @@ struct DownstreamBlock {                  // one module's LED/gate-out state, fr
     uint8_t dispNumbermode = 0;
     uint8_t dispFontsize = 0;
     uint8_t dispIsText = 0;
+    // DisplayState::active — has any circuit ever written this screen? Carried
+    // explicitly rather than inferred from the content, because a legitimately
+    // displayed value of exactly 0 with no header is indistinguishable from an
+    // untouched screen (issue #19: an `encoder` sitting at output 0).
+    uint8_t dispActive = 0;
     MidiFrame midi;                       // M5: master -> adapter MIDI (X7 block only)
 };
 struct UpstreamMessage  { uint8_t count = 0; UpstreamBlock  block[kMaxChainModules]; };

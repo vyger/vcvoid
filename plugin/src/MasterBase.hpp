@@ -915,6 +915,7 @@ public:
                         b.dispIsText = ds->isText ? 1 : 0;
                         if (ds->isText)
                             copyDisplayText(b.dispText, engine->textForNumber(float(ds->bodyText)));
+                        b.dispActive     = ds->active ? 1 : 0;
                         b.dispValue      = ds->value;
                         b.dispNumbermode = ds->numbermode;
                         b.dispFontsize   = ds->fontsize;

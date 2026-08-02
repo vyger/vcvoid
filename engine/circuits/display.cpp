@@ -33,9 +33,12 @@
 //     default), default linger 0.01 s.
 //   * An attempt is ACCEPTED iff it comes from the current owner, OR the linger
 //     window has expired (tick >= lingerUntilTick), OR it is a same-tick overwrite
-//     (another circuit already wrote THIS tick: patch order wins, later lands last —
-//     SPEC-GAP, see DisplayState.lastWriteTick). On accept the content updates,
-//     owner := this, lingerUntilTick := tick + linger*tickRate.
+//     by an equal-or-higher tier (another circuit already wrote THIS tick: patch
+//     order wins among equals, later lands last — SPEC-GAP, see
+//     DisplayState.lastWriteTick). The tier is what keeps a circuit-tier writer
+//     (ui::showCircuitValue: encoder & friends) from stealing the screen from
+//     [display] on the same tick — hardware.md §6.12's precedence list. On accept
+//     the content updates, owner := this, lingerUntilTick := tick + linger*tickRate.
 //   * `useasdefault = 1`: while selected, once tick >= lingerUntilTick and someone
 //     else owns, re-assert this circuit's current content each tick (idempotent).
 //     Two defaults -> last in patch order ends up owning (same SPEC-GAP tie-break).
@@ -59,14 +62,11 @@ class Display : public Circuit {
 public:
     void tick(EngineState& s) override {
         // --- resolve the target DB8E screen -------------------------------------
-        // floorClamp range-checks the float before casting (input math can produce a
-        // finite-but-out-of-range target like `display = I1 * 1e20`, whose cast to int
-        // would be UB). 0 => suppressed; an out-of-range/huge/non-finite value clamps
-        // to kTargetMax, which display() rejects as "no such DB8E" => inert.
-        int n = floorClamp(in("display").value(s), 0, kTargetMax);
-        if (n == 0) return;                              // suppressed: never writes
-        DisplayState* d = s.controllers.display(n);
-        if (!d) return;                                  // no such DB8E: inert
+        // targetDisplay range-checks the float before casting (input math can produce
+        // a finite-but-out-of-range target like `display = I1 * 1e20`, whose cast to
+        // int would be UB) and maps 0 / no-such-DB8E to nullptr.
+        DisplayState* d = ui::targetDisplay(*this, s);
+        if (!d) return;                     // suppressed (0) or no such DB8E: inert
 
         // --- select / selectat overlay gating -----------------------------------
         bool selectUsed = in("select").connected() || in("selectat").connected();
@@ -84,12 +84,12 @@ public:
 
         // --- candidate content ---------------------------------------------------
         bool textMode = in("text").connected();
-        int header = floorText(in("header").value(s));
+        int header = ui::floorText(in("header").value(s));
         bool haveContent;
         int body = 0;
         float val = 0.0f;
         if (textMode) {
-            body = floorText(in("text").value(s));
+            body = ui::floorText(in("text").value(s));
             haveContent = (body != 0);                   // empty text => no content
         } else {
             haveContent = in("value").connected();
@@ -130,7 +130,12 @@ public:
         if (attempt) {
             bool accepted = (d->owner == this) ||
                             (s.tick >= d->lingerUntilTick) ||
-                            (d->active && d->lastWriteTick == s.tick);  // same-tick
+                            // same-tick: patch order wins among equals, but never
+                            // over a HIGHER tier (there is none above [display]
+                            // headlessly, so this only ever blocks nothing today —
+                            // it keeps the rule symmetric with ui::showCircuitValue).
+                            (d->active && d->lastWriteTick == s.tick &&
+                             kTierDisplay >= d->ownerTier);
             if (accepted) {
                 d->active = true;
                 d->headerText = header;
@@ -139,9 +144,10 @@ public:
                 else          d->value = val;
                 // floorClamp guards the float before the cast (finite-out-of-range
                 // input math would make the raw (int)floor UB), then lands in range.
-                d->numbermode = (uint8_t)floorClamp(in("numbermode").value(s), 0, 18);
-                d->fontsize   = (uint8_t)floorClamp(in("fontsize").value(s), 0, 3);
+                d->numbermode = (uint8_t)ui::floorClamp(in("numbermode").value(s), 0, 18);
+                d->fontsize   = (uint8_t)ui::floorClamp(in("fontsize").value(s), 0, 3);
                 d->owner = this;
+                d->ownerTier = kTierDisplay;
                 long lt = std::lround((double)linger * s.tickRateHz);
                 if (lt < 0) lt = 0;
                 d->lingerUntilTick = s.tick + (uint64_t)lt;
@@ -162,29 +168,6 @@ public:
     }
 
 private:
-    // Largest DB8E target we bother resolving; anything beyond is inert. Well within
-    // int and float-exact, so the cast in floorClamp never overflows.
-    static constexpr int kTargetMax = 256;
-    // Text numbers are 1-based; anything at/above this is "no such text" (textForNumber
-    // returns ""). Float-exact and int-safe so a huge input math product cannot make
-    // the cast UB.
-    static constexpr int kTextMax = 1 << 20;
-
-    // Range-check-before-cast: a finite-but-out-of-range float cast to a narrow int is
-    // UB, and input math (`= I1 * 1e20`) can produce one. Compare AS FLOAT, clamp into
-    // [lo, hi], and only ever cast an already-in-range value. Non-finite maps to lo.
-    static int floorClamp(float v, int lo, int hi) {
-        if (!std::isfinite(v) || v <= float(lo)) return lo;
-        if (v >= float(hi)) return hi;
-        return (int)std::floor(v);
-    }
-    // Text numbers are 1-based positive integers (0 = empty). <=0 (and non-finite) map
-    // to 0 (empty); an out-of-range large number clamps to kTextMax which resolves to
-    // "" (no such text), matching textForNumber's contract without a UB cast.
-    static int floorText(float v) {
-        return floorClamp(v, 0, kTextMax);
-    }
-
     bool  prevSelected_ = false;
     bool  trigPrev_ = false;
     int   prevText_ = 0;
