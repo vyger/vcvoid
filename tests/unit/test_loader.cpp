@@ -219,13 +219,21 @@ TEST(loader_master18_registers) {
     CHECK(compile18("[copy]\n input = I2\n output = O8\n", cp).ok);
     CHECK(compile18("[lfo]\n square = G4\n", cp).ok);
     CHECK(compile18("[lfo]\n square = G12\n", cp).ok);          // X7
-    CHECK(compile18("[lfo]\n square = G4.8\n", cp).ok);         // 4th G8
+    CHECK(compile18("[lfo]\n square = G1.4\n", cp).ok);         // native gate out, dotted (#24)
+    CHECK(compile18("[lfo]\n square = G2.1\n", cp).ok);         // 1st G8 on the MASTER18
+    CHECK(compile18("[lfo]\n square = G5.8\n", cp).ok);         // 4th G8
     CHECK(compile18("[lfo]\n square = R4\n", cp).ok);           // diag LED
     CHECK(compile18("[lfo]\n square = R17\n", cp).ok);          // virtual R
     // invalid on Master18
     CHECK(hasError(compile18("[copy]\n input = I3\n output = O1\n", cp), "input"));
     CHECK(hasError(compile18("[copy]\n input = I1\n output = N1\n", cp), "normalization"));
     CHECK(hasError(compile18("[lfo]\n square = G5\n", cp), "gate"));
+    CHECK(hasError(compile18("[lfo]\n square = G1.5\n", cp), "gate"));   // == G5 (#24)
+    CHECK(hasError(compile18("[lfo]\n square = G6.1\n", cp), "register"));  // only 4 G8s
+    // Master16 keeps its own numbering: G1.x is the first G8, G5.x is nothing.
+    CompiledPatch cp16g;
+    CHECK(compile("[lfo]\n square = G1.8\n", cp16g).ok);
+    CHECK(hasError(compile("[lfo]\n square = G5.1\n", cp16g), "register"));
     CHECK(hasError(compile18("[lfo]\n square = R5\n", cp), "register"));
     CHECK(hasError(compile18("[lfo]\n square = R16\n", cp), "register"));
     CHECK(hasError(compile18("[copy]\n input = X1\n output = O1\n", cp), "register"));

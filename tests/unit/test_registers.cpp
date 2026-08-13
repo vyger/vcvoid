@@ -45,6 +45,31 @@ TEST(regid_canonicalize_g8) {
     RegId g9 = canonicalize(rid("G9"), MasterType::Master16);
     CHECK(g9.ctrl == 0 && g9.num == 9);              // X7 gate: unchanged
     CHECK(pack(canonicalize(rid("G1.5"), MasterType::Master16)) == pack(g5));
+    // Issue #24: the bare->dotted rewrite is master-INDEPENDENT (the Forge does
+    // it in atomregister.cpp before it knows the master), so on the MASTER18 the
+    // native gate output G1 and its dotted spelling G1.1 are one register. Only
+    // WHICH device G1.x is differs by master -- see regid_g8_register.
+    RegId g1 = canonicalize(rid("G1"), MasterType::Master18);
+    CHECK(g1.ctrl == 1 && g1.num == 1);
+    CHECK(pack(canonicalize(rid("G1.1"), MasterType::Master18)) == pack(g1));
+    RegId g12 = canonicalize(rid("G12"), MasterType::Master18);
+    CHECK(g12.ctrl == 0 && g12.num == 12);           // X7 gate: unchanged
+}
+
+// Issue #24: gate device 1 is the first G8 on the MASTER but the master's own
+// gate section on the MASTER18, so the MASTER18's G8s are G2.x ... G5.x
+// (manual/hardware.md 7.3).
+TEST(regid_g8_register) {
+    RegId first16 = g8Register(1, 1, MasterType::Master16);
+    CHECK(first16.type == 'G' && first16.ctrl == 1 && first16.num == 1);
+    CHECK(pack(first16) == pack(canonicalize(rid("G1"), MasterType::Master16)));
+    CHECK(pack(g8Register(4, 8, MasterType::Master16)) == pack(rid("G4.8")));
+
+    RegId first18 = g8Register(1, 1, MasterType::Master18);
+    CHECK(first18.type == 'G' && first18.ctrl == 2 && first18.num == 1);
+    CHECK(pack(g8Register(4, 8, MasterType::Master18)) == pack(rid("G5.8")));
+    // ... and never collides with the MASTER18's own gate outputs
+    CHECK(pack(first18) != pack(canonicalize(rid("G1"), MasterType::Master18)));
 }
 
 TEST(registerfile_basics) {

@@ -22,7 +22,18 @@ std::optional<RegId> parseRegisterName(const std::string& name);
 // returns the number, or nullopt if the name is not a valid fader handle.
 std::optional<int> parseFaderName(const std::string& name);
 std::string toString(const RegId& r);
+
+// Rewrites bare G1..G8 to the dotted device-1 form (G1.1..G1.8); everything else
+// is returned unchanged. Register ids reaching the RegisterFile should be
+// canonical so the two spellings of one jack land on one slot.
 RegId canonicalize(RegId r, MasterType master);
+
+// The register of jack `jack` (1..8) on the `g8Index`th (1-based) physical G8 in
+// the chain. The dotted G index counts GATE DEVICES, and device 1 is the first
+// G8 on the MASTER but the master's own gate section on the MASTER18, so the
+// G8s there are G2.x .. G5.x. Callers that walk the physical chain must go
+// through this rather than building {'G', g8Index, jack} directly.
+RegId g8Register(uint8_t g8Index, uint8_t jack, MasterType master);
 inline uint32_t pack(const RegId& r) {
     return (uint32_t(uint8_t(r.type)) << 16) | (uint32_t(r.ctrl) << 8) | r.num;
 }

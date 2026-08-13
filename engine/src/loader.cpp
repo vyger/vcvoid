@@ -11,8 +11,9 @@ namespace droid {
 namespace {
 // Master-aware register validity. Master16 rules unchanged; Master18 rules
 // mirror the Forge (droidforge/patch/patch.cpp updateProblems + registerAvailable):
-// I1-I2 only (gate ins), no N registers, native G1-G4 plus X7 G9-G12,
-// R5-R16 absent (R1-R4 = rear diagnostic LEDs), X1 absent.
+// I1-I2 only (gate ins), no N registers, native gate outs G1-G4 (== G1.1-G1.4)
+// plus G8s at G2.x-G5.x and X7 gates G9-G12, R5-R16 absent (R1-R4 = rear
+// diagnostic LEDs), X1 absent.
 bool validRegister(const RegId& r, MasterType master,
                    const std::vector<std::string>& controllers, std::string& err) {
     bool m18 = master == MasterType::Master18;
@@ -33,16 +34,23 @@ bool validRegister(const RegId& r, MasterType master,
             if (r.ctrl == 0 && r.num >= 1 && r.num <= 8) return true;
             break;
         case 'G':
-            // ctrl 1-4 = G8 expanders (both masters). ctrl 0: X7 gates G9-G12 on
-            // both; native G1-G4 on Master18 only (on Master16 canonicalize()
-            // rewrote bare G1-G8 to G1.x already).
-            if (r.ctrl >= 1 && r.ctrl <= 4 && r.num >= 1 && r.num <= 8) return true;
+            // The dotted ctrl counts GATE DEVICES; canonicalize() has already
+            // rewritten bare G1-G8 to G1.x on both masters. Device 1 is the first
+            // G8 on the MASTER (G1.x-G4.x = the four expanders), but the master's
+            // own four gate outputs on the MASTER18, which pushes its expanders to
+            // G2.x-G5.x (manual/basics.md register tables, hardware.md 7.3).
+            // ctrl 0 survives canonicalize only for the X7's gates G9-G12.
             if (r.ctrl == 0 && r.num >= 9 && r.num <= 12) return true;
-            if (m18 && r.ctrl == 0 && r.num >= 1 && r.num <= 4) return true;
-            if (m18 && r.ctrl == 0 && r.num >= 5 && r.num <= 8) {
-                err = "Invalid gate number " + std::to_string(r.num) +
-                      " (the MASTER18 has only the gate outputs G1 ... G4)";
-                return false;
+            if (m18) {
+                if (r.ctrl == 1 && r.num >= 1 && r.num <= 4) return true;   // native gate outs
+                if (r.ctrl == 1 && r.num >= 5 && r.num <= 8) {
+                    err = "Invalid gate number " + std::to_string(r.num) +
+                          " (the MASTER18 has only the gate outputs G1 ... G4)";
+                    return false;
+                }
+                if (r.ctrl >= 2 && r.ctrl <= 5 && r.num >= 1 && r.num <= 8) return true;
+            } else {
+                if (r.ctrl >= 1 && r.ctrl <= 4 && r.num >= 1 && r.num <= 8) return true;
             }
             break;
         case 'R':

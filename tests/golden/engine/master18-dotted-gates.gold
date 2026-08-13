@@ -1,0 +1,39 @@
+# Issue #24: on the MASTER18 the dotted gate index counts GATE DEVICES, and
+# device 1 is the master's own four gate outputs -- so G1.1 ... G1.4 are the
+# same four jacks as bare G1 ... G4, and the G8 expanders start at G2.x. A patch
+# driving G1.1 must therefore land on the very register the panel's G1 jack
+# reads (canonicalize() rewrites bare G1 -> G1.1 on both masters).
+master 18
+tickrate 1000
+patch <<<
+# LABELS: master=18
+[lfo]
+    hz = 1
+    level = 1
+    bipolar = 0
+    square = _CLOCK
+
+[copy]
+    input = _CLOCK
+    output = G1.1
+
+[copy]
+    input = _CLOCK
+    output = O1
+
+# The first G8 on a MASTER18 is G2.x, NOT G1.x -- driving it must not touch the
+# master's own gate outputs above.
+[copy]
+    input = 1
+    output = G2.1
+>>>
+# Both spellings of the master's gate 1 read the LFO's square, in phase with O1.
+@100 expect O1 1
+@100 expect G1 1
+@100 expect G1.1 1
+@600 expect O1 0
+@600 expect G1 0
+@600 expect G1.1 0
+# ... and the G8 register is its own jack, held high throughout.
+@100 expect G2.1 1
+@600 expect G2.1 1

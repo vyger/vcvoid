@@ -58,10 +58,23 @@ std::string toString(const RegId& r) {
     return s;
 }
 
-RegId canonicalize(RegId r, MasterType master) {
-    if (r.type == 'G' && r.ctrl == 0 && master == MasterType::Master16 && r.num <= 8)
-        r.ctrl = 1;    // G5 == G1.5 on the MASTER
+RegId canonicalize(RegId r, MasterType /*master*/) {
+    // Bare G1..G8 is the dotted form of gate device 1, on BOTH masters — the
+    // Forge parses it that way unconditionally (atomregister.cpp: "G5 -> G1.5").
+    // Which device that is differs by master (see g8Register); the rewrite does
+    // not. G9..G12 are the X7's gates and stay bare.
+    if (r.type == 'G' && r.ctrl == 0 && r.num >= 1 && r.num <= 8)
+        r.ctrl = 1;    // G5 == G1.5 on the MASTER; G1 == G1.1 on the MASTER18
     return r;
+}
+
+RegId g8Register(uint8_t g8Index, uint8_t jack, MasterType master) {
+    // Device 1 of the gate chain is the first G8 on the MASTER, but the
+    // MASTER18's own four gate outputs on the MASTER18 — so its G8s shift up one
+    // (manual/hardware.md 7.3: "the first G8 has the eight registers G2.1 ...
+    // G2.8 and the fourth G8 would get G5.1 ... G5.8").
+    uint8_t ctrl = uint8_t(g8Index + (master == MasterType::Master18 ? 1 : 0));
+    return RegId{'G', ctrl, jack};
 }
 
 float RegisterFile::get(const RegId& r) const {

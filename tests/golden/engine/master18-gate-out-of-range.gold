@@ -1,0 +1,10 @@
+# Issue #24: the MASTER18 has four native gate outputs, so gate device 1 stops
+# at G1.4 -- G1.5 is the dotted spelling of the already-rejected bare G5.
+master 18
+expect_load_error "the MASTER18 has only the gate outputs G1 ... G4"
+patch <<<
+# LABELS: master=18
+[lfo]
+    hz = 2
+    square = G1.5
+>>>

@@ -634,7 +634,7 @@ public:
             if (id == MG8) {
                 if (++g8 > 4) continue;                          // hardware max, extras ignored
                 for (uint8_t j = 1; j <= 8; j++) {
-                    droid::RegId gr = droid::canonicalize({'G', g8, j}, masterType_);
+                    droid::RegId gr = droid::g8Register(g8, j, masterType_);
                     if (!engine->registerDriven(gr))             // input jack ONLY if patch doesn't drive it
                         engine->setRegister(gr, up.block[i].gates[j - 1]);
                 }
@@ -794,7 +794,7 @@ public:
                 if (id == MG8) {
                     if (++g8d > 4) continue;
                     for (uint8_t j = 1; j <= 8; j++) {
-                        droid::RegId gr = droid::canonicalize({'G', g8d, j}, masterType_);
+                        droid::RegId gr = droid::g8Register(g8d, j, masterType_);
                         if (engine->registerDriven(gr))          // driven register == output jack
                             b.gates[j - 1] = engine->getRegister(gr);
                         // undriven stays 0 -> output jack low

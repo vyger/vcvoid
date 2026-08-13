@@ -82,21 +82,30 @@ TEST(chain_validate_chain) {
           "controller 2: patch declares b32, chain has nothing");
 }
 
-// Guards the assumption the master G8 mapping relies on: it always feeds the
-// explicit-controller G form ('G', g8, j) with a 1-based g8 counter, so
-// canonicalize must leave that form UNCHANGED (identity). Plain G1..G8 (ctrl 0)
-// is the only form that gets rewritten to the first G8 (ctrl 1).
-TEST(chain_g8_register_canonicalization) {
+// Guards the register mapping the master's chain feed/readback relies on: it
+// walks the physical chain with a 1-based G8 counter and resolves each jack via
+// g8Register(), which is where the MASTER18's one-device offset lives (#24).
+// Feeding {'G', g8, j} directly would put the MASTER18's first G8 on top of the
+// master's own gate outputs.
+TEST(chain_g8_register_mapping) {
     using namespace droid;
-    // non-identity: plain G5 aliases the first G8's gate 5 on the MASTER
-    RegId plain = canonicalize(RegId{'G', 0, 5}, MasterType::Master16);
-    CHECK(plain.ctrl == 1 && plain.num == 5);
-    // identity: explicit-controller G forms (what the master code feeds) are untouched
     for (uint8_t g = 1; g <= 4; g++)
         for (uint8_t j = 1; j <= 8; j++) {
-            RegId r = canonicalize(RegId{'G', g, j}, MasterType::Master16);
-            CHECK(r.type == 'G' && r.ctrl == g && r.num == j);
+            RegId r16 = g8Register(g, j, MasterType::Master16);
+            CHECK(r16.type == 'G' && r16.ctrl == g && r16.num == j);
+            RegId r18 = g8Register(g, j, MasterType::Master18);
+            CHECK(r18.type == 'G' && r18.ctrl == g + 1 && r18.num == j);
         }
+    // The MASTER18's four native gate outputs are device 1 and belong to no G8.
+    for (uint8_t j = 1; j <= 4; j++) {
+        RegId native = canonicalize(RegId{'G', 0, j}, MasterType::Master18);
+        CHECK(native.ctrl == 1 && native.num == j);
+        for (uint8_t g = 1; g <= 4; g++)
+            CHECK(pack(g8Register(g, j, MasterType::Master18)) != pack(native));
+    }
+    // On the MASTER, by contrast, bare G1..G8 IS the first G8.
+    CHECK(pack(canonicalize(RegId{'G', 0, 5}, MasterType::Master16)) ==
+          pack(g8Register(1, 5, MasterType::Master16)));
 }
 
 TEST(chain_detent_delta) {
