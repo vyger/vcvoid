@@ -43,6 +43,17 @@
 //     positions (idx 4..7 of randomize-CV) shifting the note per turn.
 //   * outputs: cv, gate, startofsequence, currentstep, currentpage, accumulator,
 //     startstepout, endstepout.
+//   * `linktonext` multi-track linking: the FADER/LED editing surface is shared
+//     across the chain (only the instance addressed by the main's fadermode —
+//     `fadermode / 10 == chain index`, editing with the local `fadermode % 10` —
+//     drives/lights the physical faders; the others release them, so the boot
+//     page shows the addressed instance's steps, not a collision of all of them),
+//     and the members' TRANSPORT is remote-controlled from the chain main: each
+//     member plays the main's step number (so the main's shiftsteps, play order,
+//     repeats and skips carry over, and the member's own are ignored) while its
+//     own lane supplies CV, gate, probability, gate pattern and ratchets. `holdcv`
+//     on a member takes the extra value 2 (sync the CV to its own gate instead of
+//     the main's). A member ignores its own clock/reset/run-order inputs entirely.
 //   * select/selectat overlay, 4 presets, clear / clearall / clearskips /
 //     clearrepeats, defaultcv (a notch index when cvnotches >= 2) / defaultgate.
 //   * composemode: while high the transport ignores clock edges; a CV edit
@@ -62,15 +73,10 @@
 //     only. The others interact with direction/pingpong/forms; deferred whole.
 //   * `metricsaver` and `constantlength` — polymetric clock-snap-back and
 //     repeat/skip length compensation (both read but inert).
-//   * `linktonext` multi-track linking: the FADER/LED editing surface IS shared
-//     across the chain (only the instance addressed by the main's fadermode —
-//     `fadermode / 10 == chain index`, editing with the local `fadermode % 10` —
-//     drives/lights the physical faders; the others release them, so the boot
-//     page shows the addressed instance's steps, not a collision of all of them).
-//     The linked instances' TRANSPORT is NOT yet remote-controlled from the main
-//     (step/skip/repeat mirroring, `fadermode/buttonmode` +10 buttonmode side) —
-//     each still steps on its own clock, so a linked lane with no clock holds its
-//     first step. Enough for the editing surface; full remote stepping deferred.
+//   * `linktonext`, the BUTTONMODE side: `buttonmode` is read per-instance and
+//     clamped 0..3, so the chain-wide `buttonmode + 10` addressing (the touch
+//     buttons editing a linked instance's gates/skips) is not implemented. The
+//     fadermode side and the transport ARE (see IMPLEMENTED above).
 //     LINKED-LUCKY semantics are likewise not implemented (motoquencer.md
 //     :682-705): `luckyshuffle`/`luckyreverse` fired on the MAIN should rearrange
 //     every linked instance's steps by the SAME permutation, and `luckyskips`,
@@ -749,11 +755,15 @@ protected:
     }
 
     void transport(EngineState& s) {
+        if (chainMain_) { transportLinked(s); return; }
         bool run = in("run").value(s) >= kHigh;
         // Advance the clock/reset edge detectors every tick (even when frozen) so
         // leaving compose/stop does not fire a phantom edge on a still-high input.
         bool clockEdge = clockGate_.risingEdge(in("clock").value(s));
-        if (resetGate_.risingEdge(in("reset").value(s))) { resetPending_ = true; acc_ = 0; triggerSos(s); }
+        if (resetGate_.risingEdge(in("reset").value(s))) {
+            resetPending_ = true; acc_ = 0; triggerSos(s);
+            accEpoch_++; accEvtReset_ = true;       // published to the chain members
+        }
 
         // composemode: the sequencer stops clocking; stepping is driven only by CV
         // edits (see onCvEdited), so ignore clock edges entirely.
@@ -794,6 +804,39 @@ protected:
         enterStep(s, order, playPos_);
     }
 
+    // A linktonext chain member is REMOTE CONTROLLED: it ignores its own clock /
+    // reset / startstep / endstep / direction / pingpong / autoreset / shiftsteps
+    // (motoquencer.md:677) and simply plays whatever step the chain main is on —
+    // including the main's repeats and skips, whose per-step settings on the
+    // member are ignored. Its own lane still decides CV, gate, gate probability,
+    // gate pattern and ratchets. The main always ticks first (the chain is
+    // resolved along patch order), so its transport state is fresh here.
+    void transportLinked(EngineState& s) {
+        SeqCore* m = chainMain_;
+        period_    = m->period_;
+        pulse_     = m->pulse_;
+        turn_      = m->turn_;
+        playPos_   = m->playPos_;
+        // The accumulator is per-instance (its own accumulatorrange), but it turns
+        // on the MAIN's wraps and zeroes on the main's resets.
+        if (m->accEpoch_ != seenAccEpoch_) {
+            seenAccEpoch_ = m->accEpoch_;
+            if (m->accEvtReset_) acc_ = 0; else advanceAccumulator(s);
+        }
+        if (m->sosEpoch_ != seenSosEpoch_) { seenSosEpoch_ = m->sosEpoch_; triggerSos(s); }
+        if (m->stepEpoch_ != seenStepEpoch_) {
+            seenStepEpoch_ = m->stepEpoch_;
+            started_ = true;
+            enterStepAt(s, m->playStep_, m->playLogical_, m->curStepRepeats());
+        }
+    }
+
+    // Repeats of the step this instance is currently playing (1 before the first
+    // step entry) — read by the chain members, which inherit the main's repeats.
+    int curStepRepeats() const {
+        return playStep_ < 0 ? 1 : cur_.repeats[clampi(playStep_, 0, kSteps - 1)];
+    }
+
     int curRepeats(EngineState& s, const std::vector<int>& order) {
         int phys = physOf(s, order[clampi(playPos_, 0, (int)order.size() - 1)]);
         return cur_.repeats[phys];
@@ -811,6 +854,7 @@ protected:
     }
 
     void advanceAccumulator(EngineState& s) {
+        accEpoch_++; accEvtReset_ = false;      // published to the chain members
         long range = std::lround(in("accumulatorrange").value(s));
         if (range <= 0) { acc_ = 0; return; }
         if (range > 16) range = 16;
@@ -820,18 +864,28 @@ protected:
 
     // Latch the step we are entering and precompute its gate windows.
     void enterStep(EngineState& s, const std::vector<int>& order, int pos) {
-        int phys = physOf(s, order[clampi(pos, 0, (int)order.size() - 1)]);
+        int logical = order[clampi(pos, 0, (int)order.size() - 1)];
+        int phys = physOf(s, logical);
+        enterStepAt(s, phys, logical, cur_.repeats[clampi(phys, 0, kSteps - 1)]);
+    }
+
+    // Enter physical step `phys` (logical index `logical`) lasting `reps` clock
+    // pulses. Split out of enterStep so a chain member can be handed the MAIN's
+    // step number and repeat count while still latching its own lane's values.
+    void enterStepAt(EngineState& s, int phys, int logical, int reps) {
+        phys = clampi(phys, 0, kSteps - 1);
         playStep_ = phys;
-        playLogical_ = order[clampi(pos, 0, (int)order.size() - 1)];
+        playLogical_ = logical;
         latchCvpos_ = cur_.cvpos[phys];
         latchRandcv_ = cur_.randcv[phys];
         plays_ = cur_.gate[phys] && probabilityPlays(s, phys);
         stepStart_ = s.tick;
         pitchCached_ = false;   // recompute the step's raw pitch on entry
+        stepEpoch_++;           // published to the chain members
 
         gateWin_.clear();
         if (!plays_) return;
-        int reps = cur_.repeats[phys];
+        if (reps < 1) reps = 1;
         int rat  = cur_.ratchets[phys];
         int gp   = cur_.gatepat[phys];
         double T = period_ > 0.0 ? period_ : 0.0;
@@ -979,8 +1033,14 @@ protected:
         // scale must NOT move the CV ("change only takes effect on the next step").
         // repeatshift/ratchetshift legitimately re-derive it per pulse/ratchet.
         // tuning/transpose stay live (vibrato input, per minifonion/arpeggio).
-        bool holdcv = in("holdcv").value(s) >= kHigh;
-        if (playStep_ >= 0 && (!holdcv || plays_)) {
+        // holdcv 0 = update on every step; 1 = only on steps that play a gate. On a
+        // chain member the manual adds value 2: 1 syncs the CV to the MAIN's gate
+        // (the default), 2 to the member's own gate (motoquencer.md:690).
+        float hold = in("holdcv").value(s);
+        bool cvUpdates = hold < kHigh ? true                        // 0: every step
+                       : (chainMain_ && hold < 1.5f) ? chainMain_->plays_
+                       : plays_;
+        if (playStep_ >= 0 && cvUpdates) {
             if (!pitchCached_ || pulse_ != cachedPulse_ || ratchet != cachedRatchet_) {
                 rawPitch_ = playedPitch(s, pulse_, ratchet);
                 cachedPulse_ = pulse_; cachedRatchet_ = ratchet; pitchCached_ = true;
@@ -995,7 +1055,7 @@ protected:
             if (period_ > 0.0 && !gateWin_.empty()) {
                 for (auto& w : gateWin_) if (s.tick >= w.first && s.tick < w.second) gateHigh = true;
             } else {
-                gateHigh = in("clock").value(s) >= kHigh;   // period unknown: clock level
+                gateHigh = chainClock(s) >= kHigh;          // period unknown: clock level
             }
         }
         out("gate").set(s, gateHigh ? 1.0f : 0.0f);
@@ -1082,7 +1142,16 @@ protected:
     static long trigTicks(EngineState& s) {
         long t = std::lround(0.01 * s.tickRateHz); return t < 1 ? 1 : t;
     }
-    void triggerSos(EngineState& s) { sosUntil_ = (long)s.tick + trigTicks(s); }
+    // The clock level driving this instance — a chain member has no clock of its
+    // own, so it borrows the main's (used only for the gate fallback before the
+    // clock period is known).
+    float chainClock(EngineState& s) {
+        return (chainMain_ ? chainMain_ : this)->in("clock").value(s);
+    }
+    void triggerSos(EngineState& s) {
+        sosUntil_ = (long)s.tick + trigTicks(s);
+        sosEpoch_++;                                // published to the chain members
+    }
     static int clampi(int v, int lo, int hi) { return v < lo ? lo : (v > hi ? hi : v); }
     static float clampf(float v, float lo, float hi) { return v < lo ? lo : (v > hi ? hi : v); }
     static bool risingEdge(bool& prev, float v) {
@@ -1108,6 +1177,13 @@ protected:
     int  chainIndex_ = 0;
     bool linkToNext_ = false;
     int  chainRawFm_ = 0;
+    // Transport events published by the chain main and mirrored by its members
+    // (see transportLinked). Monotonic counters rather than one-tick flags, so a
+    // member cannot miss one; accEvtReset_ says whether the latest accumulator
+    // event was a reset (zero it) or a wrap (advance it by our own range).
+    uint64_t stepEpoch_ = 0, accEpoch_ = 0, sosEpoch_ = 0;
+    bool     accEvtReset_ = false;
+    uint64_t seenStepEpoch_ = 0, seenAccEpoch_ = 0, seenSosEpoch_ = 0;
     std::vector<bool> prevTouch_ = std::vector<bool>(kSteps, false);
 
     // transport

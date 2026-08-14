@@ -1,0 +1,74 @@
+# motoquencer linktonext: `holdcv` on a chain member (#28). motoquencer.md:690 --
+# "In the linked sequencer, holdcv has one additional value: 2. If you set it to
+# 2, the CV output of the linked sequencer is synchronized to the gate of the
+# linked sequencer, not to that of the main sequencer."
+#
+# A 2-step chain: the MAIN's step 2 has no gate, both members' step 2 does.
+#   member A (holdcv 1, the default) -> CV follows the MAIN's gate: holds step 1's
+#                                       value while the chain plays step 2
+#   member B (holdcv 2)              -> CV follows its OWN gate: moves to step 2
+tickrate 100
+patch <<<
+[m4]
+[motoquencer]
+    clock      = I1
+    fadermode  = I2
+    numsteps   = 2
+    numfaders  = 2
+    linktonext = 1
+    quantize   = 0
+    cvbase     = 0
+    cvrange    = 1
+    cv         = O1
+    gate       = O5
+[motoquencer]
+    numsteps   = 2
+    numfaders  = 2
+    linktonext = 1
+    quantize   = 0
+    cvbase     = 0
+    cvrange    = 1
+    cv         = O2
+    gate       = O6
+[motoquencer]
+    numsteps   = 2
+    numfaders  = 2
+    quantize   = 0
+    cvbase     = 0
+    cvrange    = 1
+    holdcv     = 2
+    cv         = O3
+    gate       = O7
+>>>
+# member A's CV lane (fadermode 10): step 1 = 1.0, step 2 = 0.5
+@1 set I2 10
+@2 move F1 1.0
+@3 move F2 0.5
+# member B's CV lane (fadermode 20): the same two values
+@4 set I2 20
+@5 move F1 1.0
+@6 move F2 0.5
+# the MAIN's gate lane (fadermode 6): switch step 2's gate off
+@7 set I2 6
+@8 move F2 0.0
+@8 expect F2 0.0 tol 1e-4
+@9 set I2 0
+# step 1: everyone plays, both members emit their step-1 CV
+@11 set I1 1
+@11 expect O2 1.0 tol 1e-4
+@11 expect O3 1.0 tol 1e-4
+@11 expect O5 1 tol 1e-4
+@12 set I1 0
+# step 2: the main is silent, both members still gate (their own step-2 gate is
+# on). A holds step 1's CV (synced to the main's gate); B follows its own.
+@13 set I1 1
+@13 expect O5 0 tol 1e-4
+@13 expect O6 1 tol 1e-4
+@13 expect O7 1 tol 1e-4
+@13 expect O2 1.0 tol 1e-4
+@13 expect O3 0.5 tol 1e-4
+# wrap: the main plays again, so A re-acquires the step-1 CV it was already on
+@14 set I1 0
+@15 set I1 1
+@15 expect O2 1.0 tol 1e-4
+@15 expect O3 1.0 tol 1e-4

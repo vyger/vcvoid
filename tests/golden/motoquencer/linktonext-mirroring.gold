@@ -1,0 +1,88 @@
+# motoquencer linktonext: a chain member inherits the MAIN's step order (#28).
+# motoquencer.md:684-687 -- "If the main sequencer plays repeats, so does the
+# linked one. The repeats setting of the linked sequencer's steps are ignored. If
+# the main sequencer skips a step, so does the linked one. The skip property of
+# steps in the linked sequencer are ignored, as well."
+#
+# The member's four steps carry four distinct CVs (1.0 / 0.75 / 0.5 / 0.25), so
+# its `cv` names the step the chain is on. Then, on the MAIN, step 1 gets 2
+# repeats (fadermode 3) and step 2 is skipped (fadermode 7); on the MEMBER, step 3
+# is skipped (fadermode 17) -- which must have no effect at all. The member's
+# step 1 gets the "all" gate pattern (fadermode 14) so its gate fires once per
+# repeat pulse: two gates on a step whose repeat count it inherits from the main.
+#
+# Expected play order: 1, 1 (repeat), 3 (2 is skipped on the main), 4, wrap to 1.
+tickrate 100
+patch <<<
+[m4]
+[motoquencer]
+    clock      = I1
+    fadermode  = I2
+    numsteps   = 4
+    numfaders  = 4
+    linktonext = 1
+    quantize   = 0
+    cvbase     = 0
+    cvrange    = 1
+    cv         = O1
+[motoquencer]
+    quantize   = 0
+    cvbase     = 0
+    cvrange    = 1
+    holdcv     = 0
+    cv         = O2
+    gate       = O6
+>>>
+# the member's CV lane (fadermode 10): one distinct value per step
+@1 set I2 10
+@2 move F1 1.0
+@3 move F2 0.75
+@4 move F3 0.5
+@5 move F4 0.25
+# the member's OWN skip lane (fadermode 17): skip its step 3 -- ignored below
+@6 set I2 17
+@7 move F3 1.0
+@7 expect F3 1.0 tol 1e-4
+# the member's gate-pattern lane (fadermode 14): step 1 -> dent 1 of 4 = "all"
+@8 set I2 14
+@9 move F1 0.3333
+@9 expect F1 0.3333 tol 1e-3
+# the main's repeats lane (fadermode 3): step 1 -> dent 1 of 16 = 2 repeats
+@10 set I2 3
+@11 move F1 0.0667
+@11 expect F1 0.0667 tol 1e-3
+# the main's skip lane (fadermode 7): skip step 2
+@12 set I2 7
+@13 move F2 1.0
+@13 expect F2 1.0 tol 1e-4
+# park the faders back on the member's CV lane (no more edits) and run the clock
+@14 set I2 10
+@15 set I1 1
+@15 expect O2 1.0 tol 1e-4
+# 2nd edge: the main's step 1 repeats, so the member holds its step 1 too
+@16 set I1 0
+@17 set I1 1
+@17 expect O2 1.0 tol 1e-4
+# 3rd edge: the main skips step 2 -> both lanes jump to step 3. The member's own
+# skip on step 3 is ignored, so it plays there.
+@18 set I1 0
+@19 set I1 1
+@19 expect O2 0.5 tol 1e-4
+@20 set I1 0
+@21 set I1 1
+@21 expect O2 0.25 tol 1e-4
+# wrap: back to step 1, which repeats again. The period (2 ticks) is known by now,
+# so the member's "all" gate pattern fires one 1-tick gate per inherited repeat
+# pulse -- at the step start (tick 23) AND one period later (tick 25). With only
+# its own repeat count (1) the second gate would be missing.
+@22 set I1 0
+@23 set I1 1
+@23 expect O2 1.0 tol 1e-4
+@23 expect O6 1 tol 1e-4
+@24 set I1 0
+@24 expect O6 0 tol 1e-4
+@25 set I1 1
+@25 expect O2 1.0 tol 1e-4
+@25 expect O6 1 tol 1e-4
+@26 set I1 0
+@26 expect O6 0 tol 1e-4
