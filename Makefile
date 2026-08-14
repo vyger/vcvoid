@@ -7,7 +7,7 @@ UNIT_SRC   := $(wildcard tests/unit/*.cpp)
 RUNNER_SRC := $(wildcard tests/runner/*.cpp)
 GOLDENS    := $(shell find tests/golden -name '*.gold' 2>/dev/null | sort)
 
-.PHONY: all test unittests goldens gen clean crosscheck layoutcheck artcheck
+.PHONY: all test unittests goldens gen clean crosscheck layoutcheck artcheck labelcheck
 
 VENDOR := tools/droidcheck/vendor/droidforge/droidforge
 # The Forge's main/tuning.h gates a few constants behind Qt's platform macros
@@ -53,6 +53,16 @@ clean:
 
 crosscheck:
 	tools/crosscheck.sh
+
+# Register-label extraction parity (issue #26): our extractor vs the Forge's own
+# parser, over every patch in patches/. Skips itself when droidcheck is unbuilt,
+# like layoutcheck does with the vendor checkout.
+$(BUILD)/labeldump: engine/src/labels.cpp engine/src/controllers.cpp tests/tools/labeldump.cpp engine/src/labels.hpp
+	@mkdir -p $(BUILD)
+	$(CXX) $(CXXFLAGS) engine/src/labels.cpp engine/src/controllers.cpp tests/tools/labeldump.cpp -o $@
+
+labelcheck: $(BUILD)/labeldump
+	@tools/labelcheck.sh
 
 layoutcheck:
 	@if [ -d "$(VENDOR)/modules" ]; then \
