@@ -47,6 +47,22 @@ static void check(const char* name, const Module& forge) {
                             name, t, i, mp.x, mp.y, ms, fp.x(), fp.y(), fs);
                 failures++;
             }
+            // Register-label chip geometry (issue #26) — same zero-tolerance
+            // rule, so our panel chips land exactly where the Forge draws them.
+            QPointF flp = forge.labelPosition(t, i);
+            droid::layout::Pos mlp = mine->labelPos(t, i);
+            if (std::fabs(mine->labelDist(t, i) - forge.labelDistance(t, i)) > eps ||
+                std::fabs(mine->labelW(t, i) - forge.labelWidth(t, i)) > eps ||
+                std::fabs(mine->aspect(t, i) - forge.rectAspect(t, i)) > eps ||
+                std::fabs(mlp.x - flp.x()) > eps || std::fabs(mlp.y - flp.y()) > eps) {
+                std::printf("FAIL %s %c%u label: dist %g w %g aspect %g pos (%g,%g)"
+                            " != forge dist %g w %g aspect %g pos (%g,%g)\n",
+                            name, t, i, mine->labelDist(t, i), mine->labelW(t, i),
+                            mine->aspect(t, i), mlp.x, mlp.y,
+                            forge.labelDistance(t, i), forge.labelWidth(t, i),
+                            forge.rectAspect(t, i), flp.x(), flp.y());
+                failures++;
+            }
         }
     }
 }

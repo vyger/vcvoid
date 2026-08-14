@@ -161,6 +161,8 @@ struct DroidMaster18Widget : DroidMasterBaseWidget {
             addOutput(createOutputCentered<dw::DroidPort>(
                 A.vec(L->pos('G', i + 1)).plus(A.off(dw::kJackArtDx, dw::kJackArtDy)),
                 module, DroidMaster18::GATE_OUTPUTS + i));
+        dw::addLabelOverlay(this, "master18", A,
+                            module ? &module->registerLabels : nullptr);
     }
 
     void appendContextMenu(Menu* menu) override {

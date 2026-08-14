@@ -13,7 +13,29 @@ struct DroidMaster : DroidMasterBase {
     // RedGreenBlueLight uses 3 light ids per LED, so the 4x4 matrix needs 16 * 3.
     enum LightId { ENUMS(MATRIX_LIGHTS, 16 * 3), LIGHTS_LEN };
 
-    DroidMaster() : DroidMasterBase(droid::MasterType::Master16, 8, 8, 0, 16 * 3) {}
+    DroidMaster() : DroidMasterBase(droid::MasterType::Master16, 8, 8, 0, 16 * 3) {
+        // A LightInfo is what gives an LED a tooltip at all (Module.hpp:
+        // "LightInfos are initialized to null unless configLight() is called").
+        // The matrix mirrors the jacks, so name each LED after the jack it
+        // tracks; a patch's R-register label replaces that (issue #26).
+        for (int i = 0; i < 16; i++)
+            configLight(MATRIX_LIGHTS + i * 3,
+                        i < 8 ? string::f("Input %d", i + 1)
+                              : string::f("Output %d", i - 7));
+    }
+
+    // The base labels the jacks; the matrix LEDs are this master's alone. Done
+    // inline rather than through applyLightBank because the fallback name is
+    // per-LED (which jack it mirrors), not one format string.
+    void applyOwnLabels() override {
+        DroidMasterBase::applyOwnLabels();
+        for (int i = 0; i < 16; i++)
+            vcvoid::labels::applyLight(
+                lightInfos[MATRIX_LIGHTS + i * 3],
+                vcvoid::labels::compose(registerLabels.find('R', unsigned(i) + 1)),
+                i < 8 ? string::f("Input %d", i + 1)
+                      : string::f("Output %d", i - 7));
+    }
 
     // The 4x4 LED matrix mirrors the eight input and eight output jacks, exactly
     // like the hardware MASTER ("a 4 x 4 multicolor LED matrix displaying the
@@ -109,6 +131,8 @@ struct DroidMasterWidget : DroidMasterBaseWidget {
             addOutput(createOutputCentered<dw::DroidPort>(
                 A.vec(L->pos('O', i + 1)).plus(A.off(dw::kJackArtDx, dw::kJackArtDy)),
                 module, DroidMaster::OUT_OUTPUTS + i));
+        dw::addLabelOverlay(this, "master", A,
+                            module ? &module->registerLabels : nullptr);
     }
 };
 

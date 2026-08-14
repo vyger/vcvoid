@@ -42,7 +42,7 @@ unittests: $(BUILD)/unittests
 goldens: $(BUILD)/droidtest
 	@if [ -n "$(GOLDENS)" ]; then $(BUILD)/droidtest $(GOLDENS); else echo "no goldens yet"; fi
 
-test: unittests goldens layoutcheck artcheck
+test: unittests goldens layoutcheck labelcheck artcheck
 
 gen:
 	python3 tools/jackgen/jackgen.py

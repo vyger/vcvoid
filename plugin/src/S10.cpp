@@ -23,13 +23,21 @@ struct DroidS10 : ChainModule {
                          {"down", "center", "up"});
     }
 
+    droid::chain::ModelId chainModel() const override { return droid::chain::MS10; }
+
     void fillUpstream(droid::chain::UpstreamBlock& b) override {
-        b.modelId = droid::chain::MS10;
         for (int i = 0; i < 2; i++) b.switches[i] = params[ROTARY_PARAMS + i].getValue();
         for (int i = 0; i < 8; i++) b.switches[2 + i] = params[TOGGLE_PARAMS + i].getValue();
     }
 
     void applyDownstream(const droid::chain::DownstreamBlock&, float) override {}   // no LEDs
+
+    void applyOwnLabels() override {
+        using namespace vcvoid::labels;
+        // S1-S2 are the rotaries, S3-S10 the three-way toggles.
+        applyParamBank(this, ROTARY_PARAMS, 2, 'S', registerLabels, "S%d");
+        applyParamBank(this, TOGGLE_PARAMS, 8, 'S', registerLabels, "S%d", false, 3);
+    }
 
     void process(const ProcessArgs& args) override { relay(args.sampleTime); }
 };
@@ -63,6 +71,8 @@ struct DroidS10Widget : VcvoidModuleWidget {
         for (int i = 0; i < 8; i++)    // S3-S10: 3-way toggles
             addParam(createParamCentered<dw::DroidToggle>(
                 A.vec(L->pos('S', i + 3)), module, DroidS10::TOGGLE_PARAMS + i));
+        dw::addLabelOverlay(this, "s10", A,
+                            module ? &module->registerLabels : nullptr);
     }
 };
 

@@ -15,12 +15,17 @@ struct DroidP10 : ChainModule {
             configParam(POT_PARAMS + i, 0.f, 1.f, 0.f, string::f("P%d", i + 1));
     }
 
+    droid::chain::ModelId chainModel() const override { return droid::chain::MP10; }
+
     void fillUpstream(droid::chain::UpstreamBlock& b) override {
-        b.modelId = droid::chain::MP10;
         for (int i = 0; i < 10; i++) b.pots[i] = params[POT_PARAMS + i].getValue();
     }
 
     void applyDownstream(const droid::chain::DownstreamBlock&, float) override {}   // no LEDs
+
+    void applyOwnLabels() override {
+        vcvoid::labels::applyParamBank(this, POT_PARAMS, 10, 'P', registerLabels, "P%d");
+    }
 
     void process(const ProcessArgs& args) override { relay(args.sampleTime); }
 };
@@ -43,6 +48,8 @@ struct DroidP10Widget : VcvoidModuleWidget {
             k->capDiaHP = 1.38f;   // art-measured full cap inside the printed gold ring (160 px)
             addParam(k);
         }
+        dw::addLabelOverlay(this, "p10", A,
+                            module ? &module->registerLabels : nullptr);
     }
 };
 

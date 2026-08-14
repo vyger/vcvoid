@@ -16,6 +16,10 @@
 struct DroidBling : ChainModule {
     DroidBling() { config(0, 0, 0, 0); }
 
+    // A BLING is not a DROID module at all: it never adds a block, so it
+    // reports None and takes no register labels.
+    droid::chain::ModelId chainModel() const override { return droid::chain::None; }
+
     // unused — relay() is bypassed entirely
     void fillUpstream(droid::chain::UpstreamBlock&) override {}
     void applyDownstream(const droid::chain::DownstreamBlock&, float) override {}

@@ -50,3 +50,15 @@ bool ChainModule::isChainRightNeighbor(Module* m) {
     // different chain (and has no left-face buffers to write).
     return isChainController(m);
 }
+
+bool ChainModule::onMasterChain() {
+    // Walk left through the controllers until a master appears. The chain is
+    // at most 21 modules, and this runs once per frame per module.
+    for (Module* m = leftExpander.module; m; m = m->leftExpander.module) {
+        if (m->model == modelDroidMaster || m->model == modelDroidMaster18)
+            return true;
+        if (!isChainController(m))
+            return false;   // a foreign module breaks the chain
+    }
+    return false;
+}

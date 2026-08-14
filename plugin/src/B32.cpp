@@ -25,14 +25,20 @@ struct DroidB32 : ChainModule {
         return std::round(math::clamp(v, 0.f, 1.f) * 3.f) / 3.f;
     }
 
+    droid::chain::ModelId chainModel() const override { return droid::chain::MB32; }
+
     void fillUpstream(droid::chain::UpstreamBlock& b) override {
-        b.modelId = droid::chain::MB32;
         b.buttons = packButtonParams(BUTTON_PARAMS, 32);   // bit 31 (button 32) fits in uint32_t buttons
     }
 
     void applyDownstream(const droid::chain::DownstreamBlock& b, float sampleTime) override {
         for (int i = 0; i < 32; i++)
             lights[BUTTON_LIGHTS + i].setBrightnessSmooth(quantizeLed(b.leds[i]), sampleTime);
+    }
+
+    void applyOwnLabels() override {
+        vcvoid::labels::applyParamBank(this, BUTTON_PARAMS, 32, 'B', registerLabels,
+                                       "B%d", true);
     }
 
     void process(const ProcessArgs& args) override { relay(args.sampleTime); }
@@ -52,6 +58,8 @@ struct DroidB32Widget : VcvoidModuleWidget {
             b->lightId = DroidB32::BUTTON_LIGHTS + i;
             addParam(b);
         }
+        dw::addLabelOverlay(this, "b32", A,
+                            module ? &module->registerLabels : nullptr);
     }
 };
 

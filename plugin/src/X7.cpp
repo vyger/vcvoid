@@ -58,6 +58,22 @@ struct DroidX7 : ChainModule {
         config(PARAMS_LEN, INPUTS_LEN, OUTPUTS_LEN, LIGHTS_LEN);
         for (int j = 0; j < 4; j++)
             configOutput(GATE_OUTPUTS + j, rack::string::f("G%d gate out", 9 + j));
+        // LightInfos so the indicators can carry the patch's R labels (R49..R56).
+        static const char* kStatus[4] = {"SD card", "USB", "MIDI TRS in", "MIDI TRS out"};
+        for (int j = 0; j < 4; j++) {
+            configLight(STATUS_LIGHTS + j * 3, kStatus[j]);
+            configLight(GATE_LIGHTS + j * 3, rack::string::f("G%d gate", 9 + j));
+        }
+    }
+
+    void applyOwnLabels() override {
+        using namespace vcvoid::labels;
+        // The X7's gates are G9..G12 and its LEDs R49..R56 — the offsets live in
+        // registerLabels, so the banks are numbered 1..4 locally.
+        applyPortBank(this, Port::OUTPUT, GATE_OUTPUTS, 4, 'G', registerLabels,
+                      "G%d gate out");
+        applyLightBank(this, STATUS_LIGHTS, 4, 3, 'R', registerLabels, "Status %d");
+        applyLightBank(this, GATE_LIGHTS, 4, 3, 'R', registerLabels, "Gate %d", 5);
     }
 
     // Classify a MIDI status byte into an activity colour (RGB) per §8.5.
@@ -74,9 +90,10 @@ struct DroidX7 : ChainModule {
         statusColor(e, ledColor[led]);
     }
 
+    droid::chain::ModelId chainModel() const override { return droid::chain::MX7; }
+
     void fillUpstream(droid::chain::UpstreamBlock& b) override {
         using namespace droid::chain;
-        b.modelId = MX7;
         rack::midi::InputQueue* q[2]   = { &trsIn, &usbIn };
         int ledFor[2] = { 2 /*TRS-in*/, 1 /*USB*/ };
         for (int port = 0; port < droid::chain::kChainMidiPorts; port++) {
@@ -204,6 +221,8 @@ struct DroidX7Widget : VcvoidModuleWidget {
             addOutput(createOutputCentered<dw::DroidPort>(
                 A.vec(L->pos('G', j + 1)).plus(A.off(dw::kJackArtDx, dw::kJackArtDy)),
                 module, DroidX7::GATE_OUTPUTS + j));
+        dw::addLabelOverlay(this, "x7", A,
+                            module ? &module->registerLabels : nullptr);
     }
 
     void appendContextMenu(Menu* menu) override {
