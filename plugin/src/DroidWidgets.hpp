@@ -543,12 +543,17 @@ struct VcvoidModuleWidget : rack::app::ModuleWidget {
         appendBuildInfoMenu(menu);
     }
 
-    // The per-module "Show register labels" toggle, matching the master's.
+    // "Show register labels" for the whole DROID system. The flag lives on the
+    // master — a chain module's own copy is a mirror the master overwrites
+    // every frame, so binding the item to that would toggle for one frame and
+    // snap back. Off-chain there is no system and no labels, so no item.
     void appendRegisterLabelMenu(Menu* menu) {
         auto* cm = dynamic_cast<ChainModule*>(module);
         if (!cm) return;
+        vcvoid::labels::ModuleLabels* master = cm->chainMasterLabels();
+        if (!master) return;
         menu->addChild(new MenuSeparator);
         menu->addChild(createBoolPtrMenuItem("Show register labels", "",
-                                             &cm->registerLabels.show));
+                                             &master->show));
     }
 };

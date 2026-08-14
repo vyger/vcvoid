@@ -41,7 +41,10 @@ struct ChainModule : Module {
     // ---- register labels (issue #26) ------------------------------------
     // UI-thread only. The master's widget walks the chain, fills this in with
     // the patch's labels plus THIS module's controller/expander number, and
-    // calls applyOwnLabels(); the panel overlay draws from it.
+    // calls applyOwnLabels(); the panel overlay draws from it. `show` is a
+    // MIRROR of the master's flag, re-pushed every frame — a DROID system is
+    // one instrument, so its labels turn on and off together. Do not persist
+    // it here; the master owns it.
     vcvoid::labels::ModuleLabels registerLabels;
     virtual void applyOwnLabels() {}
 
@@ -50,17 +53,10 @@ struct ChainModule : Module {
     // this, so its widget clears them (see VcvoidModuleWidget::step).
     bool onMasterChain();
 
-    // The "Show register labels" toggle rides the module's own patch storage.
-    json_t* dataToJson() override {
-        json_t* root = json_object();
-        json_object_set_new(root, "showRegisterLabels",
-                            json_boolean(registerLabels.show));
-        return root;
-    }
-    void dataFromJson(json_t* root) override {
-        if (json_t* j = json_object_get(root, "showRegisterLabels"))
-            registerLabels.show = json_boolean_value(j);
-    }
+    // The label state of the master at the head of my chain, or null when I am
+    // not on one. This is where the "Show register labels" toggle lives, so
+    // right-clicking any module of a system flips the whole system.
+    vcvoid::labels::ModuleLabels* chainMasterLabels();
 
   protected:
     // Packs `n` momentary-button params (starting at `firstParamId`) into a

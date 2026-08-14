@@ -228,6 +228,7 @@ struct DroidX7Widget : VcvoidModuleWidget {
     void appendContextMenu(Menu* menu) override {
         auto* m = dynamic_cast<DroidX7*>(module);
         if (!m) { appendBuildInfoMenu(menu); return; }
+        appendRegisterLabelMenu(menu);   // keep in step with the base's menu
         menu->addChild(new MenuSeparator);
         auto sub = [&](const char* label, rack::midi::Port* port) {
             menu->addChild(createSubmenuItem(label, "", [port](Menu* sm) {

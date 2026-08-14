@@ -1108,6 +1108,15 @@ struct DroidMasterBaseWidget : ModuleWidget {
              mod && ChainModule::isChainRightNeighbor(mod);
              mod = mod->rightExpander.module)
             chain.push_back(mod);
+        // The "Show register labels" toggle belongs to the SYSTEM, not to one
+        // module: a master and its chain are one instrument. The master owns
+        // the flag (and persists it); every module on the chain mirrors it.
+        // Re-pushed every frame — it is a handful of bool writes, and it means
+        // the toggle takes effect without waiting for a patch or chain change.
+        for (Module* mod : chain)
+            static_cast<ChainModule*>(mod)->registerLabels.show =
+                m->registerLabels.show;
+
         uint32_t gen = m->labelGen.load(std::memory_order_acquire);
         if (labelsPublished && gen == lastLabelGen && chain == lastLabelChain)
             return;
