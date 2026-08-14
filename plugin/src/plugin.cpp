@@ -1,5 +1,6 @@
 #include "plugin.hpp"
 #include "ChainModule.hpp"
+#include "MasterBase.hpp"   // chainMasterOf() reaches the master's label state
 #include "uatbridge/Bridge.hpp"
 Plugin* pluginInstance;
 void init(Plugin* p) {
@@ -49,4 +50,24 @@ bool ChainModule::isChainRightNeighbor(Module* m) {
     // My right neighbour must be a controller: a master to my right belongs to a
     // different chain (and has no left-face buffers to write).
     return isChainController(m);
+}
+
+// The master at the head of my chain, or null. Walks left through the
+// controllers; the chain is at most 21 modules and this runs at most once per
+// frame per module.
+static DroidMasterBase* chainMasterOf(Module* self) {
+    for (Module* m = self->leftExpander.module; m; m = m->leftExpander.module) {
+        if (m->model == modelDroidMaster || m->model == modelDroidMaster18)
+            return dynamic_cast<DroidMasterBase*>(m);
+        if (!isChainController(m))
+            return nullptr;   // a foreign module breaks the chain
+    }
+    return nullptr;
+}
+
+bool ChainModule::onMasterChain() { return chainMasterOf(this) != nullptr; }
+
+vcvoid::labels::ModuleLabels* ChainModule::chainMasterLabels() {
+    DroidMasterBase* m = chainMasterOf(this);
+    return m ? &m->registerLabels : nullptr;
 }

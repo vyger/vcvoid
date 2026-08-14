@@ -6,6 +6,7 @@
 #include "plugin.hpp"
 #include "Layout.hpp"
 #include "BuildInfo.hpp"
+#include "ChainModule.hpp"   // ChainModule::registerLabels (issue #26)
 #include "uatbridge/Bridge.hpp"
 
 namespace dw {
@@ -26,7 +27,12 @@ inline float hpPx(float hp) { return mm2px(hp * droid::layout::kHPmm); }
 struct ArtMap {
     float imgW, imgH;   // faceplate PNG pixel dimensions
     Vec box;            // module widget box.size
+    // The M4 places its controls with plain hpVec() rather than through the
+    // art, so anything that has to line up with them (the register-label chips)
+    // needs the same mapping. `plain` selects it.
+    bool plain = false;
     Vec vec(droid::layout::Pos p) const {
+        if (plain) return hpVec(p);
         constexpr float kPxPerMm = 22.75f;
         return Vec(p.x * droid::layout::kHPmm * kPxPerMm * box.x / imgW,
                    p.y * droid::layout::kHPmm * kPxPerMm * box.y / imgH);
@@ -38,6 +44,10 @@ struct ArtMap {
     // jack holes sit (+0.9, +3.3) art px from their layout centres
     Vec off(float artDx, float artDy) const { return Vec(x(artDx), y(artDy)); }
 };
+
+// An ArtMap that maps HP straight to Rack px (no faceplate stretch), for
+// modules whose overlays are placed with hpVec().
+inline ArtMap plainArtMap() { ArtMap a{1.f, 1.f, Vec(1.f, 1.f)}; a.plain = true; return a; }
 
 // The baked jack holes sit this far (art px) from their Layout centres —
 // measured on master.png (spread 0.1 px across all 16 jacks; same render
@@ -398,6 +408,105 @@ inline ArtMap setupPanel(rack::app::ModuleWidget* w, const char* slug, const cha
     return ArtMap{artW, artH, w->box.size};
 }
 
+// ---- register-label chips (issue #26) ------------------------------------
+
+// What a chip shows. The Forge draws the shorthand, or the plain label
+// truncated to MAX_LENGTH_SHORTHAND — then centres and HARD-CLIPS it into a
+// chip that fits about nine characters, so an unabbreviated label renders as an
+// unreadable middle fragment (uat-core.ini's O1 shows as ", 1..10 H"). We keep
+// the Forge's chip and its 18-character cap, but draw from the START of the
+// label and ellipsize, so the text is always readable. A [SHORT] renders
+// identically in both.
+inline std::string chipText(NVGcontext* vg, const droid::RegisterLabel& l,
+                            float maxWidthPx) {
+    std::string s = l.shorthand;
+    if (s.empty()) {
+        s = l.text.substr(0, (size_t) droid::layout::kLabelMaxChars);
+        // Never cut a UTF-8 sequence in half.
+        while (!s.empty() && (s.back() & 0xC0) == 0x80) s.pop_back();
+        if (!s.empty() && (s.back() & 0x80)) s.pop_back();
+    }
+    if (s.empty()) return s;
+    float bounds[4];
+    if (nvgTextBounds(vg, 0, 0, s.c_str(), NULL, bounds) <= maxWidthPx) return s;
+    while (s.size() > 1) {
+        s.pop_back();
+        while (!s.empty() && (s.back() & 0xC0) == 0x80) s.pop_back();
+        std::string probe = s + "…";
+        if (nvgTextBounds(vg, 0, 0, probe.c_str(), NULL, bounds) <= maxWidthPx)
+            return probe;
+    }
+    return s;
+}
+
+// Draws every label chip for one module: a transparent, event-ignoring overlay
+// on top of the panel, so it can never steal a click from the controls beneath.
+// One implementation serves every module — the chip geometry all comes from
+// Layout.hpp, which `make layoutcheck` holds to the Forge's own numbers.
+struct LabelOverlay : rack::widget::TransparentWidget {
+    const droid::layout::ModuleLayout* layout = nullptr;
+    ArtMap art{1.f, 1.f, Vec(1.f, 1.f)};
+    const vcvoid::labels::ModuleLabels* labels = nullptr;   // module-owned; null in the browser
+
+    void draw(const DrawArgs& args) override {
+        if (!layout || !labels || !labels->show || !labels->active) return;
+        NVGcontext* vg = args.vg;
+        std::shared_ptr<rack::Font> font = APP->window->loadFont(
+            rack::asset::system("res/fonts/ShareTechMono-Regular.ttf"));
+        if (!font || font->handle < 0) return;   // no font: draw nothing, never crash
+        nvgFontFaceId(vg, font->handle);
+        nvgFontSize(vg, hpPx(droid::layout::kLabelFontHP));
+        nvgTextAlign(vg, NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE);
+
+        // Only types with a control of their own: N rides its input jack and L
+        // rides its button/slider, so neither gets a chip (see primary()).
+        static const char kDrawn[] = {'I', 'O', 'G', 'B', 'P', 'E', 'S', 'R', 'X'};
+        for (char t : kDrawn) {
+            unsigned n = layout->num(t);
+            for (unsigned i = 1; i <= n; i++)
+                if (const droid::RegisterLabel* l = labels->primary(t, i))
+                    drawChip(vg, t, i, *l);
+        }
+    }
+
+    void drawChip(NVGcontext* vg, char type, unsigned number,
+                  const droid::RegisterLabel& l) {
+        droid::layout::Rect hp = droid::layout::labelRect(*layout, type, number);
+        // Position through the faceplate art like every other overlay, so the
+        // chip tracks the control it names; sizes stay in plain HP px.
+        Vec topLeft = art.vec({hp.x, hp.y});
+        float w = hpPx(hp.w), h = hpPx(hp.h);
+
+        nvgBeginPath(vg);
+        nvgRoundedRect(vg, topLeft.x, topLeft.y, w, h,
+                       hpPx(droid::layout::kLabelRadiusHP));
+        nvgFillColor(vg, nvgRGB(0xff, 0xff, 0xff));
+        nvgFill(vg);
+        nvgStrokeWidth(vg, 1.f);
+        nvgStrokeColor(vg, nvgRGB(0, 0, 0));
+        nvgStroke(vg);
+
+        std::string text = chipText(vg, l, w - hpPx(0.12f));
+        if (text.empty()) return;
+        nvgFillColor(vg, nvgRGB(0, 0, 0));
+        nvgText(vg, topLeft.x + w / 2.f, topLeft.y + h / 2.f, text.c_str(), NULL);
+    }
+};
+
+// Adds the register-label overlay on top of a module's panel. Call at the END
+// of a widget constructor so the chips draw over the controls.
+inline LabelOverlay* addLabelOverlay(rack::app::ModuleWidget* w, const char* slug,
+                                     ArtMap art,
+                                     const vcvoid::labels::ModuleLabels* labels) {
+    auto* o = new LabelOverlay;
+    o->layout = droid::layout::find(slug);
+    o->art = art;
+    o->labels = labels;
+    o->box.size = w->box.size;
+    w->addChild(o);
+    return o;
+}
+
 } // namespace dw
 
 // Shared base for every vcvoid controller/expander ModuleWidget. The UAT bridge
@@ -417,10 +526,34 @@ struct VcvoidModuleWidget : rack::app::ModuleWidget {
     void step() override {
         rack::app::ModuleWidget::step();
         if (auto* b = uat::Bridge::instance()) b->ensureWidget();
+        // Register labels (issue #26) are pushed onto us by the master's widget
+        // while we are on its chain. Dragged off it, nobody would ever clear
+        // them, so we do it ourselves — the master repopulates on rejoin.
+        if (auto* cm = dynamic_cast<ChainModule*>(module)) {
+            if (cm->registerLabels.active && !cm->onMasterChain()) {
+                cm->registerLabels.active = false;
+                cm->applyOwnLabels();
+            }
+        }
     }
 
     // Subclasses that override this (X7) must keep the build-info line last.
     void appendContextMenu(Menu* menu) override {
+        appendRegisterLabelMenu(menu);
         appendBuildInfoMenu(menu);
+    }
+
+    // "Show register labels" for the whole DROID system. The flag lives on the
+    // master — a chain module's own copy is a mirror the master overwrites
+    // every frame, so binding the item to that would toggle for one frame and
+    // snap back. Off-chain there is no system and no labels, so no item.
+    void appendRegisterLabelMenu(Menu* menu) {
+        auto* cm = dynamic_cast<ChainModule*>(module);
+        if (!cm) return;
+        vcvoid::labels::ModuleLabels* master = cm->chainMasterLabels();
+        if (!master) return;
+        menu->addChild(new MenuSeparator);
+        menu->addChild(createBoolPtrMenuItem("Show register labels", "",
+                                             &master->show));
     }
 };

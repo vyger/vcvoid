@@ -36,8 +36,9 @@ struct DroidE4 : ChainModule {
 
     DroidE4() { config(PARAMS_LEN, INPUTS_LEN, OUTPUTS_LEN, LIGHTS_LEN); }
 
+    droid::chain::ModelId chainModel() const override { return droid::chain::ME4; }
+
     void fillUpstream(droid::chain::UpstreamBlock& b) override {
-        b.modelId = droid::chain::ME4;
         for (int i = 0; i < 4; i++) b.detentCount[i] = detent[i];
         b.buttons = 0;
         for (int i = 0; i < 4; i++)
@@ -148,6 +149,8 @@ struct DroidE4Widget : VcvoidModuleWidget {
             }
             addChild(enc);
         }
+        dw::addLabelOverlay(this, "e4", dw::ArtMap{692.f, 2915.f, box.size},
+                            module ? &module->registerLabels : nullptr);
     }
 };
 

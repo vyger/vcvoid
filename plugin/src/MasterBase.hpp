@@ -3,6 +3,7 @@
 #include "src/engine.hpp"   // droid::Engine (via -I../engine)
 #include "ChainModule.hpp"  // droid::chain protocol + ChainModule::isChain{Left,Right}Neighbor
 #include "Layout.hpp"
+#include "RegisterLabels.hpp"   // issue #26: patch labels -> tooltips + panel chips
 #include "uatbridge/Bridge.hpp"   // forward-declares Rack types only; safe here
 #include "AdaptiveRate.hpp"
 #include "BuildInfo.hpp"
@@ -47,6 +48,14 @@ struct DroidMasterBase : Module {
     // dataFromJson's patch load). Touched only under engineMutex or on the UI
     // thread paths that also hold it.
     droid::StateSnapshot lastSnapshot;
+    // Register labels from the patch's header comments (issue #26).
+    // `sharedLabels` is written by whichever thread loads the patch (UI or the
+    // UAT bridge's HTTP thread) under engineMutex; `labelGen` is bumped after
+    // it, and the widgets copy it out on their own step(). `registerLabels` is
+    // this master's own UI-thread view — the widgets read it while drawing.
+    droid::PatchLabels sharedLabels;              // engineMutex
+    std::atomic<uint32_t> labelGen{0};
+    vcvoid::labels::ModuleLabels registerLabels;  // UI thread only
     float targetHz = 6000.f;
     // Timing mode (issue #3). Adaptive (default for new masters) derives
     // targetHz from the loaded patch's RAM footprint (AdaptiveRate.hpp) on
@@ -417,6 +426,13 @@ public:
                 }
             }
         }
+        // Register labels come from the RAW text: they are comments, which the
+        // engine parser strips, and they are published even when the patch
+        // fails to load — the labels are still what the file says, and a
+        // half-broken patch is exactly when knowing what a jack was meant to be
+        // helps most.
+        droid::PatchLabels labels = droid::parseRegisterLabels(text);
+
         std::lock_guard<std::mutex> lock(engineMutex);
         // Every engine swap/drop invalidates an armed signal watch: its names
         // were validated against the OLD engine (see disarmWatch). Lock order
@@ -424,6 +440,10 @@ public:
         disarmWatch();
         lastResult = r;
         patchPath = path;
+        sharedLabels = std::move(labels);
+        // Publish last: a widget that sees the new generation must find the
+        // labels already in place.
+        labelGen.fetch_add(1, std::memory_order_release);
         if (r.ok) {
             // Circuit-state transfer (hardware.md §11.1: "when you press the
             // button for loading a new patch, the states are saved immediately").
@@ -501,6 +521,17 @@ public:
         }
         if (!path.empty())
             loadPatchFile(path);
+    }
+
+    // Push the current registerLabels onto this master's own jacks (issue #26).
+    // UI thread only — these are std::strings Rack's tooltips read while
+    // drawing. MASTER overrides to add its 4x4 LED matrix.
+    virtual void applyOwnLabels() {
+        using namespace vcvoid::labels;
+        applyPortBank(this, Port::INPUT, 0, numIns_, 'I', registerLabels, "I%d");
+        applyPortBank(this, Port::OUTPUT, 0, numOuts_, 'O', registerLabels, "O%d");
+        applyPortBank(this, Port::OUTPUT, numOuts_, numGateOuts_, 'G',
+                      registerLabels, "G%d");
     }
 
     // MASTER18 gate/extra I/O hook, called at the end of process() right after the
@@ -1002,6 +1033,8 @@ public:
             json_boolean(ignoreHwMemoryLimits));
         json_object_set_new(root, "allowExperimentalCircuits",
             json_boolean(allowExperimentalCircuits));
+        json_object_set_new(root, "showRegisterLabels",
+            json_boolean(registerLabels.show));
         json_object_set_new(root, "circuitState", snapshotToJson(lastSnapshot));
         return root;
     }
@@ -1027,6 +1060,8 @@ public:
         // on Rack reopen instead of failing with the gate error (#12).
         if (json_t* j = json_object_get(root, "allowExperimentalCircuits"))
             allowExperimentalCircuits = json_boolean_value(j);
+        if (json_t* j = json_object_get(root, "showRegisterLabels"))
+            registerLabels.show = json_boolean_value(j);
         // Load the saved circuit state BEFORE the patch load below, so that
         // loadPatchFile (with no live engine yet) restores it into the fresh
         // engine — the Rack-reopen mirror of the hot-reload transfer.
@@ -1058,6 +1093,76 @@ struct DroidMasterBaseWidget : ModuleWidget {
     // ISSUE-5: while the chainOk debounce is holding a still-invalid chain, keep
     // revalidating every frame so the tolerance window advances in real time.
     bool chainRevalPending = false;
+    // Register-label distribution (issue #26): what we last published, so the
+    // string work only runs when the patch or the physical chain changed.
+    uint32_t lastLabelGen = 0;
+    std::vector<Module*> lastLabelChain;
+    bool labelsPublished = false;
+
+    // Hand the patch's register labels to this master and to every module on
+    // its chain, numbering them exactly as the chain protocol does. UI thread:
+    // these end up in std::strings that Rack's tooltips read while drawing.
+    void updateRegisterLabels(DroidMasterBase* m) {
+        std::vector<Module*> chain;
+        for (Module* mod = m->rightExpander.module;
+             mod && ChainModule::isChainRightNeighbor(mod);
+             mod = mod->rightExpander.module)
+            chain.push_back(mod);
+        // The "Show register labels" toggle belongs to the SYSTEM, not to one
+        // module: a master and its chain are one instrument. The master owns
+        // the flag (and persists it); every module on the chain mirrors it.
+        // Re-pushed every frame — it is a handful of bool writes, and it means
+        // the toggle takes effect without waiting for a patch or chain change.
+        for (Module* mod : chain)
+            static_cast<ChainModule*>(mod)->registerLabels.show =
+                m->registerLabels.show;
+
+        uint32_t gen = m->labelGen.load(std::memory_order_acquire);
+        if (labelsPublished && gen == lastLabelGen && chain == lastLabelChain)
+            return;
+        lastLabelGen = gen;
+        lastLabelChain = chain;
+        labelsPublished = true;
+
+        droid::PatchLabels labels;
+        bool havePatch = false;
+        {
+            std::lock_guard<std::mutex> lock(m->engineMutex);
+            labels = m->sharedLabels;
+            havePatch = !m->patchPath.empty();
+        }
+        m->registerLabels.patch = labels;
+        m->registerLabels.active = havePatch;
+        // A MASTER18's own G1..G4 are written "G1.n": the Forge numbers gate
+        // registers per expander even for the master's built-in gates, and
+        // rewrites a bare "G3" to G1.3 (modules/module.cpp:207). Harmless on
+        // the MASTER, which has no gate jacks.
+        m->registerLabels.gateG8 = 1;
+        m->applyOwnLabels();
+
+        unsigned controller = 0, g8 = 0;
+        for (Module* mod : chain) {
+            // isChainRightNeighbor() already established the type.
+            auto* cm = static_cast<ChainModule*>(mod);
+            auto& ml = cm->registerLabels;
+            ml.patch = labels;
+            ml.active = havePatch;
+            ml.controller = ml.gateG8 = ml.gateOffset = ml.rOffset = 0;
+            droid::chain::ModelId id = cm->chainModel();
+            if (droid::chain::isControllerModel(id)) {
+                ml.controller = ++controller;
+            } else if (id == droid::chain::MG8) {
+                // Gates are G<n>.1-8; the RGB LED banks continue after the
+                // master's own R1..R16, eight per G8.
+                ml.gateG8 = ++g8;
+                ml.rOffset = 16 + 8 * (g8 - 1);
+            } else if (id == droid::chain::MX7) {
+                ml.gateOffset = 8;    // the X7's gates are G9..G12
+                ml.rOffset = 48;      // and its LEDs R49..R56
+            }
+            cm->applyOwnLabels();
+        }
+    }
 
     void step() override {
         ModuleWidget::step();
@@ -1067,6 +1172,7 @@ struct DroidMasterBaseWidget : ModuleWidget {
         if (auto* b = uat::Bridge::instance()) b->ensureWidget();
         DroidMasterBase* m = getModule<DroidMasterBase>();
         if (!m) return;                            // no module in browser preview
+        updateRegisterLabels(m);
         // UI-thread reload for a pending sample-rate change. If no widget ever
         // pumps step() (rare headless/library use), the flag stays set and the
         // engine keeps its previous rate until a frame runs — acceptable.
@@ -1176,6 +1282,11 @@ struct DroidMasterBaseWidget : ModuleWidget {
         menu->addChild(createMenuItem("Reload patch", "", [m, patchPath]() {
             if (!patchPath.empty()) m->loadPatchFile(patchPath);
         }, patchPath.empty()));
+        // Mirrors the Forge's View -> Show register labels (F3), but per module
+        // rather than per application, since a Rack patch can hold several
+        // independent DROID systems.
+        menu->addChild(createBoolPtrMenuItem("Show register labels", "",
+                                             &m->registerLabels.show));
         menu->addChild(createIndexSubmenuItem("Tick rate",
             {string::f("Adaptive (currently %.1f kHz)", m->adaptiveHz / 1000.f),
              "2 kHz", "4 kHz", "6 kHz (hardware-typical)", "8 kHz"},

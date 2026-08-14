@@ -107,3 +107,73 @@ TEST(layout_interactive_minimum_size) {
         }
     }
 }
+
+// ---- register-label chips (issue #26) -----------------------------------
+
+TEST(layout_label_rect_matches_forge_formula) {
+    using namespace droid::layout;
+    const ModuleLayout* m = find("master");
+    CHECK(m != nullptr);
+    if (!m) return;
+    // Forge paintRegisterLabel: the chip is labelWidth wide and LABEL_HEIGHT
+    // tall, centred on the control and offset from the BOTTOM of the control's
+    // drawn rect — which is 2/3 of the nominal register size (registerRect).
+    Rect r = labelRect(*m, 'O', 1);
+    Pos c = m->pos('O', 1);
+    float drawn = m->size('O', 1) * 2.f / 3.f;      // aspect 0 for a jack: square
+    CHECK_NEAR(r.w, 1.93f, 1e-4f);                  // RACV_JACK_LABEL_WIDTH
+    CHECK_NEAR(r.h, 0.70f, 1e-4f);                  // RACV_LABEL_HEIGHT
+    CHECK_NEAR(r.x, c.x - 1.93f / 2.f, 1e-4f);      // centred on the jack
+    CHECK_NEAR(r.y, c.y + drawn / 2.f - 2.45f, 1e-4f);
+    // Negative labelDistance puts the chip ABOVE the jack on every module.
+    CHECK(r.y + r.h < c.y);
+}
+
+TEST(layout_label_rect_uses_aspect_for_non_square_controls) {
+    using namespace droid::layout;
+    // The M4's faders are tall (rectAspect 2.2), so their chip clears a much
+    // taller control than a square one would give.
+    const ModuleLayout* m4 = find("m4");
+    CHECK(m4 != nullptr);
+    if (!m4) return;
+    Rect r = labelRect(*m4, 'P', 1);
+    Pos c = m4->pos('P', 1);
+    float drawn = m4->size('P', 1) * 2.f / 3.f;
+    CHECK_NEAR(r.y, c.y + drawn * 2.2f / 2.f - 15.34f, 1e-4f);
+}
+
+TEST(layout_label_rect_honours_explicit_positions) {
+    using namespace droid::layout;
+    // The P8S8 is the only module with labelPosition overrides: its slider
+    // chips are staggered, and an explicit position is absolute, not an offset.
+    const ModuleLayout* p = find("p8s8");
+    CHECK(p != nullptr);
+    if (!p) return;
+    Rect r1 = labelRect(*p, 'P', 1);
+    CHECK_NEAR(r1.x, 0.05f, 1e-4f);
+    CHECK_NEAR(r1.y, 3.90f, 1e-4f);
+    Rect r5 = labelRect(*p, 'P', 5);          // second row: +7.80 HP
+    CHECK_NEAR(r5.y, 3.90f + 7.80f, 1e-4f);
+    // Its switches have no explicit position, so they fall back to the offset.
+    Rect s1 = labelRect(*p, 'S', 1);
+    CHECK_NEAR(s1.x, p->pos('S', 1).x - 2.00f / 2.f, 1e-4f);
+}
+
+TEST(layout_label_chips_stay_on_the_panel) {
+    using namespace droid::layout;
+    // A chip that fell off the panel edge would be clipped away by Rack. The
+    // Forge's own numbers keep every chip inside its module, so a transcription
+    // slip that pushed one out of bounds is a bug worth catching here.
+    const float panelHP = kPanelMm / kHPmm;
+    for (const auto& m : kModules) {
+        for (char t : {'I','N','O','G','B','L','P','E','S','R','X'}) {
+            for (unsigned n = 1; n <= m.num(t); n++) {
+                Rect r = labelRect(m, t, n);
+                CHECK(r.x >= -0.5f);
+                CHECK(r.x + r.w <= m.hp + 0.5f);
+                CHECK(r.y >= 0.f);
+                CHECK(r.y + r.h <= panelHP);
+            }
+        }
+    }
+}

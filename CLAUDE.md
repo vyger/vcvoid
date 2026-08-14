@@ -104,6 +104,10 @@ cd tools/droidcheck
 - `make gen` — regenerate `engine/gen/` from the Forge's droidfirmware.json
   (needs `tools/droidcheck/vendor/`, i.e. run `tools/droidcheck/build.sh` once).
 - `make crosscheck` — validate golden patches against droidcheck (Forge parity).
+- `make labelcheck` — register-label extraction parity: our
+  `engine/src/labels.cpp` vs the Forge's own parser (`droidcheck --labels`),
+  over every patch in `patches/`. Part of `make test`; skips itself when
+  droidcheck is unbuilt.
 
 ### Plugin identity: vcvoid
 
@@ -125,6 +129,20 @@ data. `make artcheck` (needs `opencv-python`) validates those positions against
 the faceplate art via Hough-circle/line detection. `tools/panelshots.sh`
 renders per-module screenshots through Rack for regression diffing —
 `tools/check_panelshots.py` compares them against `tests/panel-baseline/`.
+`tools/labelpreview.py <module> <patch.ini>` renders a panel WITH its register
+labels as an SVG at Rack's 100% zoom, straight from `Layout.hpp` + the label
+extractor, so chip geometry can be eyeballed without launching Rack.
+
+### Register labels
+
+A patch names its jacks and controls with header comments — `# O1: [CLK] master
+clock` — which the Forge paints on the module faces and vcvoid shows as Rack
+tooltips plus the same chips (see issue #26). Labels are recognised ONLY in the
+patch header (after the title comment, before the first circuit or `# -----`
+section separator), matching the Forge's parser exactly; a patch that opens
+with a separator gets no labels in either app. `[SHORT]` is what the chip
+shows, so patches meant to be read on-panel should carry one — without it the
+chip falls back to the label text, ellipsized to the ~9 characters that fit.
 
 ### Key concepts
 

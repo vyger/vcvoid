@@ -1,6 +1,7 @@
 #pragma once
 #include "plugin.hpp"
 #include "src/chain.hpp"
+#include "RegisterLabels.hpp"   // issue #26
 #include <midi.hpp>
 #include <string>
 #include <vector>
@@ -30,6 +31,32 @@ struct ChainModule : Module {
 
     virtual void fillUpstream(droid::chain::UpstreamBlock& b) = 0;
     virtual void applyDownstream(const droid::chain::DownstreamBlock& b, float sampleTime) = 0;
+
+    // Which DROID module this is. Stamped into every upstream block by relay(),
+    // so fillUpstream() never sets modelId itself and the two can't disagree;
+    // the master's widget also reads it to number the chain when distributing
+    // register labels (issue #26).
+    virtual droid::chain::ModelId chainModel() const = 0;
+
+    // ---- register labels (issue #26) ------------------------------------
+    // UI-thread only. The master's widget walks the chain, fills this in with
+    // the patch's labels plus THIS module's controller/expander number, and
+    // calls applyOwnLabels(); the panel overlay draws from it. `show` is a
+    // MIRROR of the master's flag, re-pushed every frame — a DROID system is
+    // one instrument, so its labels turn on and off together. Do not persist
+    // it here; the master owns it.
+    vcvoid::labels::ModuleLabels registerLabels;
+    virtual void applyOwnLabels() {}
+
+    // True when a master sits at the head of the chain to my left. A module
+    // dragged off the chain keeps whatever labels it was given until it notices
+    // this, so its widget clears them (see VcvoidModuleWidget::step).
+    bool onMasterChain();
+
+    // The label state of the master at the head of my chain, or null when I am
+    // not on one. This is where the "Show register labels" toggle lives, so
+    // right-clicking any module of a system flips the whole system.
+    vcvoid::labels::ModuleLabels* chainMasterLabels();
 
   protected:
     // Packs `n` momentary-button params (starting at `firstParamId`) into a
@@ -83,6 +110,7 @@ struct ChainModule : Module {
         }
         UpstreamBlock mine;
         fillUpstream(mine);
+        mine.modelId = chainModel();
         if (leftExpander.module && isChainLeftNeighbor(leftExpander.module)) {
             // Participants allocate this producer in their constructors; the null
             // guard protects against a future left neighbour that does not.

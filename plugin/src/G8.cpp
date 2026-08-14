@@ -21,10 +21,15 @@ struct DroidG8 : ChainModule {
         for (int i = 0; i < 8; i++) {
             configInput(GATE_INPUTS + i, string::f("G.%d gate in", i + 1));
             configOutput(GATE_OUTPUTS + i, string::f("G.%d gate out", i + 1));
+            // A LightInfo is what gives an LED a tooltip at all (Module.hpp:
+            // "LightInfos are initialized to null unless configLight() is
+            // called"); the patch's R-register label replaces this name.
+            configLight(GATE_LIGHTS + i * 3, string::f("Gate %d", i + 1));
         }
     }
+    droid::chain::ModelId chainModel() const override { return droid::chain::MG8; }
+
     void fillUpstream(droid::chain::UpstreamBlock& b) override {
-        b.modelId = droid::chain::MG8;
         for (int i = 0; i < 8; i++)   // hardware input threshold: >= 0.75 V reads 1
             b.gates[i] = inputs[GATE_INPUTS + i].getVoltage() >= 0.75f ? 1.f : 0.f;
     }
@@ -48,6 +53,17 @@ struct DroidG8 : ChainModule {
             lights[base + 2].setBrightnessSmooth(0.f, sampleTime);
         }
     }
+    void applyOwnLabels() override {
+        using namespace vcvoid::labels;
+        // Each physical jack is an input port AND an output port at the same
+        // spot, so both carry the gate's label.
+        applyPortBank(this, Port::INPUT, GATE_INPUTS, 8, 'G', registerLabels,
+                      "G.%d gate in");
+        applyPortBank(this, Port::OUTPUT, GATE_OUTPUTS, 8, 'G', registerLabels,
+                      "G.%d gate out");
+        applyLightBank(this, GATE_LIGHTS, 8, 3, 'R', registerLabels, "Gate %d");
+    }
+
     void process(const ProcessArgs& args) override { relay(args.sampleTime); }
 };
 
@@ -93,6 +109,8 @@ struct DroidG8Widget : VcvoidModuleWidget {
             l->box.pos = A.vec(L->pos('R', i + 1)).minus(l->box.size.div(2));
             addChild(l);
         }
+        dw::addLabelOverlay(this, "g8", A,
+                            module ? &module->registerLabels : nullptr);
     }
 };
 

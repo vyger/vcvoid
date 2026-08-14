@@ -17,14 +17,21 @@ struct DroidP2B8 : ChainModule {
             configButton(BUTTON_PARAMS + i, string::f("B%d", i + 1));
     }
 
+    droid::chain::ModelId chainModel() const override { return droid::chain::MP2B8; }
+
     void fillUpstream(droid::chain::UpstreamBlock& b) override {
-        b.modelId = droid::chain::MP2B8;
         for (int i = 0; i < 2; i++) b.pots[i] = params[POT_PARAMS + i].getValue();
         b.buttons = packButtonParams(BUTTON_PARAMS, 8);
     }
 
     void applyDownstream(const droid::chain::DownstreamBlock& b, float sampleTime) override {
         applyLedBank(BUTTON_LIGHTS, 8, b.leds, sampleTime);
+    }
+
+    void applyOwnLabels() override {
+        using namespace vcvoid::labels;
+        applyParamBank(this, POT_PARAMS, 2, 'P', registerLabels, "P%d");
+        applyParamBank(this, BUTTON_PARAMS, 8, 'B', registerLabels, "B%d", true);
     }
 
     void process(const ProcessArgs& args) override { relay(args.sampleTime); }
@@ -49,6 +56,8 @@ struct DroidP2B8Widget : VcvoidModuleWidget {
             b->lightId = DroidP2B8::BUTTON_LIGHTS + i;
             addParam(b);
         }
+        dw::addLabelOverlay(this, "p2b8", A,
+                            module ? &module->registerLabels : nullptr);
     }
 };
 

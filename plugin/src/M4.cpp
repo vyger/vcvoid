@@ -52,8 +52,9 @@ struct DroidM4 : ChainModule {
         return params[TOUCH_PARAMS + i].getValue() > 0.5f;
     }
 
+    droid::chain::ModelId chainModel() const override { return droid::chain::MM4; }
+
     void fillUpstream(droid::chain::UpstreamBlock& b) override {
-        b.modelId = droid::chain::MM4;
         for (int i = 0; i < 4; i++) b.faderPos[i] = params[FADER_PARAMS + i].getValue();
         b.faderTouch = 0;
         b.plateTouch = 0;
@@ -70,6 +71,13 @@ struct DroidM4 : ChainModule {
             ledB[i]        = b.faderLed[i];
             ledC[i]        = b.faderLedColor[i];
         }
+    }
+
+    void applyOwnLabels() override {
+        using namespace vcvoid::labels;
+        applyParamBank(this, FADER_PARAMS, 4, 'P', registerLabels, "Fader %d");
+        applyParamBank(this, TOUCH_PARAMS, 4, 'B', registerLabels, "Touch plate %d",
+                       true);
     }
 
     void process(const ProcessArgs& args) override {
@@ -246,6 +254,8 @@ struct DroidM4Widget : VcvoidModuleWidget {
                 dw::hpVec(L->pos('L', i + 1)), module,
                 DroidM4::TOUCH_PARAMS + i, DroidM4::TOUCH_LIGHTS + i * 3));
         }
+        dw::addLabelOverlay(this, "m4", dw::plainArtMap(),
+                            module ? &module->registerLabels : nullptr);
     }
 };
 

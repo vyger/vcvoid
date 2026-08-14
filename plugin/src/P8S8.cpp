@@ -21,14 +21,23 @@ struct DroidP8S8 : ChainModule {
                          {"down", "center", "up"});
     }
 
+    droid::chain::ModelId chainModel() const override { return droid::chain::MP8S8; }
+
     void fillUpstream(droid::chain::UpstreamBlock& b) override {
-        b.modelId = droid::chain::MP8S8;
         for (int i = 0; i < 8; i++) b.pots[i] = params[SLIDER_PARAMS + i].getValue();
         for (int i = 0; i < 8; i++) b.switches[i] = params[TOGGLE_PARAMS + i].getValue();
     }
 
     void applyDownstream(const droid::chain::DownstreamBlock& b, float sampleTime) override {
         applyLedBank(SLIDER_LIGHTS, 8, b.leds, sampleTime);
+    }
+
+    void applyOwnLabels() override {
+        using namespace vcvoid::labels;
+        // The sliders are pots whose LEDs sit inside them, so they take the
+        // L-register label too (same reasoning as a button's LED).
+        applyParamBank(this, SLIDER_PARAMS, 8, 'P', registerLabels, "P%d", true);
+        applyParamBank(this, TOGGLE_PARAMS, 8, 'S', registerLabels, "S%d");
     }
 
     void process(const ProcessArgs& args) override { relay(args.sampleTime); }
@@ -74,6 +83,8 @@ struct DroidP8S8Widget : VcvoidModuleWidget {
             t->box.pos = center.minus(t->box.size.div(2));
             addParam(t);
         }
+        dw::addLabelOverlay(this, "p8s8", A,
+                            module ? &module->registerLabels : nullptr);
     }
 };
 

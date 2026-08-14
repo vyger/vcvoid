@@ -51,8 +51,9 @@ struct DroidDB8E : ChainModule {
             configButton(BUTTON_PARAMS + i, string::f("B%d", i + 1));
     }
 
+    droid::chain::ModelId chainModel() const override { return droid::chain::MDB8E; }
+
     void fillUpstream(droid::chain::UpstreamBlock& b) override {
-        b.modelId = droid::chain::MDB8E;
         b.detentCount[0] = detent;
         b.buttons = packButtonParams(BUTTON_PARAMS, 8);   // 8 face buttons -> bits 0-7
         if (gest.level()) b.buttons |= (1u << 8);         // encoder push -> bit 8 (Task 2 contract)
@@ -79,6 +80,14 @@ struct DroidDB8E : ChainModule {
         // an `encoder` parked at output 0 with no header is real content that
         // the old "any field is non-empty" heuristic read as an idle screen.
         dispActive = b.modelId == droid::chain::MDB8E && b.dispActive;
+    }
+
+    void applyOwnLabels() override {
+        // B9 (the encoder's push) and the encoder itself are custom widgets with
+        // no ParamQuantity, so only the eight face buttons take tooltips; their
+        // labels still draw as panel chips.
+        vcvoid::labels::applyParamBank(this, BUTTON_PARAMS, 8, 'B', registerLabels,
+                                       "B%d", true);
     }
 
     void process(const ProcessArgs& args) override {
@@ -260,6 +269,8 @@ struct DroidDB8EWidget : VcvoidModuleWidget {
             b->lightId = DroidDB8E::BUTTON_LIGHTS + i;
             addParam(b);
         }
+        dw::addLabelOverlay(this, "db8e", A,
+                            module ? &module->registerLabels : nullptr);
     }
 };
 
