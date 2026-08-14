@@ -13,8 +13,14 @@ int main() {
         for (char t : types)
             for (unsigned n = 1; n <= m.num(t); n++) {
                 auto p = m.pos(t, n);
-                std::printf("%s{\"type\":\"%c\",\"n\":%u,\"x\":%g,\"y\":%g,\"size\":%g}",
-                            firstC ? "" : ",", t, n, p.x, p.y, m.size(t, n));
+                // The label chip too (issue #26), so tools/labelpreview.py can
+                // render the panel exactly as the plugin draws it without
+                // reimplementing the geometry.
+                auto r = droid::layout::labelRect(m, t, n);
+                std::printf("%s{\"type\":\"%c\",\"n\":%u,\"x\":%g,\"y\":%g,\"size\":%g,"
+                            "\"label\":{\"x\":%g,\"y\":%g,\"w\":%g,\"h\":%g}}",
+                            firstC ? "" : ",", t, n, p.x, p.y, m.size(t, n),
+                            r.x, r.y, r.w, r.h);
                 firstC = false;
             }
         std::printf("]}");
