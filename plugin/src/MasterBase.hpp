@@ -67,6 +67,10 @@ struct DroidMasterBase : Module {
     int divider = 8;
     float effectiveRate = 6000.f;   // sampleRate / divider; the rate the engine runs at
     int frameCounter = 0;
+    // Relay clock (issue #32): bumped on every tick frame we write downstream, so
+    // the controller chain can tell "the master produced something new" from "the
+    // same frame again" without knowing our tick rate. Audio thread only.
+    uint32_t chainTickSeq = 0;
     // Set on the engine thread by onSampleRateChange; consumed by the widget's
     // step() on the UI thread, which is the only thread allowed to reload.
     std::atomic<bool> timingDirty{false};
@@ -807,6 +811,7 @@ public:
                 ? (DownstreamMessage*) rightExpander.module->leftExpander.producerMessage
                 : nullptr) {
             down->count = 0;
+            down->tickSeq = ++chainTickSeq;   // relay clock: this frame is new (issue #32)
             uint8_t c2 = 0;
             uint8_t g8d = 0;
             // Same running globals as the upstream loop (chain order), advanced on the

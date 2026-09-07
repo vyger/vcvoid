@@ -31,6 +31,7 @@ void prependUpstream(const UpstreamBlock& mine, const UpstreamMessage& fromRight
 
 void shiftDownstream(const DownstreamMessage& fromLeft, DownstreamBlock& mine,
                      DownstreamMessage* out) {
+    if (out) out->tickSeq = fromLeft.tickSeq;                        // relay clock travels with the data
     if (fromLeft.count == 0) { mine = DownstreamBlock{}; if (out) out->count = 0; return; }
     mine = fromLeft.block[0];
     if (!out) return;                                               // chain ends here: no tail to build

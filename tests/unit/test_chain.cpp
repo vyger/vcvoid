@@ -73,6 +73,21 @@ TEST(chain_shift_overflow_clamps) {
     CHECK(rest.count == kMaxChainModules - 1);       // clamped, no over-read/write of block[]
 }
 
+// ---- relay clock (issue #32) -----------------------------------------
+// tickSeq travels rightward with the LED data: it is what lets a module skip the
+// multi-KB block copies on a frame where nothing can have changed.
+TEST(chain_relay_clock_carriers) {
+    DownstreamMessage d; d.count = 2; d.tickSeq = 77;
+    d.block[0].modelId = MP2B8; d.block[1].modelId = MB32;
+    DownstreamBlock mine; DownstreamMessage rest;
+    shiftDownstream(d, mine, rest);
+    CHECK(rest.tickSeq == 77);               // the tick reaches the next hop
+
+    DownstreamMessage starved; starved.tickSeq = 78;
+    shiftDownstream(starved, mine, rest);
+    CHECK(rest.tickSeq == 78);               // ... even when there is no block to pass on
+}
+
 TEST(chain_controller_models_skip_g8) {
     UpstreamMessage m; m.count = 3;
     m.block[0].modelId = MG8;

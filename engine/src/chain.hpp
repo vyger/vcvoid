@@ -189,8 +189,22 @@ struct DownstreamBlock {                  // one module's LED/gate-out state, fr
     uint8_t dispActive = 0;
     MidiFrame midi;                       // M5: master -> adapter MIDI (X7 block only)
 };
+// `tickSeq` is the RELAY CLOCK: it lets a module skip the multi-KB block copies
+// on a frame where nothing can have changed, without any module needing to know
+// the master's tick rate (issue #32). It is relay bookkeeping, not patch data —
+// the engine never reads it.
+//
+//   tickSeq  monotonic, bumped by the master on every tick frame (the only
+//            frames it writes downstream at all) and carried rightward by
+//            shiftDownstream. LED/gate state cannot change between ticks by
+//            construction, so an unchanged tickSeq means "no work to do". This
+//            is the same dedupe the X7 already runs on MidiFrame::seq, lifted
+//            to the message so every model benefits.
+// Propagating the tick rather than the rate is what keeps this safe: there is
+// no phase to agree on, nothing to recompute when the divider moves or the
+// sample rate changes, and a hot-plugged module simply joins on the next tick.
 struct UpstreamMessage  { uint8_t count = 0; UpstreamBlock  block[kMaxChainModules]; };
-struct DownstreamMessage{ uint8_t count = 0; DownstreamBlock block[kMaxChainModules]; };
+struct DownstreamMessage{ uint8_t count = 0; uint32_t tickSeq = 0; DownstreamBlock block[kMaxChainModules]; };
 
 // Both relay helpers copy only block[0..count-1] and clamp an untrusted wire
 // count themselves, so a caller may pass a neighbour's live buffer directly
@@ -199,6 +213,8 @@ struct DownstreamMessage{ uint8_t count = 0; DownstreamBlock block[kMaxChainModu
 // thread (issue #32). Precondition unchanged: `out` must not alias the input.
 void prependUpstream(const UpstreamBlock& mine, const UpstreamMessage& fromRight,
                      UpstreamMessage& out);
+// shiftDownstream carries the relay clock with the data: `fromLeft.tickSeq`
+// into `out->tickSeq`.
 // `out` may be null when the chain ends to my right: block[0] is still
 // extracted into `mine`, but the relay tail is not built at all.
 void shiftDownstream(const DownstreamMessage& fromLeft, DownstreamBlock& mine,

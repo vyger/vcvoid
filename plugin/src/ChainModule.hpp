@@ -3,6 +3,7 @@
 #include "src/chain.hpp"
 #include "RegisterLabels.hpp"   // issue #26
 #include <midi.hpp>
+#include <cstring>
 #include <string>
 #include <vector>
 
@@ -95,6 +96,17 @@ struct ChainModule : Module {
     static bool isChainLeftNeighbor(Module* m);   // valid as MY left neighbour: master or a controller
     static bool isChainRightNeighbor(Module* m);  // valid as MY right neighbour: controllers only, never the master
 
+  private:
+    // ---- relay clock state (issue #32) ---------------------------------
+    // Audio thread only. The relay used to copy several KB in each direction on
+    // every audio frame; these let it skip a frame on which nothing can have
+    // changed. See the UpstreamMessage/DownstreamMessage comments in chain.hpp
+    // for the protocol side.
+    droid::chain::DownstreamBlock forMe_{};   // last block the master addressed to me
+    uint32_t lastTickSeq_ = 0;                // master tick behind forMe_
+    bool attached_ = false;                   // a valid left neighbour last frame
+
+  public:
     void relay(float sampleTime) {
         using namespace droid::chain;
         Module* left  = leftExpander.module;
@@ -103,47 +115,68 @@ struct ChainModule : Module {
         const bool haveRight = right && isChainRightNeighbor(right);
 
         // ---- upstream: my controls + everything from my right, to my left --
+        // Prepend reads STRAIGHT from my consumer into the neighbour's producer: staging through a local
+        // UpstreamMessage would value-initialize all 21 blocks (5.7 KB) every
+        // frame, and prependUpstream already copies only block[0..count-1] and
+        // clamps an untrusted count itself. `mine` and my consumer are distinct
+        // storage from the neighbour's producer, so the no-alias precondition on
+        // (in, out) holds.
+        static const UpstreamMessage kEmptyChain;   // count 0: chain ends to my right
+        const UpstreamMessage& src = haveRight
+            ? *(const UpstreamMessage*) rightExpander.consumerMessage
+            : kEmptyChain;
+
         UpstreamBlock mine;
+        std::memset(&mine, 0, sizeof mine);   // padding included: compared with memcmp below
         fillUpstream(mine);
         mine.modelId = chainModel();
+
         if (haveLeft) {
             // Participants allocate this producer in their constructors; the null
             // guard protects against a future left neighbour that does not.
             if (auto* dst = (UpstreamMessage*) left->rightExpander.producerMessage) {
-                // Prepend STRAIGHT from my consumer into the neighbour's producer.
-                // Staging through a local UpstreamMessage would value-initialize
-                // all 21 blocks (5.7 KB) every audio frame; prependUpstream copies
-                // only block[0..count-1] and clamps an untrusted count itself, so
-                // the temporary bought nothing (issue #32). `mine` and my consumer
-                // are distinct storage from the neighbour's producer, so
-                // prependUpstream's no-alias precondition on (in, out) holds.
-                static const UpstreamMessage kEmptyChain;   // count 0: chain ends to my right
-                prependUpstream(mine,
-                                haveRight ? *(const UpstreamMessage*) rightExpander.consumerMessage
-                                          : kEmptyChain,
-                                *dst);
+                prependUpstream(mine, src, *dst);
                 left->rightExpander.requestMessageFlip();
             }
         }
+
         // ---- downstream: my LEDs from block[0], relay the rest rightward ---
+        // Skipping a write is safe only because every write is a COMPLETE
+        // snapshot: Rack's double buffer leaves the consumer holding whatever was
+        // last flipped, which stays correct precisely as long as no write is a
+        // delta. Do not introduce partial writes here.
         // Participants allocate this producer in their constructors; the null
         // guard protects against a future right neighbour that does not.
         DownstreamMessage* dst = haveRight
             ? (DownstreamMessage*) right->leftExpander.producerMessage
             : nullptr;
-        DownstreamBlock forMe;
         if (haveLeft) {
-            // Shift STRAIGHT into the neighbour's producer — again distinct
-            // storage from my own consumer. A null `dst` means the chain ends
-            // here, and shiftDownstream then skips building the tail entirely
-            // rather than filling an 11 KB local we would throw away.
-            shiftDownstream(*(const DownstreamMessage*) leftExpander.consumerMessage,
-                            forMe, dst);
-        } else {
-            forMe = DownstreamBlock{};   // left neighbour invalid: dark LEDs, don't freeze at last state
-            if (dst) dst->count = 0;     // ... and the same darkness propagates rightward
+            const auto& in = *(const DownstreamMessage*) leftExpander.consumerMessage;
+            if (in.tickSeq != lastTickSeq_) {   // one word decides the per-block work
+                lastTickSeq_ = in.tickSeq;
+                // Shift STRAIGHT into the neighbour's producer — again distinct
+                // storage from my own consumer. A null `dst` means the chain ends
+                // here, and shiftDownstream then skips building the tail entirely.
+                shiftDownstream(in, forMe_, dst);
+                if (dst) right->leftExpander.requestMessageFlip();
+            }
+        } else if (attached_) {
+            // Just fell off the chain: darken myself and everyone to my right
+            // once, rather than every frame.
+            forMe_ = DownstreamBlock{};
+            lastTickSeq_ = 0;
+            if (dst) {
+                dst->count = 0;
+                dst->tickSeq = 0;
+                right->leftExpander.requestMessageFlip();
+            }
         }
-        applyDownstream(forMe, sampleTime);
-        if (dst) right->leftExpander.requestMessageFlip();
+        attached_ = haveLeft;
+        // Applied EVERY frame even though forMe_ only changes on a tick:
+        // setBrightnessSmooth is a per-step exponential, so a fade needs the
+        // intermediate calls to actually land. It measures at ~11 ns for the
+        // widest model (B32, 32 LEDs) — the block copies above were the cost,
+        // not this.
+        applyDownstream(forMe_, sampleTime);
     }
 };
