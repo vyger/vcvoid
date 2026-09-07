@@ -97,46 +97,53 @@ struct ChainModule : Module {
 
     void relay(float sampleTime) {
         using namespace droid::chain;
+        Module* left  = leftExpander.module;
+        Module* right = rightExpander.module;
+        const bool haveLeft  = left  && isChainLeftNeighbor(left);
+        const bool haveRight = right && isChainRightNeighbor(right);
+
         // ---- upstream: my controls + everything from my right, to my left --
-        UpstreamMessage incoming;                    // zero-count if chain ends here
-        if (rightExpander.module && isChainRightNeighbor(rightExpander.module)) {
-            // Count-bounded copy: only the live blocks (not all 21) move per
-            // frame. `incoming` is default-constructed (count=0, tail zeroed) and
-            // prependUpstream reads only block[0..count-1], so this is behavior-
-            // preserving while avoiding a ~2.7 KB full-struct copy every frame.
-            const auto* src = (const UpstreamMessage*) rightExpander.consumerMessage;
-            incoming.count = std::min<uint8_t>(src->count, kMaxChainModules);
-            for (uint8_t k = 0; k < incoming.count; k++) incoming.block[k] = src->block[k];
-        }
         UpstreamBlock mine;
         fillUpstream(mine);
         mine.modelId = chainModel();
-        if (leftExpander.module && isChainLeftNeighbor(leftExpander.module)) {
+        if (haveLeft) {
             // Participants allocate this producer in their constructors; the null
             // guard protects against a future left neighbour that does not.
-            if (auto* dst = (UpstreamMessage*) leftExpander.module->rightExpander.producerMessage) {
-                // `mine`/`incoming` are distinct storage from `*dst` (own stack + our
-                // consumer vs the neighbour's producer), so prependUpstream's no-alias
-                // precondition on (in, out) holds.
-                prependUpstream(mine, incoming, *dst);
-                leftExpander.module->rightExpander.requestMessageFlip();
+            if (auto* dst = (UpstreamMessage*) left->rightExpander.producerMessage) {
+                // Prepend STRAIGHT from my consumer into the neighbour's producer.
+                // Staging through a local UpstreamMessage would value-initialize
+                // all 21 blocks (5.7 KB) every audio frame; prependUpstream copies
+                // only block[0..count-1] and clamps an untrusted count itself, so
+                // the temporary bought nothing (issue #32). `mine` and my consumer
+                // are distinct storage from the neighbour's producer, so
+                // prependUpstream's no-alias precondition on (in, out) holds.
+                static const UpstreamMessage kEmptyChain;   // count 0: chain ends to my right
+                prependUpstream(mine,
+                                haveRight ? *(const UpstreamMessage*) rightExpander.consumerMessage
+                                          : kEmptyChain,
+                                *dst);
+                left->rightExpander.requestMessageFlip();
             }
         }
         // ---- downstream: my LEDs from block[0], relay the rest rightward ---
+        // Participants allocate this producer in their constructors; the null
+        // guard protects against a future right neighbour that does not.
+        DownstreamMessage* dst = haveRight
+            ? (DownstreamMessage*) right->leftExpander.producerMessage
+            : nullptr;
         DownstreamBlock forMe;
-        DownstreamMessage rest;
-        if (leftExpander.module && isChainLeftNeighbor(leftExpander.module))
-            shiftDownstream(*(DownstreamMessage*) leftExpander.consumerMessage, forMe, rest);
-        else
+        if (haveLeft) {
+            // Shift STRAIGHT into the neighbour's producer — again distinct
+            // storage from my own consumer. A null `dst` means the chain ends
+            // here, and shiftDownstream then skips building the tail entirely
+            // rather than filling an 11 KB local we would throw away.
+            shiftDownstream(*(const DownstreamMessage*) leftExpander.consumerMessage,
+                            forMe, dst);
+        } else {
             forMe = DownstreamBlock{};   // left neighbour invalid: dark LEDs, don't freeze at last state
-        applyDownstream(forMe, sampleTime);
-        if (rightExpander.module && isChainRightNeighbor(rightExpander.module)) {
-            // Participants allocate this producer in their constructors; the null
-            // guard protects against a future right neighbour that does not.
-            if (auto* dst = (DownstreamMessage*) rightExpander.module->leftExpander.producerMessage) {
-                *dst = rest;
-                rightExpander.module->leftExpander.requestMessageFlip();
-            }
+            if (dst) dst->count = 0;     // ... and the same darkness propagates rightward
         }
+        applyDownstream(forMe, sampleTime);
+        if (dst) right->leftExpander.requestMessageFlip();
     }
 };

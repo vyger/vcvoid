@@ -38,6 +38,23 @@ TEST(chain_prepend_shift) {
     CHECK(rest.count == 0);
 }
 
+// The relay's end-of-chain case (issue #32): a module with no right neighbour
+// passes out=null, so the 11 KB tail is never built. block[0] must still reach
+// `mine` exactly as it does when a tail is requested.
+TEST(chain_shift_null_out) {
+    DownstreamMessage d; d.count = 2;
+    d.block[0].modelId = MP2B8; d.block[0].leds[3] = 0.75f;
+    d.block[1].modelId = MB32;
+    DownstreamBlock mine;
+    shiftDownstream(d, mine, nullptr);
+    CHECK(mine.modelId == MP2B8);
+    CHECK(std::fabs(mine.leds[3] - 0.75f) < 1e-6f);
+
+    DownstreamMessage empty;                 // starved chain, still no tail wanted
+    shiftDownstream(empty, mine, nullptr);
+    CHECK(mine.modelId == None);             // cleared block, not frozen at the last state
+}
+
 TEST(chain_overflow_clamps) {
     UpstreamMessage m; m.count = kMaxChainModules;   // already full
     for (int i = 0; i < kMaxChainModules; i++) m.block[i].modelId = MB32;

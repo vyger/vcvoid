@@ -30,13 +30,14 @@ void prependUpstream(const UpstreamBlock& mine, const UpstreamMessage& fromRight
 }
 
 void shiftDownstream(const DownstreamMessage& fromLeft, DownstreamBlock& mine,
-                     DownstreamMessage& out) {
-    if (fromLeft.count == 0) { mine = DownstreamBlock{}; out.count = 0; return; }
+                     DownstreamMessage* out) {
+    if (fromLeft.count == 0) { mine = DownstreamBlock{}; if (out) out->count = 0; return; }
     mine = fromLeft.block[0];
+    if (!out) return;                                               // chain ends here: no tail to build
     int rest = fromLeft.count - 1;
     if (rest > kMaxChainModules - 1) rest = kMaxChainModules - 1;   // untrusted wire count: never over-read/write the fixed block[]
-    for (int i = 0; i < rest; i++) out.block[i] = fromLeft.block[i + 1];
-    out.count = uint8_t(rest);
+    for (int i = 0; i < rest; i++) out->block[i] = fromLeft.block[i + 1];
+    out->count = uint8_t(rest);
 }
 
 int32_t detentDelta(uint32_t now, uint32_t last) {

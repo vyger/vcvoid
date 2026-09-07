@@ -192,10 +192,21 @@ struct DownstreamBlock {                  // one module's LED/gate-out state, fr
 struct UpstreamMessage  { uint8_t count = 0; UpstreamBlock  block[kMaxChainModules]; };
 struct DownstreamMessage{ uint8_t count = 0; DownstreamBlock block[kMaxChainModules]; };
 
+// Both relay helpers copy only block[0..count-1] and clamp an untrusted wire
+// count themselves, so a caller may pass a neighbour's live buffer directly
+// rather than staging through a temporary — the messages are several KB and
+// value-initializing or assigning one whole is what used to dominate the audio
+// thread (issue #32). Precondition unchanged: `out` must not alias the input.
 void prependUpstream(const UpstreamBlock& mine, const UpstreamMessage& fromRight,
                      UpstreamMessage& out);
+// `out` may be null when the chain ends to my right: block[0] is still
+// extracted into `mine`, but the relay tail is not built at all.
 void shiftDownstream(const DownstreamMessage& fromLeft, DownstreamBlock& mine,
-                     DownstreamMessage& out);
+                     DownstreamMessage* out);
+inline void shiftDownstream(const DownstreamMessage& fromLeft, DownstreamBlock& mine,
+                            DownstreamMessage& out) {
+    shiftDownstream(fromLeft, mine, &out);
+}
 
 // Wrap-safe signed detent difference (two's-complement subtraction).
 int32_t detentDelta(uint32_t now, uint32_t last);
