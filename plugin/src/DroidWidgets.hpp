@@ -225,7 +225,24 @@ struct DroidButton : app::Switch {
             nvgStrokeColor(args.vg, nvgRGB(0x30, 0x30, 0x30));
             nvgStroke(args.vg);
         } else {
-            // translucent overlays only; the baked cap (and its label) shows
+            // Translucent overlays only; the baked cap (and its label) shows.
+            //
+            // The baked DB8E cap is pure #ffffff, so a warm glow laid straight on
+            // top of it barely reads — the button looked much the same lit or
+            // dark. Knock the cap down to the drawn modules' UNLIT grey first and
+            // back that dim off as the LED comes up, so it travels the same
+            // #c4c4c4 -> warm-white range as the b32/p2b8/p4b2 caps above. Both
+            // layers stay translucent, so the printed legend still shows through.
+            //
+            // Black at this alpha over #ffffff lands exactly on #c4c4c4, the
+            // unlit inner-disc colour drawn in the opaque branch: 1 - 0xc4/0xff.
+            constexpr float kUnlitDim = 0.231f;
+            if (glow < 1.f) {
+                nvgBeginPath(args.vg);
+                nvgCircle(args.vg, c.x, c.y, r);
+                nvgFillColor(args.vg, nvgRGBAf(0.f, 0.f, 0.f, kUnlitDim * (1.f - glow)));
+                nvgFill(args.vg);
+            }
             if (glow > 0.f) {
                 nvgBeginPath(args.vg);
                 nvgCircle(args.vg, c.x, c.y, r);
