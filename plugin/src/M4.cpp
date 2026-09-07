@@ -16,7 +16,8 @@
 //
 // The animated fader widget (below) mirrors real hardware: while the user drags
 // a fader the touch bit is set and the param follows the mouse; when released
-// the motor eases the param toward motorTarget with a ~80 ms time constant.
+// the motor eases the param toward motorTarget with a ~40 ms time constant
+// (kMotorTauSec).
 // The hardware touch plate is a real momentary button here (TOUCH_PARAMS):
 // holding it raises the fader's touch bit exactly like holding the fader, and
 // its RGB LED (TOUCH_LIGHTS) shows the circuit-driven faderLed colour. The
@@ -202,9 +203,14 @@ struct DroidM4Fader : VCVSlider {
         VCVSlider::onDragEnd(e);
     }
 
+    // Motor ease time constant. Halved from the original 80 ms so a
+    // circuit-commanded move snaps into place about twice as fast — the 80 ms
+    // glide read as sluggish against the hardware.
+    static constexpr float kMotorTauSec = 0.04f;
+
     void step() override {
         // Motor animation: when the user is NOT holding the fader, ease the
-        // param toward the circuit-commanded target with a ~80 ms time constant.
+        // param toward the circuit-commanded target with kMotorTauSec.
         if (module && !module->isTouched(idx)) {
             if (engine::ParamQuantity* pq = getParamQuantity()) {
                 double dt = APP->window->getLastFrameDuration();   // seconds
@@ -218,7 +224,7 @@ struct DroidM4Fader : VCVSlider {
                     if (std::fabs(target - cur) < 1e-4f) {
                         pq->setValue(target);
                     } else {
-                        float k = 1.f - std::exp(-(float)dt / 0.08f);
+                        float k = 1.f - std::exp(-(float)dt / kMotorTauSec);
                         pq->setValue(cur + (target - cur) * k);
                     }
                 }
