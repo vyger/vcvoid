@@ -23,6 +23,7 @@ bool defaultLedFromPot(ModelId id) { return id == MP8S8; }
 void prependUpstream(const UpstreamBlock& mine, const UpstreamMessage& fromRight,
                      UpstreamMessage& out) {
     out.block[0] = mine;
+    out.dirty = fromRight.dirty;   // the caller ORs in its own block's dirtiness
     int copy = fromRight.count;
     if (copy > kMaxChainModules - 1) copy = kMaxChainModules - 1;   // drop farthest
     for (int i = 0; i < copy; i++) out.block[i + 1] = fromRight.block[i];

@@ -103,6 +103,7 @@ struct ChainModule : Module {
     // changed. See the UpstreamMessage/DownstreamMessage comments in chain.hpp
     // for the protocol side.
     droid::chain::DownstreamBlock forMe_{};   // last block the master addressed to me
+    droid::chain::UpstreamGate gate_;         // upstream publish decision (headless-tested)
     uint32_t lastTickSeq_ = 0;                // master tick behind forMe_
     bool attached_ = false;                   // a valid left neighbour last frame
 
@@ -115,7 +116,8 @@ struct ChainModule : Module {
         const bool haveRight = right && isChainRightNeighbor(right);
 
         // ---- upstream: my controls + everything from my right, to my left --
-        // Prepend reads STRAIGHT from my consumer into the neighbour's producer: staging through a local
+        // Published only when something actually changed. Prepend reads STRAIGHT
+        // from my consumer into the neighbour's producer: staging through a local
         // UpstreamMessage would value-initialize all 21 blocks (5.7 KB) every
         // frame, and prependUpstream already copies only block[0..count-1] and
         // clamps an untrusted count itself. `mine` and my consumer are distinct
@@ -131,12 +133,16 @@ struct ChainModule : Module {
         fillUpstream(mine);
         mine.modelId = chainModel();
 
-        if (haveLeft) {
+        const uint8_t inCount = std::min<uint8_t>(src.count, kMaxChainModules);
+        const auto d = gate_.decide(mine, src.dirty, inCount);
+        if (haveLeft && d.publish) {
             // Participants allocate this producer in their constructors; the null
             // guard protects against a future left neighbour that does not.
             if (auto* dst = (UpstreamMessage*) left->rightExpander.producerMessage) {
-                prependUpstream(mine, src, *dst);
+                prependUpstream(mine, src, *dst);      // carries src.dirty into *dst
+                if (d.dirty) dst->dirty = 1;
                 left->rightExpander.requestMessageFlip();
+                gate_.notePublished(mine, inCount, d.dirty);
             }
         }
 
