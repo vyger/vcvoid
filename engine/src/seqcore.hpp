@@ -43,12 +43,17 @@
 //     positions (idx 4..7 of randomize-CV) shifting the note per turn.
 //   * outputs: cv, gate, startofsequence, currentstep, currentpage, accumulator,
 //     startstepout, endstepout.
-//   * `linktonext` multi-track linking: the FADER/LED editing surface is shared
-//     across the chain (only the instance addressed by the main's fadermode —
-//     `fadermode / 10 == chain index`, editing with the local `fadermode % 10` —
-//     drives/lights the physical faders; the others release them, so the boot
-//     page shows the addressed instance's steps, not a collision of all of them),
-//     and the members' TRANSPORT is remote-controlled from the chain main: each
+//   * `linktonext` multi-track linking: the FADER and BUTTON/LED editing
+//     surfaces are shared across the chain, each addressed independently by the
+//     main's fadermode resp. buttonmode — `mode / 10 == chain index`, editing
+//     with the local `mode % 10` — so only the addressed instance drives the
+//     faders (resp. reads the step buttons and lights the LEDs) and the others
+//     release that surface (the boot page shows the addressed instance's steps,
+//     not a collision of all of them). luckyshuffle / luckyreverse fired on the
+//     main apply the identical permutation to every member, and the four
+//     step-order lucky ops (luckyskips, luckyrepeats, luckyshuffle,
+//     luckyreverse) are ignored when read on a member (motoquencer.md:704-705).
+//     The members' TRANSPORT is remote-controlled from the chain main: each
 //     member plays the main's step number (so the main's shiftsteps, play order,
 //     repeats and skips carry over, and the member's own are ignored) while its
 //     own lane supplies CV, gate, probability, gate pattern and ratchets. `holdcv`
@@ -73,18 +78,6 @@
 //     only. The others interact with direction/pingpong/forms; deferred whole.
 //   * `metricsaver` and `constantlength` — polymetric clock-snap-back and
 //     repeat/skip length compensation (both read but inert).
-//   * `linktonext`, the BUTTONMODE side: `buttonmode` is read per-instance and
-//     clamped 0..3, so the chain-wide `buttonmode + 10` addressing (the touch
-//     buttons editing a linked instance's gates/skips) is not implemented. The
-//     fadermode side and the transport ARE (see IMPLEMENTED above).
-//     LINKED-LUCKY semantics are likewise not implemented (motoquencer.md
-//     :682-705): `luckyshuffle`/`luckyreverse` fired on the MAIN should rearrange
-//     every linked instance's steps by the SAME permutation, and `luckyskips`,
-//     `luckyrepeats`, `luckyshuffle`, `luckyreverse` should be IGNORED when read
-//     on a linked (non-main) instance. Today each instance edge-detects and
-//     applies these four to its own steps independently. `luckyfaders` IS honoured
-//     correctly across the chain — it rerolls only the fader-owner's shown lane
-//     (see applyLuckyOp case 0); the other value/CV lucky ops apply per-instance.
 //   * keyboard recording: keyboardcv/keyboardgate/keyboardmode/recordmode/
 //     recordsilence.
 //   * copy / paste / pastefaders / pastebuttons / stepcopy / doublerange / bulkedit.
@@ -175,21 +168,24 @@ public:
 
         // --- dynamic config -------------------------------------------------
         int page       = clampi((int)std::lround(in("page").value(s)), 0, pages() - 1);
-        int buttonmode = clampi((int)std::lround(in("buttonmode").value(s)), 0, 3);
 
-        // linktonext: the whole chain reads ONE fadermode off the main instance
-        // (linked members leave `fadermode` unwired). `rawFm / 10` picks which
-        // chain member owns the physical faders; it edits with `rawFm % 10`, the
-        // others release them. A standalone sequencer (no link) keeps its raw
-        // fadermode clamped to 0..7 and always owns its faders.
-        int rawFm;
-        if (chainMain_) rawFm = chainMain_->chainRawFm_;
-        else { rawFm = (int)std::lround(in("fadermode").value(s)); chainRawFm_ = rawFm; }
-        bool inChain   = chainMain_ != nullptr || linkToNext_;
-        int  ownerIdx  = rawFm < 0 ? 0 : rawFm / 10;
-        bool faderOwner = !inChain || ownerIdx == chainIndex_;
-        int  fadermode = inChain ? clampi(rawFm - 10 * chainIndex_, 0, 7)
-                                 : clampi(rawFm, 0, 7);
+        // linktonext: the whole chain reads ONE fadermode and ONE buttonmode off
+        // the main instance (linked members leave both unwired; motoquencer.md
+        // "add 10 to fadermode or buttonmode"). `raw / 10` picks which chain
+        // member owns the physical faders (resp. the step buttons + LEDs); it
+        // edits with `raw % 10`, the others release that surface. The two are
+        // independent: fadermode 11 + buttonmode 0 shows the linked member's
+        // faders and the main's buttons. A standalone sequencer (no link) keeps
+        // its raw modes clamped and always owns both surfaces.
+        bool inChain = chainMain_ != nullptr || linkToNext_;
+        if (!chainMain_) {
+            chainRawFm_ = (int)std::lround(in("fadermode").value(s));
+            chainRawBm_ = (int)std::lround(in("buttonmode").value(s));
+        }
+        const SeqCore* main = chainMain_ ? chainMain_ : this;
+        bool faderOwner, buttonOwner;
+        int  fadermode  = resolveChainMode(main->chainRawFm_, inChain, 7, faderOwner);
+        int  buttonmode = resolveChainMode(main->chainRawBm_, inChain, 3, buttonOwner);
 
         // --- presets / clear (always run) -----------------------------------
         bool recall = handlePresets(s);
@@ -203,11 +199,22 @@ public:
         // regardless of selection). A fired op permanently mutates the sequence, so
         // force a motor recall to re-command the faders to the rerolled values (the
         // manual: "you will immediately see them moving around").
-        if (applyLucky(s, page, fadermode, buttonmode, faderOwner)) recall = true;
+        if (applyLucky(s, page, fadermode, buttonmode, faderOwner, buttonOwner)) recall = true;
+        // A chain member mirrors the MAIN's step rearrangements (luckyshuffle /
+        // luckyreverse): "the exact same rearrangement of steps will happen at
+        // the linked sequencers" (motoquencer.md). Pull-style like the transport
+        // epochs: the main published the permutation this tick (it ticks first).
+        if (chainMain_ && chainMain_->orderEpoch_ != seenOrderEpoch_) {
+            seenOrderEpoch_ = chainMain_->orderEpoch_;
+            permuteSteps(chainMain_->orderT_, chainMain_->orderSrc_);
+            recall = true;
+        }
 
-        // this instance shows on the faders only while selected AND the chain
-        // fadermode addresses it (a standalone is always its own owner).
-        bool showFaders = selected && faderOwner;
+        // this instance shows on the faders (resp. buttons + LEDs) only while
+        // selected AND the chain fadermode (resp. buttonmode) addresses it (a
+        // standalone is always its own owner).
+        bool showFaders  = selected && faderOwner;
+        bool showButtons = selected && buttonOwner;
 
         // recall the motors when the visible page/mode changed
         if (page != shownPage_ || fadermode != shownMode_) recall = true;
@@ -215,14 +222,15 @@ public:
         shownMode_ = fadermode;
 
         // --- fader + touch editing (only while showing) ---------------------
-        if (showFaders) editSurface(s, page, fadermode, buttonmode, recall);
-        else wasSelected_ = false;   // re-taking the faders re-commands them (recall)
+        if (showFaders || showButtons)
+            editSurface(s, page, fadermode, buttonmode, recall, showFaders, showButtons);
+        if (!showFaders) wasSelected_ = false;   // re-taking the faders re-commands them (recall)
 
         // --- transport ------------------------------------------------------
         transport(s);
 
         // --- step LEDs (panel-only; after transport so playStep_ is fresh) ---
-        updateLeds(s, page, buttonmode, showFaders);
+        updateLeds(s, page, buttonmode, showButtons);
 
         // --- outputs --------------------------------------------------------
         emit(s);
@@ -236,7 +244,10 @@ public:
     // fader / FaderState.led; E4: the middle-three ring cells below the encoder /
     // EncoderState.stepLed).
     virtual int  availableLanes(EngineState& s) = 0;
-    virtual void editSurface(EngineState& s, int page, int fm, int bm, bool recall) = 0;
+    // `faders` / `buttons` say which halves of the surface this instance owns
+    // this tick (a chained member can own one without the other, see tick()).
+    virtual void editSurface(EngineState& s, int page, int fm, int bm, bool recall,
+                             bool faders, bool buttons) = 0;
     virtual void setLaneLed(EngineState& s, int lane, float bright, float color) = 0;
 
     // --- persistent state (DROIDSTA.BIN contract) ---------------------------
@@ -485,7 +496,16 @@ protected:
     // it rises, permanently rerolls a subset of the dialed steps. `applyLucky`
     // edge-detects all 16 in a fixed order and returns whether any fired (so tick()
     // can force a motor recall). Runs regardless of selection.
-    bool applyLucky(EngineState& s, int page, int fm, int bm, bool faderOwner) {
+    // A chain member's raw mode (shared off the main) maps to its own lane as
+    // `raw - 10 * chainIndex_`; it owns the surface iff `raw / 10` is its index.
+    int resolveChainMode(int raw, bool inChain, int hi, bool& owner) const {
+        if (!inChain) { owner = true; return clampi(raw, 0, hi); }
+        int ownerIdx = raw < 0 ? 0 : raw / 10;
+        owner = ownerIdx == chainIndex_;
+        return clampi(raw - 10 * chainIndex_, 0, hi);
+    }
+
+    bool applyLucky(EngineState& s, int page, int fm, int bm, bool faderOwner, bool buttonOwner) {
         static const char* kOps[16] = {
             "luckyfaders", "luckybuttons", "luckycvs", "luckycvdrift", "luckyspread",
             "luckyinvert", "luckyrandomizecv", "luckygates", "luckyskips", "luckyties",
@@ -494,8 +514,13 @@ protected:
         bool fired = false;
         for (int op = 0; op < 16; op++) {
             if (!risingEdge(luckyPrev_[op], in(kOps[op]).value(s))) continue;
+            // On a chain member the four step-ORDER ops are ignored: skips and
+            // repeats come from the main's play order, and shuffle/reverse are
+            // mirrored from the main (motoquencer.md: "with the exception of
+            // luckyskips, luckyrepeats, luckyshuffle and luckyreverse").
+            if (chainMain_ && (op == 8 || op == 12 || op == 14 || op == 15)) continue;
             fired = true;
-            applyLuckyOp(s, op, luckyTargets(s, page), fm, bm, faderOwner);
+            applyLuckyOp(s, op, luckyTargets(s, page), fm, bm, faderOwner, buttonOwner);
         }
         return fired;
     }
@@ -536,10 +561,20 @@ protected:
         dst.gate[di]    = src.gate[si];    dst.skip[di]     = src.skip[si];
     }
 
-    void luckyReverse(const std::vector<int>& T) {
+    // Move whole step tuples: step T[i] takes the tuple that was at src[i]. The
+    // permutation is also published for chain members (orderEpoch_, see tick()).
+    void permuteSteps(const std::vector<int>& T, const std::vector<int>& src) {
         SeqState snap = cur_;
         int n = (int)T.size();
-        for (int i = 0; i < n; i++) copyStep(cur_, T[i], snap, T[n - 1 - i]);
+        for (int i = 0; i < n; i++) copyStep(cur_, T[i], snap, src[i]);
+    }
+    void publishOrder(const std::vector<int>& T, const std::vector<int>& src) {
+        orderT_ = T; orderSrc_ = src; orderEpoch_++;
+    }
+    void luckyReverse(const std::vector<int>& T) {
+        std::vector<int> src(T.rbegin(), T.rend());
+        permuteSteps(T, src);
+        publishOrder(T, src);
     }
     void luckyShuffle(EngineState& s, const std::vector<int>& T) {
         int n = (int)T.size();
@@ -550,8 +585,8 @@ protected:
             if (j >= n) j = n - 1;
             std::swap(order[i], order[j]);
         }
-        SeqState snap = cur_;
-        for (int i = 0; i < n; i++) copyStep(cur_, T[i], snap, order[i]);
+        permuteSteps(T, order);
+        publishOrder(T, order);
     }
 
     // Apply one lucky operation to its target steps. `amount`/`lvbase` are the
@@ -559,7 +594,7 @@ protected:
     // engine RNG. cvpos/CV work in 0..1 position space (playback maps it to the CV
     // range), matching "within the allowed CV range".
     void applyLuckyOp(EngineState& s, int op, const std::vector<int>& T, int fm, int bm,
-                      bool faderOwner) {
+                      bool faderOwner, bool buttonOwner) {
         float amount = clampf(in("luckyamount").value(s), 0.0f, 1.0f);
         float lvbase = clampf(in("luckycvbase").value(s), 0.0f, 1.0f);
         auto U = [&] { return randUniform(s.rngState); };
@@ -578,6 +613,9 @@ protected:
                 }
                 break;
             case 1:   // luckybuttons: reroll the current button lane (per buttonmode).
+                // Same ownership rule as luckyfaders: `bm` is only the real shown
+                // lane on the button OWNER; elsewhere it is the chain-clamped alias.
+                if (!buttonOwner) break;
                 for (int i : T) {
                     float u = U();
                     if (bm == 2) cur_.gatepat[i] = (uint8_t)clampi((int)std::lround(u * amount * 3.0f), 0, 3);
@@ -1172,18 +1210,24 @@ protected:
     // linktonext chain (resolved once at init). chainMain_ is the chain's first
     // instance (nullptr if this is the main or a standalone); chainIndex_ is our
     // 0-based distance from it; linkToNext_ is whether we feed a further member;
-    // chainRawFm_ (published by the main each tick) is the chain-wide fadermode.
+    // chainRawFm_ / chainRawBm_ (published by the main each tick) are the
+    // chain-wide fadermode / buttonmode.
     SeqCore* chainMain_ = nullptr;
     int  chainIndex_ = 0;
     bool linkToNext_ = false;
     int  chainRawFm_ = 0;
+    int  chainRawBm_ = 0;   // likewise the chain-wide buttonmode
     // Transport events published by the chain main and mirrored by its members
     // (see transportLinked). Monotonic counters rather than one-tick flags, so a
     // member cannot miss one; accEvtReset_ says whether the latest accumulator
     // event was a reset (zero it) or a wrap (advance it by our own range).
     uint64_t stepEpoch_ = 0, accEpoch_ = 0, sosEpoch_ = 0;
+    // Last luckyshuffle / luckyreverse permutation published by the main
+    // (targets + the source step each target took), mirrored by the members.
+    uint64_t orderEpoch_ = 0;
+    std::vector<int> orderT_, orderSrc_;
     bool     accEvtReset_ = false;
-    uint64_t seenStepEpoch_ = 0, seenAccEpoch_ = 0, seenSosEpoch_ = 0;
+    uint64_t seenStepEpoch_ = 0, seenAccEpoch_ = 0, seenSosEpoch_ = 0, seenOrderEpoch_ = 0;
     std::vector<bool> prevTouch_ = std::vector<bool>(kSteps, false);
 
     // transport

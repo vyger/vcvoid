@@ -1068,8 +1068,10 @@ circuits:
       cvnotches>=2)/defaultgate; outputs cv/gate/startofsequence (10 ms
       trigger)/currentstep/currentpage/accumulator/startstepout/endstepout;
       all 16 lucky* randomizers with luckychance/scope/amount/cvbase;
-      linktonext chains -- one chain-wide fadermode off the main (fadermode/10
-      picks the fader owner, the others release the bank) and the members'
+      linktonext chains -- one chain-wide fadermode AND buttonmode off the main
+      (mode/10 picks the fader resp. button+LED owner, the others release that
+      surface), luckyshuffle/luckyreverse on the main mirrored to every member
+      (and the four step-order lucky ops ignored on a member), and the members'
       transport remote-controlled from the main (they play the main's step
       number, so its shiftsteps/play order/repeats/skips carry over and their
       own are ignored, while each member's own lane supplies cv/gate/
@@ -1082,16 +1084,13 @@ circuits:
       pastefaders/pastebuttons/stepcopy/doublerange/bulkedit,
       interactive start/end (buttonmode 1) + setendstep, pitch
       randomization (stored but inert; manual gives no distribution),
-      taptempo, DB8E display, dontsave/SD persistence, LED feel/color;
-      on a linktonext chain the buttonmode +10 addressing and the LINKED-LUCKY
-      rules (luckyshuffle/luckyreverse mirrored from the main; the four
-      order-changing lucky ops ignored on a member).
+      taptempo, DB8E display, dontsave/SD persistence, LED feel/color.
       SPEC-GAPs (literal readings; deterministic): instant motor; ratchet
       gate len = gatelength*(period/ratchets); long/tie = one gate over the
       whole step; CV latched at step entry; scale-change note memory modelled
       positionally. 30 goldens (incl. composemode, holdcv-drift,
       defaultcv-notches, gatelength-min, linktonext transport/mirroring/
-      holdcv). requires-human: motor haptics +
+      holdcv/buttonmode/lucky-order). requires-human: motor haptics +
       auto-moving faders + LED rings need real M4 hardware."
   motorfader:
     status: done
