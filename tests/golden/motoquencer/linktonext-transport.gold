@@ -1,0 +1,73 @@
+# motoquencer linktonext: the chain MAIN drives every member's transport (#28).
+# A linked lane deliberately leaves `clock` unwired -- the manual says "don't wire
+# clock or reset or anything else that deals with stepping"; the linked sequencer
+# is remote controlled and "the current step number of the linked sequencer will
+# always be the same as the step number of the main sequencer". Before this fix
+# such a lane never started at all: no step LED and cv pinned at 0.
+#
+# The main is the pitch lane (fadermode 0), the linked one a CV lane addressed by
+# fadermode 10. Both are continuous (quantize 0, cvbase 0, cvrange 1) so a fader
+# reads straight through to the lane's `cv`. The linked lane's four steps get four
+# distinct values, so its `cv` proves WHICH step the chain is on; holdcv = 0 so it
+# updates on every step. Its gate (O6) proves the linked lane plays its own gates
+# on the main's clock.
+tickrate 100
+patch <<<
+[m4]
+[motoquencer]
+    clock      = I1
+    fadermode  = I2
+    numsteps   = 4
+    numfaders  = 4
+    linktonext = 1
+    quantize   = 0
+    cvbase     = 0
+    cvrange    = 1
+    cv         = O1
+    gate       = O5
+[motoquencer]
+    linktonext = 0
+    quantize   = 0
+    cvbase     = 0
+    cvrange    = 1
+    holdcv     = 0
+    cv         = O2
+    gate       = O6
+>>>
+# address the linked lane (fadermode 10) and dial its four steps to 1.0 / 0.75 /
+# 0.5 / 0.25 -- the main's own steps stay at their rest position (0).
+@1 set I2 10
+@2 move F1 1.0
+@2 expect F1 1.0 tol 1e-4
+@3 move F2 0.75
+@4 move F3 0.5
+@5 move F4 0.25
+@5 expect F4 0.25 tol 1e-4
+# first clock edge: both lanes start on step 1. The main's pitch lane is at 0,
+# the linked lane emits its own step-1 value and opens its own gate.
+@7 set I1 1
+@7 expect O1 0.0 tol 1e-4
+@7 expect O2 1.0 tol 1e-4
+@7 expect O5 1 tol 1e-4
+@7 expect O6 1 tol 1e-4
+# steps 2, 3, 4: the linked lane follows the main's step number -- it does not
+# sit on its own first step, and it does not need a clock of its own.
+@8 set I1 0
+@9 set I1 1
+@9 expect O2 0.75 tol 1e-4
+@10 set I1 0
+@11 set I1 1
+@11 expect O2 0.5 tol 1e-4
+@12 set I1 0
+@13 set I1 1
+@13 expect O2 0.25 tol 1e-4
+# ... and wraps back to step 1 with the main.
+@14 set I1 0
+@15 set I1 1
+@15 expect O2 1.0 tol 1e-4
+@15 expect O6 1 tol 1e-4
+# the linked lane's gate is a window of gatelength(0.5) * period(2) = 1 tick,
+# just like the main's -- it is not stuck high.
+@16 set I1 0
+@16 expect O5 0 tol 1e-4
+@16 expect O6 0 tol 1e-4

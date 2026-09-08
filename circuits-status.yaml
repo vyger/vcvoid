@@ -1066,20 +1066,32 @@ circuits:
       autoreset); select/selectat overlay, 4 presets,
       clear/clearall/clearskips/clearrepeats, defaultcv (a notch index when
       cvnotches>=2)/defaultgate; outputs cv/gate/startofsequence (10 ms
-      trigger)/currentstep/currentpage/accumulator/startstepout/endstepout.
+      trigger)/currentstep/currentpage/accumulator/startstepout/endstepout;
+      all 16 lucky* randomizers with luckychance/scope/amount/cvbase;
+      linktonext chains -- one chain-wide fadermode off the main (fadermode/10
+      picks the fader owner, the others release the bank) and the members'
+      transport remote-controlled from the main (they play the main's step
+      number, so its shiftsteps/play order/repeats/skips carry over and their
+      own are ignored, while each member's own lane supplies cv/gate/
+      probability/gate pattern/ratchets; holdcv 2 = sync the CV to the
+      member's own gate instead of the main's).
       DEFERRED (advanced live-performance conveniences, interactive gestures
       with no headless analog, or panel-only; documented in seqcore.hpp): form
       + startofpart, movement patterns 1..7 (pattern 0/linear only),
-      metricsaver, constantlength, linktonext, keyboard recording, copy/paste/
-      pastefaders/pastebuttons/stepcopy/doublerange/bulkedit, all lucky*
-      randomizers, interactive start/end (buttonmode 1) + setendstep, pitch
+      metricsaver, constantlength, keyboard recording, copy/paste/
+      pastefaders/pastebuttons/stepcopy/doublerange/bulkedit,
+      interactive start/end (buttonmode 1) + setendstep, pitch
       randomization (stored but inert; manual gives no distribution),
-      taptempo, DB8E display, dontsave/SD persistence, LED feel/color.
+      taptempo, DB8E display, dontsave/SD persistence, LED feel/color;
+      on a linktonext chain the buttonmode +10 addressing and the LINKED-LUCKY
+      rules (luckyshuffle/luckyreverse mirrored from the main; the four
+      order-changing lucky ops ignored on a member).
       SPEC-GAPs (literal readings; deterministic): instant motor; ratchet
       gate len = gatelength*(period/ratchets); long/tie = one gate over the
       whole step; CV latched at step entry; scale-change note memory modelled
-      positionally. 17 goldens (incl. composemode, holdcv-drift,
-      defaultcv-notches, gatelength-min). requires-human: motor haptics +
+      positionally. 30 goldens (incl. composemode, holdcv-drift,
+      defaultcv-notches, gatelength-min, linktonext transport/mirroring/
+      holdcv). requires-human: motor haptics +
       auto-moving faders + LED rings need real M4 hardware."
   motorfader:
     status: done
