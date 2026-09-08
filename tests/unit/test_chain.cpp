@@ -3,6 +3,7 @@
 #include "src/registers.hpp"
 #include "src/engine.hpp"
 #include <cmath>
+#include <cstring>
 #include <memory>
 #include <type_traits>
 
@@ -38,6 +39,23 @@ TEST(chain_prepend_shift) {
     CHECK(rest.count == 0);
 }
 
+// The relay's end-of-chain case (issue #32): a module with no right neighbour
+// passes out=null, so the 11 KB tail is never built. block[0] must still reach
+// `mine` exactly as it does when a tail is requested.
+TEST(chain_shift_null_out) {
+    DownstreamMessage d; d.count = 2;
+    d.block[0].modelId = MP2B8; d.block[0].leds[3] = 0.75f;
+    d.block[1].modelId = MB32;
+    DownstreamBlock mine;
+    shiftDownstream(d, mine, nullptr);
+    CHECK(mine.modelId == MP2B8);
+    CHECK(std::fabs(mine.leds[3] - 0.75f) < 1e-6f);
+
+    DownstreamMessage empty;                 // starved chain, still no tail wanted
+    shiftDownstream(empty, mine, nullptr);
+    CHECK(mine.modelId == None);             // cleared block, not frozen at the last state
+}
+
 TEST(chain_overflow_clamps) {
     UpstreamMessage m; m.count = kMaxChainModules;   // already full
     for (int i = 0; i < kMaxChainModules; i++) m.block[i].modelId = MB32;
@@ -54,6 +72,86 @@ TEST(chain_shift_overflow_clamps) {
     DownstreamBlock mine; DownstreamMessage rest;
     shiftDownstream(d, mine, rest);
     CHECK(rest.count == kMaxChainModules - 1);       // clamped, no over-read/write of block[]
+}
+
+// ---- relay clock (issue #32) -----------------------------------------
+// tickSeq travels rightward with the LED data and dirty travels leftward with
+// the controls; together they are what lets a module skip the multi-KB block
+// copies on a frame where nothing can have changed.
+TEST(chain_relay_clock_carriers) {
+    DownstreamMessage d; d.count = 2; d.tickSeq = 77;
+    d.block[0].modelId = MP2B8; d.block[1].modelId = MB32;
+    DownstreamBlock mine; DownstreamMessage rest;
+    shiftDownstream(d, mine, rest);
+    CHECK(rest.tickSeq == 77);               // the tick reaches the next hop
+
+    DownstreamMessage starved; starved.tickSeq = 78;
+    shiftDownstream(starved, mine, rest);
+    CHECK(rest.tickSeq == 78);               // ... even when there is no block to pass on
+
+    UpstreamMessage from; from.count = 1; from.dirty = 1;
+    from.block[0].modelId = MB32;
+    UpstreamBlock me; me.modelId = MP2B8;
+    UpstreamMessage out;
+    prependUpstream(me, from, out);
+    CHECK(out.dirty == 1);                   // someone to my right changed: keep relaying
+    from.dirty = 0;
+    prependUpstream(me, from, out);
+    CHECK(out.dirty == 0);                   // ... and stop once they go quiet
+}
+
+TEST(chain_upstream_gate) {
+    UpstreamGate g;
+    UpstreamBlock mine; std::memset(&mine, 0, sizeof mine);
+    mine.modelId = MP2B8;
+
+    // First frame: the baseline is zeroed and my block is not, so publish.
+    auto d = g.decide(mine, 0, 0);
+    CHECK(d.publish && d.dirty);
+    g.notePublished(mine, 0, d.dirty);
+
+    // Trailing edge: one more publish carrying dirty = 0, so the neighbour's
+    // buffer does not sit with dirty stuck at 1 forever.
+    d = g.decide(mine, 0, 0);
+    CHECK(d.publish && !d.dirty);
+    g.notePublished(mine, 0, d.dirty);
+
+    // Now genuinely idle — this is the whole point of the gate.
+    d = g.decide(mine, 0, 0);
+    CHECK(!d.publish && !d.dirty);
+
+    // A control moves.
+    mine.pots[0] = 0.5f;
+    d = g.decide(mine, 0, 0);
+    CHECK(d.publish && d.dirty);
+    g.notePublished(mine, 0, d.dirty);
+
+    // Someone to my right flags a change even though my own block is unchanged.
+    d = g.decide(mine, 1, 0);
+    CHECK(d.publish && d.dirty);
+    g.notePublished(mine, 0, d.dirty);
+    g.notePublished(mine, 0, false);         // settle the trailing edge
+    CHECK(!g.decide(mine, 0, 0).publish);
+
+    // A module UNPLUGGED to my right: nobody is left to set dirty, so only the
+    // chain length betrays it. Without this the master keeps the old chain.
+    g.notePublished(mine, 3, false);
+    d = g.decide(mine, 0, 2);
+    CHECK(d.publish && d.dirty);
+}
+
+// A block differing ONLY in a field sitting next to padding must still be seen.
+// The gate compares with memcmp, which reads padding bytes too, so both sides
+// have to be memset — NSDMI value-init does not zero padding.
+TEST(chain_upstream_gate_padding) {
+    UpstreamGate g;
+    UpstreamBlock a; std::memset(&a, 0, sizeof a);
+    a.modelId = MB32;                        // uint8_t followed by padding, then buttons
+    g.notePublished(a, 0, false);
+    CHECK(!g.decide(a, 0, 0).publish);       // identical block: no publish
+    UpstreamBlock b = a;
+    b.buttons = 1u << 31;                    // the field right after that padding
+    CHECK(g.decide(b, 0, 0).publish);
 }
 
 TEST(chain_controller_models_skip_g8) {

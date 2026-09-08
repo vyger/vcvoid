@@ -9,6 +9,7 @@
 #include "controllers.hpp"
 #include "midi.hpp"
 #include <cstdint>
+#include <cstring>
 #include <string>
 #include <vector>
 
@@ -189,13 +190,90 @@ struct DownstreamBlock {                  // one module's LED/gate-out state, fr
     uint8_t dispActive = 0;
     MidiFrame midi;                       // M5: master -> adapter MIDI (X7 block only)
 };
-struct UpstreamMessage  { uint8_t count = 0; UpstreamBlock  block[kMaxChainModules]; };
-struct DownstreamMessage{ uint8_t count = 0; DownstreamBlock block[kMaxChainModules]; };
+// `dirty` (upstream) and `tickSeq` (downstream) are the RELAY CLOCK: they let a
+// module skip the multi-KB block copies on a frame where nothing can have
+// changed, without any module needing to know the master's tick rate (issue
+// #32). Both are relay bookkeeping, not patch data — the engine never reads
+// them.
+//
+//   tickSeq  monotonic, bumped by the master on every tick frame (the only
+//            frames it writes downstream at all) and carried rightward by
+//            shiftDownstream. LED/gate state cannot change between ticks by
+//            construction, so an unchanged tickSeq means "no work to do". This
+//            is the same dedupe the X7 already runs on MidiFrame::seq, lifted
+//            to the message so every model benefits.
+//   dirty    set by any module whose own block changed, carried leftward by
+//            prependUpstream. A module with a clean block and a clean tail has
+//            nothing new to publish and skips its write entirely. Content-
+//            gated rather than rate-gated on purpose: an idle rack costs
+//            nothing, while a control actually being moved still relays at
+//            full audio rate with no added latency.
+//
+// Propagating the tick rather than the rate is what keeps this safe: there is
+// no phase to agree on, nothing to recompute when the divider moves or the
+// sample rate changes, and a hot-plugged module simply joins on the next tick.
+struct UpstreamMessage  { uint8_t count = 0; uint8_t dirty = 0; UpstreamBlock  block[kMaxChainModules]; };
+struct DownstreamMessage{ uint8_t count = 0; uint32_t tickSeq = 0; DownstreamBlock block[kMaxChainModules]; };
 
+// Both relay helpers copy only block[0..count-1] and clamp an untrusted wire
+// count themselves, so a caller may pass a neighbour's live buffer directly
+// rather than staging through a temporary — the messages are several KB and
+// value-initializing or assigning one whole is what used to dominate the audio
+// thread (issue #32). Precondition unchanged: `out` must not alias the input.
 void prependUpstream(const UpstreamBlock& mine, const UpstreamMessage& fromRight,
                      UpstreamMessage& out);
+// Both carry the relay clock with the data: prependUpstream copies
+// `fromRight.dirty` into `out.dirty` (the caller ORs in its own), and
+// shiftDownstream copies `fromLeft.tickSeq` into `out->tickSeq`.
+// `out` may be null when the chain ends to my right: block[0] is still
+// extracted into `mine`, but the relay tail is not built at all.
 void shiftDownstream(const DownstreamMessage& fromLeft, DownstreamBlock& mine,
-                     DownstreamMessage& out);
+                     DownstreamMessage* out);
+inline void shiftDownstream(const DownstreamMessage& fromLeft, DownstreamBlock& mine,
+                            DownstreamMessage& out) {
+    shiftDownstream(fromLeft, mine, &out);
+}
+
+// Upstream relay gate (issue #32): decides whether a module has anything new to
+// publish toward the master. Split out of the Rack module because this state
+// machine is where the subtle failure modes live, and it is pure — so the
+// headless suite can drive it directly.
+//
+// Two of them are worth naming. A module unplugged to my RIGHT leaves nobody to
+// set `dirty`, so the chain length has to be part of the comparison or the
+// master keeps seeing the old chain. And when things go quiet the gate must emit
+// one final publish carrying dirty = 0 (`sentDirty`), or the last message I wrote
+// sits in my neighbour's buffer with dirty stuck at 1 and everything to my left
+// relays forever.
+struct UpstreamGate {
+    UpstreamBlock lastSent;      // last block published
+    uint8_t lastInCount = 0;     // chain length to my right at that publish
+    bool sentDirty = false;      // that publish carried dirty
+
+    // memcmp'd against a freshly memset `mine`, so the padding must be zeroed
+    // too — NSDMI value-init does not promise that.
+    UpstreamGate() { std::memset(&lastSent, 0, sizeof lastSent); }
+
+    struct Decision {
+        bool publish;   // write + flip this frame
+        bool dirty;     // the dirty bit to stamp on that write
+    };
+    // `mine` must have been memset before filling, for the same reason.
+    Decision decide(const UpstreamBlock& mine, uint8_t srcDirty, uint8_t inCount) const {
+        const bool dirty = srcDirty
+                        || inCount != lastInCount
+                        || std::memcmp(&mine, &lastSent, sizeof mine) != 0;
+        return {dirty || sentDirty, dirty};
+    }
+    // Call ONLY when the write actually happened: while a module has no left
+    // neighbour it publishes nothing, and the stale baseline is what makes it
+    // republish unconditionally the moment one appears.
+    void notePublished(const UpstreamBlock& mine, uint8_t inCount, bool dirty) {
+        lastSent = mine;
+        lastInCount = inCount;
+        sentDirty = dirty;
+    }
+};
 
 // Wrap-safe signed detent difference (two's-complement subtraction).
 int32_t detentDelta(uint32_t now, uint32_t last);

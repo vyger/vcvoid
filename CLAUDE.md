@@ -107,7 +107,9 @@ cd tools/droidcheck
 - `make labelcheck` — register-label extraction parity: our
   `engine/src/labels.cpp` vs the Forge's own parser (`droidcheck --labels`),
   over every patch in `patches/`. Part of `make test`; skips itself when
-  droidcheck is unbuilt.
+  droidcheck is unbuilt, and says so plainly when droidcheck is *stale* —
+  `build/` is git-ignored, so pulling a Forge-side change leaves the old binary
+  behind and it must be rebuilt with `tools/droidcheck/build.sh`.
 
 ### Plugin identity: vcvoid
 

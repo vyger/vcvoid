@@ -23,6 +23,7 @@ bool defaultLedFromPot(ModelId id) { return id == MP8S8; }
 void prependUpstream(const UpstreamBlock& mine, const UpstreamMessage& fromRight,
                      UpstreamMessage& out) {
     out.block[0] = mine;
+    out.dirty = fromRight.dirty;   // the caller ORs in its own block's dirtiness
     int copy = fromRight.count;
     if (copy > kMaxChainModules - 1) copy = kMaxChainModules - 1;   // drop farthest
     for (int i = 0; i < copy; i++) out.block[i + 1] = fromRight.block[i];
@@ -30,13 +31,15 @@ void prependUpstream(const UpstreamBlock& mine, const UpstreamMessage& fromRight
 }
 
 void shiftDownstream(const DownstreamMessage& fromLeft, DownstreamBlock& mine,
-                     DownstreamMessage& out) {
-    if (fromLeft.count == 0) { mine = DownstreamBlock{}; out.count = 0; return; }
+                     DownstreamMessage* out) {
+    if (out) out->tickSeq = fromLeft.tickSeq;                        // relay clock travels with the data
+    if (fromLeft.count == 0) { mine = DownstreamBlock{}; if (out) out->count = 0; return; }
     mine = fromLeft.block[0];
+    if (!out) return;                                               // chain ends here: no tail to build
     int rest = fromLeft.count - 1;
     if (rest > kMaxChainModules - 1) rest = kMaxChainModules - 1;   // untrusted wire count: never over-read/write the fixed block[]
-    for (int i = 0; i < rest; i++) out.block[i] = fromLeft.block[i + 1];
-    out.count = uint8_t(rest);
+    for (int i = 0; i < rest; i++) out->block[i] = fromLeft.block[i + 1];
+    out->count = uint8_t(rest);
 }
 
 int32_t detentDelta(uint32_t now, uint32_t last) {
