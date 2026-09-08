@@ -1,0 +1,36 @@
+# Two midiout circuits on the SAME port with different `channel` values must
+# emit on different MIDI channels (manual: the channel is set per circuit, and a
+# patch routinely runs several channels out of one port). The channel nibble is
+# part of the status byte the engine hands to the plugin, so the plugin layer
+# must forward it verbatim (issue #35: Rack's midi::Output channel override
+# collapsed every message onto one channel). pitchstabilization=0 so note-ons
+# land immediately on the gate edge.
+tickrate 1000
+x7 1
+patch <<<
+[midiout]
+    usb     = 1
+    channel = 1
+    pitch   = I1
+    gate    = I2
+    pitchstabilization = 0
+    activesensing = 0
+
+[midiout]
+    usb     = 1
+    channel = 2
+    pitch   = I3
+    gate    = I4
+    pitchstabilization = 0
+    activesensing = 0
+>>>
+@0 set I1 0.3
+@0 set I3 0
+@1 set I2 1
+@1 set I4 1
+@1 expectmidi usb noteon 1 60 127
+@1 expectmidi usb noteon 2 24 127
+@2 set I2 0
+@2 set I4 0
+@2 expectmidi usb noteoff 1 60 127
+@2 expectmidi usb noteoff 2 24 127

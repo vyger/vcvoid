@@ -3,6 +3,7 @@
 #include "DroidWidgets.hpp"
 #include "droidcolor.hpp"
 #include "MidiConvert.hpp"
+#include "MidiOutputPort.hpp"
 #include <app/MidiDisplay.hpp>
 
 // DROID X7 expander: USB + TRS MIDI plus 4 gate outputs (G9-G12). Always first
@@ -36,7 +37,7 @@ struct DroidX7 : ChainModule {
     // MIDI ports. InputQueue buffers inbound messages and releases them by frame
     // timestamp (midi.hpp: tryPop(maxFrame)); Output wraps a device sendMessage.
     rack::midi::InputQueue trsIn, usbIn;
-    rack::midi::Output trsOut, usbOut;
+    dmidi::OutputPort trsOut, usbOut;   // channel override pinned off (MidiOutputPort.hpp)
 
     int64_t frame_ = 0;             // current engine frame, for InputQueue::tryPop
 
@@ -113,7 +114,7 @@ struct DroidX7 : ChainModule {
         // ---- outbound MIDI: dedupe by the master's monotonic seq -----------
         if (b.midi.seq != lastSeqDown) {
             lastSeqDown = b.midi.seq;
-            rack::midi::Output* out[2] = { &trsOut, &usbOut };
+            dmidi::OutputPort* out[2] = { &trsOut, &usbOut };
             int ledFor[2] = { 3 /*TRS-out*/, 1 /*USB*/ };
             for (int port = 0; port < droid::chain::kChainMidiPorts; port++) {
                 int n = std::min<int>(b.midi.count[port], kMidiEventsPerFrame);
@@ -230,15 +231,18 @@ struct DroidX7Widget : VcvoidModuleWidget {
         if (!m) { appendBuildInfoMenu(menu); return; }
         appendRegisterLabelMenu(menu);   // keep in step with the base's menu
         menu->addChild(new MenuSeparator);
-        auto sub = [&](const char* label, rack::midi::Port* port) {
-            menu->addChild(createSubmenuItem(label, "", [port](Menu* sm) {
-                rack::app::appendMidiMenu(sm, port);
+        // Inputs get Rack's full menu (there `channel` is a filter and "All
+        // channels" is a real choice); outputs get the channel-free one.
+        auto sub = [&](const char* label, rack::midi::Port* port, bool output) {
+            menu->addChild(createSubmenuItem(label, "", [port, output](Menu* sm) {
+                if (output) dmidi::appendMidiOutputMenu(sm, port);
+                else        rack::app::appendMidiMenu(sm, port);
             }));
         };
-        sub("TRS input device",  &m->trsIn);
-        sub("TRS output device", &m->trsOut);
-        sub("USB input device",  &m->usbIn);
-        sub("USB output device", &m->usbOut);
+        sub("TRS input device",  &m->trsIn,  false);
+        sub("TRS output device", &m->trsOut, true);
+        sub("USB input device",  &m->usbIn,  false);
+        sub("USB output device", &m->usbOut, true);
         appendBuildInfoMenu(menu);
     }
 };

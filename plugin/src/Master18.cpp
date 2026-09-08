@@ -1,6 +1,7 @@
 #include "MasterBase.hpp"
 #include "DroidWidgets.hpp"
 #include "MidiConvert.hpp"
+#include "MidiOutputPort.hpp"
 #include <app/MidiDisplay.hpp>
 
 // DROID MASTER18: 8 CV outs, 2 gate/trigger ins (I1/I2), 4 gate/trigger outs
@@ -18,7 +19,7 @@ struct DroidMaster18 : DroidMasterBase {
     // MIDI ports (X7.cpp patterns: InputQueue releases by frame timestamp,
     // 1..3-byte non-sysex only; Output wraps a device sendMessage).
     rack::midi::InputQueue usbIn, trs1In, trs2In;
-    rack::midi::Output usbOut, trs1Out, trs2Out;
+    dmidi::OutputPort usbOut, trs1Out, trs2Out;   // channel override pinned off (MidiOutputPort.hpp)
     int64_t frame_ = 0;
 
     // Frequency probe on I1 (manual hardware.md §9.7): positive zero-crossing
@@ -90,7 +91,7 @@ struct DroidMaster18 : DroidMasterBase {
         static constexpr droid::MidiPort kPort[3] = {
             droid::MidiPort::M18Usb, droid::MidiPort::M18Trs1, droid::MidiPort::M18Trs2};
         rack::midi::InputQueue* ins[3] = { &usbIn, &trs1In, &trs2In };
-        rack::midi::Output* outs[3] = { &usbOut, &trs1Out, &trs2Out };
+        dmidi::OutputPort* outs[3] = { &usbOut, &trs1Out, &trs2Out };
         for (int i = 0; i < 3; i++) {
             rack::midi::Message msg;
             while (ins[i]->tryPop(&msg, frame_)) {
@@ -170,17 +171,20 @@ struct DroidMaster18Widget : DroidMasterBaseWidget {
         auto* m = dynamic_cast<DroidMaster18*>(module);
         if (!m) { appendBuildInfoMenu(menu); return; }
         menu->addChild(new MenuSeparator);
-        auto sub = [&](const char* label, rack::midi::Port* port) {
-            menu->addChild(createSubmenuItem(label, "", [port](Menu* sm) {
-                rack::app::appendMidiMenu(sm, port);
+        // Inputs get Rack's full menu (there `channel` is a filter and "All
+        // channels" is a real choice); outputs get the channel-free one.
+        auto sub = [&](const char* label, rack::midi::Port* port, bool output) {
+            menu->addChild(createSubmenuItem(label, "", [port, output](Menu* sm) {
+                if (output) dmidi::appendMidiOutputMenu(sm, port);
+                else        rack::app::appendMidiMenu(sm, port);
             }));
         };
-        sub("USB MIDI input",     &m->usbIn);
-        sub("USB MIDI output",    &m->usbOut);
-        sub("MIDI1 input (TRS)",  &m->trs1In);
-        sub("MIDI1 output (TRS)", &m->trs1Out);
-        sub("MIDI2 input (TRS)",  &m->trs2In);
-        sub("MIDI2 output (TRS)", &m->trs2Out);
+        sub("USB MIDI input",     &m->usbIn,   false);
+        sub("USB MIDI output",    &m->usbOut,  true);
+        sub("MIDI1 input (TRS)",  &m->trs1In,  false);
+        sub("MIDI1 output (TRS)", &m->trs1Out, true);
+        sub("MIDI2 input (TRS)",  &m->trs2In,  false);
+        sub("MIDI2 output (TRS)", &m->trs2Out, true);
         appendBuildInfoMenu(menu);
     }
 };

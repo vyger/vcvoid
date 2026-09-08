@@ -84,6 +84,73 @@ comments are stripped before the limit is checked, so they're free).
   patch's declared chain order, not physical slot.
 - `_NAME` — internal cable (any name starting with `_`).
 
+## Label every bound control and jack
+
+**Standing rule.** Every control and jack register the patch binds carries a
+label in the patch header. No exceptions, including for scratch patches — a
+control you cannot name on the panel is a control you have to re-read the
+patch to use.
+
+- **Required:** controls (`B`, `P`, `S`, `E`) and jacks (`I`, `O`, `N`, `G`).
+- **Optional:** LEDs (`L`). An LED that mirrors its own button (`L7.20` beside
+  `B7.20`) is covered by the button's label — don't restate it. Label an `L`
+  only when its meaning is *not* obvious from the button beside it, e.g. one
+  showing a beat pulse rather than the button's on/off state, or one with no
+  button at all.
+- **Out of scope:** controls with no register of their own. M4 motor faders
+  claimed en masse by `motoquencer`'s `numfaders` have nothing to attach a
+  label to; explain those in a section comment instead.
+
+Format is `#  <register>: [SHORT] longer text`, in the header only — after the
+title comment and before the first circuit or `# ---` separator. The longer
+text becomes the tooltip, is not length-constrained, and may be omitted.
+
+### `[SHORT]` is 7-8 characters, hard
+
+`[SHORT]` is what the on-panel chip shows, and **only 7 or 8 characters
+reliably stay visible in both the Forge and vcvoid** — spaces included. Longer
+text is silently ellipsized, so the end of the name is simply lost on the
+panel. Treat 8 as the ceiling and prefer 7.
+
+This is a real budget, so spend it on the part that distinguishes one control
+from its neighbours and abbreviate everything else. Drop the space in a
+name+number pair, cut a category word to two letters, and use a bare letter
+prefix instead of a bracketed one:
+
+| Don't | Do | Why |
+|-------|-----|-----|
+| `[syn1 gate]` (9) | `[syn1 gt]` (7) | `gate` → `gt`; the channel is what matters |
+| `[(m) kick 1]` (10) | `[m kick1]` (7) | bare `m` prefix, no space before the number |
+| `[pitch/vel]` (9) | `[pit/vel]` (7) | truncate the longer half of a pair |
+
+Put the full wording in the tooltip text after the `[SHORT]`, where there is
+room for it — the chip is a reminder, not the documentation.
+
+```
+#  B7.19: [syn1] synth 1 track select
+#  B7.20: [m syn1] synth 1 mute
+#  E1.1: [encoder] menu encoder - in clock mode, BPM
+#  G9: [syn1 gt] syn1 note gate
+```
+
+Check the widths, don't eyeball them:
+
+```sh
+grep -oE '^#  [A-Z][0-9.]+: \[[^]]*\]' patch.ini |
+  sed -E 's/^#  ([^:]+): \[(.*)\]$/\2|\1/' |
+  awk -F'|' '{ if (length($1) > 8) printf "%2d  [%s]  %s\n", length($1), $1, $2 }'
+```
+
+Audit before handing a patch back — `droidcheck --labels patch.ini` prints
+every label it extracts, so diff that against the registers the patch
+actually uses:
+
+```sh
+# every bound control/jack register in the patch body
+grep -v '^[[:space:]]*#' patch.ini | grep -oE '\b[IONGBPSE][0-9]+(\.[0-9]+)?\b' | sort -u
+tools/droidcheck/build/droidcheck --labels patch.ini
+```
+
 ## Voltages ↔ numbers
 
 Jacks are −10 V…+10 V; internally everything is the number range −1…+1
