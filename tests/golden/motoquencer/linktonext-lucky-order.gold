@@ -1,0 +1,60 @@
+# motoquencer linktonext: luckyreverse on the chain MAIN rearranges the linked
+# member's steps by the SAME permutation (#30). motoquencer.md:683-684 -- "If you
+# use shiftsteps, luckyshuffle or luckyreverse on the main sequencer, the exact
+# same rearrangement of steps will happen at the linked sequencers." And
+# :704-705 -- luckyskips/luckyrepeats/luckyshuffle/luckyreverse are the lucky
+# parameters that are NOT valid on the linked sequencer (ignored there).
+#
+# The member's four steps get four distinct CVs (via fadermode 10). Then:
+#   tick 7:  luckyreverse on the MEMBER's own input -> ignored, order unchanged.
+#   tick 12: luckyreverse on the MAIN (luckychance 1, scope 0 = all four steps)
+#            -> the member plays 0.25/0.5/0.75/1.0 instead of 1.0/0.75/0.5/0.25.
+tickrate 100
+patch <<<
+[m4]
+[motoquencer]
+    clock        = I1
+    fadermode    = I2
+    luckyreverse = I3
+    luckychance  = 1
+    numsteps     = 4
+    numfaders    = 4
+    linktonext   = 1
+    cv           = O1
+[motoquencer]
+    luckyreverse = I4
+    luckychance  = 1
+    quantize     = 0
+    cvbase       = 0
+    cvrange      = 1
+    holdcv       = 0
+    cv           = O2
+>>>
+@1 set I2 10
+@2 move F1 1.0
+@3 move F2 0.75
+@4 move F3 0.5
+@5 move F4 0.25
+# luckyreverse read on the MEMBER: ignored.
+@7 set I4 1
+@8 set I4 0
+@9 set I1 1
+@9 expect O2 1.0 tol 1e-4
+@10 set I1 0
+# luckyreverse on the MAIN: the member's steps reverse too.
+@12 set I3 1
+@13 set I3 0
+# the faders (still on the member's CV lane) recall the new order
+@13 expect F1 0.25 tol 1e-4
+@13 expect F4 1.0 tol 1e-4
+@14 set I1 1
+@14 expect O2 0.5 tol 1e-4
+@15 set I1 0
+@16 set I1 1
+@16 expect O2 0.75 tol 1e-4
+@17 set I1 0
+@18 set I1 1
+@18 expect O2 1.0 tol 1e-4
+@19 set I1 0
+@20 set I1 1
+@20 expect O2 0.25 tol 1e-4

@@ -17,7 +17,8 @@ public:
         return n > 0 ? n : 4;
     }
 
-    void editSurface(EngineState& s, int page, int fm, int bm, bool recall) override {
+    void editSurface(EngineState& s, int page, int fm, int bm, bool recall,
+                     bool faders, bool buttons) override {
         int Nfeel = notchesFor(s, fm);
         for (int i = 0; i < numFaders_; i++) {
             int step = page * numFaders_ + i;
@@ -29,11 +30,14 @@ public:
             // touch plate editing (independent of fadermode). The plate BELOW the
             // fader is the step button — grabbing/moving the fader itself
             // (f->touched) is a different sensor and must never press the step.
-            bool pressed = f->plate;
-            bool wasPressed = (i < (int)prevTouch_.size()) ? prevTouch_[i] : false;
-            if (pressed && !wasPressed) pressStep(bm, step);
-            if (i < (int)prevTouch_.size()) prevTouch_[i] = pressed;
+            if (buttons) {
+                bool pressed = f->plate;
+                bool wasPressed = (i < (int)prevTouch_.size()) ? prevTouch_[i] : false;
+                if (pressed && !wasPressed) pressStep(bm, step);
+                if (i < (int)prevTouch_.size()) prevTouch_[i] = pressed;
+            }
 
+            if (!faders) continue;                         // another chain member's faders
             if (recall || !wasSelected_) {                // motorized recall
                 s.controllers.commandFader(fdr, storedPos(s, fm, step));
                 f->notches = Nfeel <= 25 ? Nfeel : 0;

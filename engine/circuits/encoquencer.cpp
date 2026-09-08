@@ -34,7 +34,8 @@ public:
         return n > 0 ? n : 4;
     }
 
-    void editSurface(EngineState& s, int page, int fm, int bm, bool recall) override {
+    void editSurface(EngineState& s, int page, int fm, int bm, bool recall,
+                     bool faders, bool buttons) override {
         (void)recall;   // encoders have no motor -> nothing to recall; state persists
         for (int i = 0; i < numFaders_; i++) {
             int step = page * numFaders_ + i;
@@ -44,11 +45,14 @@ public:
             if (!e) continue;
 
             // push-button editing (buttonmode)
-            bool pushed = e->pushed;
-            bool wasPushed = (i < (int)prevTouch_.size()) ? prevTouch_[i] : false;
-            if (pushed && !wasPushed) pressStep(bm, step);
-            if (i < (int)prevTouch_.size()) prevTouch_[i] = pushed;
+            if (buttons) {
+                bool pushed = e->pushed;
+                bool wasPushed = (i < (int)prevTouch_.size()) ? prevTouch_[i] : false;
+                if (pushed && !wasPushed) pressStep(bm, step);
+                if (i < (int)prevTouch_.size()) prevTouch_[i] = pushed;
+            }
 
+            if (!faders) continue;                          // another chain member's encoders
             // turn editing (relative detents drained by the engine each tick)
             bool changed = adjustByDetents(s, fm, step, e->pendingDetents);
             if (changed && fm == 0) { cur_.gate[step] = true; onCvEdited(s, step); }  // gate auto-on + compose audition
