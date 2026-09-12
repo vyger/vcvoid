@@ -185,12 +185,18 @@ docs (`manual/circuits/*.md`) supply the *semantics* the hand-written
 |-------|-------|--------|
 | RAM budget | 112 867 bytes (MASTER), 109 015 (MASTER18) | `droidfirmware.json` `available_memory` |
 | RAM accounting | base jacktable 168 B + per-circuit `ramsize` + per-jack `ramhint` costs | `droidfirmware.json` (same math as the Forge) |
-| Patch file size | 64 000 bytes | manual |
+| Patch file size | 64 000 bytes, measured on the patch as the master receives it: comments/whitespace stripped **and** parameter names abbreviated to their firmware short forms (`droid::deployedPatchSize`, issue #41) | manual + the Forge's `Patch::toDeployString` |
 | Jack voltage | outputs clamp to ±10 V | manual |
 | Registers | only those present on the configured master/controllers | Forge validator |
 
 Over-budget or invalid patches **refuse to load** with a Forge-style error
 (the hardware blinks LEDs; we show the message + line number).
+
+A verbose patch may therefore be much larger on disk than the size the limit is
+applied to — the Forge abbreviates parameter names on its way to the SD card
+("Use abbreviated parameter names"), so a generated patch of 65 kB of verbose
+text can be 48 kB as deployed. `make sizecheck` keeps our C++ measurement equal
+to `tools/inicompress.py`, which performs the same abbreviation in Python.
 
 Two documented escapes from fidelity exist, both per-module, both off by
 default, both in the master's *Experimental* context-menu section:

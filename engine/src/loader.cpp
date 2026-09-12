@@ -2,8 +2,11 @@
 #include "controllers.hpp"
 #include "ram.hpp"
 #include <algorithm>
+#include <cctype>
+#include <cstring>
 #include <map>
 #include <set>
+#include <sstream>
 #include <vector>
 
 namespace droid {
@@ -80,19 +83,94 @@ bool validRegister(const RegId& r, MasterType master,
     err = "There is no register " + toString(r) + " on this master";
     return false;
 }
+
+// Short form of one parameter name inside one circuit, mirroring the Forge's
+// DroidFirmware::jackShortname (droidforge/main/droidfirmware.cpp): the name is
+// looked up among the circuit's inputs first, then its outputs; an array jack
+// matches as prefix + element number and keeps that number after the shortened
+// prefix. A name the firmware does not know, or a jack with no short form,
+// stays exactly as written.
+std::string jackShortname(const gen::CircuitDef& c, const std::string& param) {
+    for (int pass = 0; pass < 2; pass++) {          // 0 = inputs, 1 = outputs
+        for (unsigned i = 0; i < c.numJacks; i++) {
+            const gen::JackDef& j = c.jacks[i];
+            if (j.isInput != (pass == 0)) continue;
+            size_t nl = std::strlen(j.name);
+            if (param.size() < nl || param.compare(0, nl, j.name) != 0) continue;
+            if (j.count == 1) {
+                if (param.size() != nl) continue;
+                return j.shortName[0] ? std::string(j.shortName) : param;
+            }
+            // Array element: only the numbers the firmware actually defines
+            // (calibrator's tune0 … tune8 is the one zero-based array).
+            for (int k = j.startAt; k < int(j.startAt) + int(j.count); k++) {
+                if (param.compare(nl, std::string::npos, std::to_string(k)) != 0) continue;
+                return j.shortName[0] ? j.shortName + std::to_string(k) : param;
+            }
+        }
+    }
+    return param;
+}
+
+// Rewrite every parameter name to its short form, leaving values, comments and
+// layout byte-for-byte alone. Parameter lines are recognised the way
+// tools/inicompress.py recognises them (indent, identifier, '='), and only
+// inside a section the firmware knows as a circuit — a controller section
+// ([p2b8], [x7]) has no jacks to abbreviate.
+std::string abbreviatePatch(const std::string& text) {
+    std::istringstream in(text);
+    std::string raw, out;
+    const gen::CircuitDef* cur = nullptr;
+    auto lower = [](std::string s) {
+        for (auto& ch : s) ch = char(std::tolower((unsigned char)ch));
+        return s;
+    };
+    while (std::getline(in, raw)) {
+        size_t b = raw.find_first_not_of(" \t");
+        if (b != std::string::npos && raw[b] == '[') {
+            size_t e = raw.find(']', b);
+            if (e != std::string::npos)
+                cur = gen::findCircuit(lower(raw.substr(b + 1, e - b - 1)));
+        } else if (cur && b != std::string::npos && std::isalpha((unsigned char)raw[b])) {
+            size_t e = b;
+            while (e < raw.size() && std::isalnum((unsigned char)raw[e])) e++;
+            size_t eq = raw.find_first_not_of(" \t", e);
+            if (eq != std::string::npos && raw[eq] == '=') {
+                std::string name = lower(raw.substr(b, e - b));
+                std::string s = jackShortname(*cur, name);
+                if (s.size() < name.size()) raw = raw.substr(0, b) + s + raw.substr(e);
+            }
+        }
+        out += raw;
+        out += '\n';
+    }
+    return out;
+}
 } // namespace
+
+size_t deployedPatchSize(const std::string& text) {
+    return stripPatch(abbreviatePatch(text)).size();
+}
 
 LoadResult compilePatch(const std::string& text, MasterType master, CompiledPatch& out,
                         const LoadOptions& opts) {
     LoadResult res;
     out = CompiledPatch{};
 
-    if (stripPatch(text).size() > 64000) {
+    // Forge parity (#41): the limit applies to the patch as the master receives
+    // it — with abbreviated parameter names. Measuring the verbose text instead
+    // refused generated patches (MFPS output) that fit on real hardware.
+    size_t deployed = deployedPatchSize(text);
+    if (deployed > kMaxPatchSize) {
+        std::string msg = "patch exceeds the maximum size of " +
+                          std::to_string(kMaxPatchSize) + " bytes (" +
+                          std::to_string(deployed) +
+                          " bytes with abbreviated parameter names, as the "
+                          "master measures it)";
         if (opts.ignoreMemoryLimits) {
-            res.warnings.push_back("patch exceeds the maximum size of 64000 bytes"
-                                   " (loaded anyway: hardware memory limits ignored)");
+            res.warnings.push_back(msg + " (loaded anyway: hardware memory limits ignored)");
         } else {
-            res.errors.push_back({0, "patch exceeds the maximum size of 64000 bytes"});
+            res.errors.push_back({0, msg});
             return res;
         }
     }

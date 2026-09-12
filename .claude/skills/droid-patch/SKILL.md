@@ -66,8 +66,10 @@ experimental and hardware-incompatible, and you must tell them both of these:
 ```
 
 A patch is a list of `[circuit]` blocks, each with `param = value` lines.
-Comments start with `#`. One patch = one file, ≤ **64 000 bytes** (spaces and
-comments are stripped before the limit is checked, so they're free).
+Comments start with `#`. One patch = one file, ≤ **64 000 bytes** — measured as
+the master receives it, so spaces and comments are free (stripped) and so are
+long parameter names (abbreviated to their short forms: `square` → `q`). Run
+`tools/inicompress.py <patch>` to see both numbers.
 
 ## Registers
 

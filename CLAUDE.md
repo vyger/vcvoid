@@ -51,8 +51,14 @@ often several of these at once.
 A patch is a text file **`droid.ini`** on the master's micro-SD card (also keeps
 running state — always leave the card in). Build patches in the **Droid Forge**
 GUI (recommended) or any text editor. The Forge blocks loading while a patch has
-*problems* (e.g. a parameter with no value). Max patch size is 64 000 bytes;
-enable compression for large generated patches.
+*problems* (e.g. a parameter with no value). Max patch size is 64 000 bytes —
+but measured on the patch as the *master receives* it: comments and whitespace
+stripped and every parameter name abbreviated to its firmware short form
+(`square` → `q`), which is how the Forge writes `droid.ini` to the SD card. A
+65 kB verbose patch out of a generator can be 48 kB deployed and run fine. The
+engine measures the same thing (`droid::deployedPatchSize`, issue #41);
+`tools/inicompress.py` does it in Python and `make sizecheck` holds the two
+equal.
 
 A patch is a list of **circuits** — DROID's internal "modules" (e.g. `lfo`,
 `contour`, `mixer`, `algoquencer`). Text syntax: `[circuitname]` header, then
@@ -104,6 +110,9 @@ cd tools/droidcheck
 - `make gen` — regenerate `engine/gen/` from the Forge's droidfirmware.json
   (needs `tools/droidcheck/vendor/`, i.e. run `tools/droidcheck/build.sh` once).
 - `make crosscheck` — validate golden patches against droidcheck (Forge parity).
+- `make sizecheck` — patch-size measurement parity: the engine's deployed
+  (abbreviated) size vs `tools/inicompress.py`, over every patch in `patches/`.
+  Part of `make test`; skips itself when the Forge checkout is missing.
 - `make labelcheck` — register-label extraction parity: our
   `engine/src/labels.cpp` vs the Forge's own parser (`droidcheck --labels`),
   over every patch in `patches/`. Part of `make test`; skips itself when

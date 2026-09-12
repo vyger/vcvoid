@@ -169,12 +169,14 @@ TEST(ram_over_budget_ignored) {
 // The 64 000-byte patch-size cap is a hardware limit too: hard error normally,
 // warning under ignoreMemoryLimits (the patch must still parse and run).
 TEST(patch_size_cap_ignored) {
-    // Pad past 64 000 bytes with a valid copy chain (stripPatch removes
+    // Pad past 64 000 bytes with a valid copy chain (the measurement removes
     // comments/whitespace, so the padding must be real circuit text; each
     // cable is written once and read once so the patch stays well-formed).
+    // Pad on the ABBREVIATED size — that is the one the limit applies to, and
+    // `input`/`output` shorten to `i`/`o`, so the verbose text is far bigger.
     std::string patch = "[copy]\n input = I1\n output = _C0\n";
     int n = 0;
-    while (stripPatch(patch).size() <= 64000) {   // the limit applies post-strip
+    while (deployedPatchSize(patch) <= kMaxPatchSize) {
         for (int i = 0; i < 100; i++) {
             patch += "[copy]\n input = _C" + std::to_string(n) +
                      "\n output = _C" + std::to_string(n + 1) + "\n";
@@ -199,4 +201,72 @@ TEST(patch_size_cap_ignored) {
     CHECK(sizeWarn);
     for (auto& e : soft.errors)
         CHECK(e.message.find("maximum size") == std::string::npos);
+}
+
+// Build a copy chain of `links` circuits, written verbosely, plus a head and a
+// tail so every cable is written once and read once.
+static std::string copyChain(int links) {
+    std::string patch = "[copy]\n    input = I1\n    output = _C0\n";
+    for (int n = 0; n < links; n++)
+        patch += "[copy]\n    input = _C" + std::to_string(n) +
+                 "\n    output = _C" + std::to_string(n + 1) + "\n";
+    patch += "[copy]\n    input = _C" + std::to_string(links) + "\n    output = O1\n";
+    return patch;
+}
+
+// Forge parity (#41): the limit is enforced on the patch as the master receives
+// it — parameter names abbreviated ("input" -> "i", "output" -> "o"), the way
+// the Forge writes droid.ini to the SD card. A verbose patch over 64 000 bytes
+// whose abbreviated form fits must LOAD; measuring the verbose text instead
+// refused generated patches (MFPS output) that run fine on hardware.
+TEST(patch_size_measured_abbreviated) {
+    std::string patch = copyChain(2600);
+    CHECK(stripPatch(patch).size() > kMaxPatchSize);       // verbose: over
+    CHECK(deployedPatchSize(patch) < kMaxPatchSize);       // abbreviated: fits
+    CompiledPatch cp;
+    LoadOptions opts;
+    opts.ignoreMemoryLimits = true;   // 2600 copy circuits blow the RAM budget
+    auto r = compilePatch(patch, MasterType::Master16, cp, opts);
+    CHECK(r.errors.empty());
+    for (auto& w : r.warnings)
+        CHECK(w.find("maximum size") == std::string::npos);
+}
+
+// ... and one that is still too big once abbreviated is still refused, with the
+// measured size named in the message.
+TEST(patch_size_over_even_abbreviated) {
+    std::string patch = copyChain(9000);
+    CHECK(deployedPatchSize(patch) > kMaxPatchSize);
+    CompiledPatch cp;
+    auto r = compilePatch(patch, MasterType::Master16, cp);
+    CHECK(!r.ok);
+    bool named = false;
+    for (auto& e : r.errors)
+        if (e.message.find("maximum size of 64000 bytes") != std::string::npos &&
+            e.message.find(std::to_string(deployedPatchSize(patch))) != std::string::npos)
+            named = true;
+    CHECK(named);
+}
+
+// The abbreviation itself: scalar and array jacks, inputs and outputs, only
+// inside circuits the firmware knows (a controller section has no jacks), and
+// nothing else about the text is measured differently than before.
+TEST(deployed_size_abbreviation) {
+    // lfo: hz has no short form, square -> q. copy: input -> i, output -> o.
+    CHECK(deployedPatchSize("[lfo]\n hz = 2\n square = _G\n") ==
+          stripPatch("[lfo]\nhz=2\nq=_G\n").size());
+    // midiout: pitch1 is an array element (p1); a bare `pitch` is not a jack
+    // name to the Forge and stays verbose.
+    CHECK(deployedPatchSize("[midiout]\n pitch1 = 0.2\n") ==
+          stripPatch("[midiout]\np1=0.2\n").size());
+    CHECK(deployedPatchSize("[midiout]\n pitch = 0.2\n") ==
+          stripPatch("[midiout]\npitch=0.2\n").size());
+    // A controller section and an unknown circuit are left alone.
+    CHECK(deployedPatchSize("[p2b8]\n[nosuchcircuit]\n input = I1\n") ==
+          stripPatch("[p2b8]\n[nosuchcircuit]\ninput=I1\n").size());
+    // Comments and quoted text count exactly as stripPatch counts them.
+    CHECK(deployedPatchSize("[copy] # gone\n input = I1  # gone\n output = O1\n") ==
+          stripPatch("[copy]\ni=I1\no=O1\n").size());
+    CHECK(deployedPatchSize("[display]\n header = \"Loud  Volume\"\n") ==
+          stripPatch("[display]\nhr=\"Loud  Volume\"\n").size());
 }
