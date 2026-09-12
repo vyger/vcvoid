@@ -1076,7 +1076,10 @@ circuits:
       number, so its shiftsteps/play order/repeats/skips carry over and their
       own are ignored, while each member's own lane supplies cv/gate/
       probability/gate pattern/ratchets; holdcv 2 = sync the CV to the
-      member's own gate instead of the main's).
+      member's own gate instead of the main's; a member inherits the main's
+      geometry -- firstfader/numfaders/numsteps -- for each of those it
+      leaves unpatched, so a linked lane pages with the main instead of
+      falling back to the whole M4 bank).
       DEFERRED (advanced live-performance conveniences, interactive gestures
       with no headless analog, or panel-only; documented in seqcore.hpp): form
       + startofpart, movement patterns 1..7 (pattern 0/linear only),

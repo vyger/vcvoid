@@ -59,6 +59,11 @@
 //     own lane supplies CV, gate, probability, gate pattern and ratchets. `holdcv`
 //     on a member takes the extra value 2 (sync the CV to its own gate instead of
 //     the main's). A member ignores its own clock/reset/run-order inputs entirely.
+//     A member's GEOMETRY (firstfader / numfaders / numsteps) is inherited from
+//     the chain main whenever the member leaves that input unpatched — the chain
+//     shares one fader bank and one step position, and the Forge's own MFPS
+//     generator emits linked lanes with none of the three while the main sets
+//     numfaders / numsteps (#34). Stating any of them on a member still wins.
 //   * select/selectat overlay, 4 presets, clear / clearall / clearskips /
 //     clearrepeats, defaultcv (a notch index when cvnotches >= 2) / defaultgate.
 //   * composemode: while high the transport ignores clock edges; a CV edit
@@ -295,20 +300,6 @@ public:
 protected:
     // ---- configuration -----------------------------------------------------
     void init(EngineState& s) {
-        long ff = std::lround(in("firstfader").value(s));
-        firstFader_ = ff < 1 ? 1 : (int)ff;
-        int avail = availableLanes(s);
-        long nf = std::lround(in("numfaders").value(s));
-        numFaders_ = in("numfaders").connected() && nf > 0 ? (int)nf : (avail > 0 ? avail : 4);
-        numFaders_ = clampi(numFaders_, 1, kSteps);
-        long ns = std::lround(in("numsteps").value(s));
-        numsteps_ = in("numsteps").connected() && ns > 0 ? (int)ns : numFaders_;
-        numsteps_ = clampi(numsteps_, 1, kSteps);
-
-        seedState(s, cur_);
-        for (int p = 0; p < kPresets; p++) preset_[p] = cur_;
-        prevPreset_ = clampi((int)std::lround(in("preset").value(s)), 0, kPresets - 1);
-
         // linktonext chain resolution. Walk back over the immediately preceding
         // sequencer peers that each `linktonext = 1`; the earliest one is this
         // chain's main and our distance from it is the chain index. `linkToNext_`
@@ -320,6 +311,36 @@ protected:
             chainMain_ = p;
             chainIndex_++;
         }
+        // The main precedes us in patch order, so it normally ticked (and
+        // inited) first; make sure of it before reading its geometry.
+        if (chainMain_ && !chainMain_->inited_) chainMain_->init(s);
+
+        // Geometry. A chain member edits the SAME physical faders as the main
+        // and plays the main's step, so an unset `firstfader` / `numfaders` /
+        // `numsteps` inherits from the chain main rather than falling back to
+        // the per-circuit default (fader 1, the whole M4 bank) (#34): the
+        // Forge's MFPS generator writes linked lanes without any of the three,
+        // and with a bank-sized single page a member's `page` input would clamp
+        // to 0 and pages 2+ of that lane could never be reached on hardware.
+        long ff = std::lround(in("firstfader").value(s));
+        if (in("firstfader").connected() && ff >= 1) firstFader_ = (int)ff;
+        else if (chainMain_)                         firstFader_ = chainMain_->firstFader_;
+        else                                         firstFader_ = ff < 1 ? 1 : (int)ff;
+        int avail = availableLanes(s);
+        long nf = std::lround(in("numfaders").value(s));
+        if (in("numfaders").connected() && nf > 0) numFaders_ = (int)nf;
+        else if (chainMain_)                       numFaders_ = chainMain_->numFaders_;
+        else                                       numFaders_ = avail > 0 ? avail : 4;
+        numFaders_ = clampi(numFaders_, 1, kSteps);
+        long ns = std::lround(in("numsteps").value(s));
+        if (in("numsteps").connected() && ns > 0) numsteps_ = (int)ns;
+        else if (chainMain_)                      numsteps_ = chainMain_->numsteps_;
+        else                                      numsteps_ = numFaders_;
+        numsteps_ = clampi(numsteps_, 1, kSteps);
+
+        seedState(s, cur_);
+        for (int p = 0; p < kPresets; p++) preset_[p] = cur_;
+        prevPreset_ = clampi((int)std::lround(in("preset").value(s)), 0, kPresets - 1);
         inited_ = true;
     }
 
