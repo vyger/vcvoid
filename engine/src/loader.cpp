@@ -167,9 +167,10 @@ LoadResult compilePatch(const std::string& text, MasterType master, CompiledPatc
                           std::to_string(deployed) +
                           " bytes with abbreviated parameter names, as the "
                           "master measures it)";
-        if (opts.ignoreMemoryLimits) {
-            res.warnings.push_back(msg + " (loaded anyway: hardware memory limits ignored)");
-        } else {
+        // "Ignore memory limits" means exactly that: the patch loads as a
+        // plain running patch, with no warning (an amber ring / tooltip on
+        // every load of a large patch is noise once the user opted in).
+        if (!opts.ignoreMemoryLimits) {
             res.errors.push_back({0, msg, ErrorCode::PatchTooBig});
             return res;
         }
@@ -312,11 +313,9 @@ LoadResult compilePatch(const std::string& text, MasterType master, CompiledPatc
     std::vector<LoadError> ramErrors;
     out.ramUsed = computeRam(out, master, ramErrors);
     res.ramUsed = out.ramUsed;
-    if (opts.ignoreMemoryLimits) {
-        for (auto& e : ramErrors)
-            res.warnings.push_back("line " + std::to_string(e.line) + ": " + e.message +
-                                   " (loaded anyway: hardware memory limits ignored)");
-    } else {
+    // Same policy as the size cap: with the limits ignored, overflows are
+    // silently accepted rather than downgraded to warnings.
+    if (!opts.ignoreMemoryLimits) {
         res.errors.insert(res.errors.end(), ramErrors.begin(), ramErrors.end());
     }
     res.ok = res.errors.empty();

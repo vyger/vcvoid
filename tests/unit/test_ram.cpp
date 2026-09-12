@@ -148,7 +148,7 @@ TEST(ram_over_budget) {
 }
 
 // Experimental "ignore memory limits" (#13): with the option set, the
-// same over-budget patch compiles ok — overflows downgrade to warnings, and
+// same over-budget patch compiles ok — overflows are accepted silently, and
 // ramUsed still reports the true (over-budget) footprint.
 TEST(ram_over_budget_ignored) {
     std::string patch;
@@ -159,15 +159,14 @@ TEST(ram_over_budget_ignored) {
     auto r = compilePatch(patch, MasterType::Master16, cp, opts);
     CHECK(r.ok);
     CHECK(r.errors.empty());
-    bool warned = false;
+    // Ignoring the limits is silent: no downgrade warning either.
     for (auto& w : r.warnings)
-        if (w.find("exceeds the available memory") != std::string::npos) warned = true;
-    CHECK(warned);
+        CHECK(w.find("exceeds the available memory") == std::string::npos);
     CHECK(r.ramUsed > 112867);   // still the honest footprint
 }
 
 // The 64 000-byte patch-size cap is a hardware limit too: hard error normally,
-// warning under ignoreMemoryLimits (the patch must still parse and run).
+// silently accepted under ignoreMemoryLimits (the patch must still parse and run).
 TEST(patch_size_cap_ignored) {
     // Pad past 64 000 bytes with a valid copy chain (the measurement removes
     // comments/whitespace, so the padding must be real circuit text; each
@@ -195,10 +194,9 @@ TEST(patch_size_cap_ignored) {
     LoadOptions opts;
     opts.ignoreMemoryLimits = true;
     auto soft = compilePatch(patch, MasterType::Master16, cp, opts);
-    bool sizeWarn = false;
+    CHECK(soft.ok);
     for (auto& w : soft.warnings)
-        if (w.find("maximum size") != std::string::npos) sizeWarn = true;
-    CHECK(sizeWarn);
+        CHECK(w.find("maximum size") == std::string::npos);
     for (auto& e : soft.errors)
         CHECK(e.message.find("maximum size") == std::string::npos);
 }
