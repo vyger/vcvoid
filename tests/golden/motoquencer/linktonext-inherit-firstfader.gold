@@ -1,0 +1,48 @@
+# motoquencer linktonext: a chain member that omits `firstfader` inherits it
+# from the chain main too (#34). The chain edits ONE physical fader bank, so a
+# member that fell back to the circuit default (fader 1) would drive a different
+# -- possibly unrelated -- set of faders than the main it is linked to.
+#
+# Here: two M4s (8 faders). The main starts at fader 5 and uses 2 faders x
+# 2 steps; the member states nothing at all. With the member addressed on the
+# fader surface (fadermode 10), fader 5 must be the member's step 0 -- with the
+# old fallback it would have been fader 1, and F5 would have landed on the
+# member's step index 4 instead (invisible, and never played by a 2-step chain).
+tickrate 100
+patch <<<
+[m4]
+[m4]
+[motoquencer]
+    clock      = I1
+    fadermode  = I3
+    firstfader = 5
+    numfaders  = 2
+    numsteps   = 2
+    linktonext = 1
+    quantize   = 0
+    cvbase     = 0
+    cvrange    = 1
+    cv         = O1
+[motoquencer]
+    quantize   = 0
+    cvbase     = 0
+    cvrange    = 1
+    holdcv     = 0
+    cv         = O2
+>>>
+# hand the fader surface to the member (chain index 1, local fadermode 0 = CV)
+@1 set I3 10
+# the member's step 0 lives on the MAIN's first fader, not on fader 1
+@2 move F5 0.75
+@2 expect F5 0.75 tol 1e-4
+# fader 1 is outside the chain's bank entirely and stays parked at 0
+@3 expect F1 0.0 tol 1e-4
+# step 0 of the member now plays the edit; step 1 (fader 6) is still 0
+@4 set I1 1
+@4 expect O2 0.75 tol 1e-4
+@5 set I1 0
+@6 set I1 1
+@6 expect O2 0.0 tol 1e-4
+@7 set I1 0
+@8 set I1 1
+@8 expect O2 0.75 tol 1e-4
