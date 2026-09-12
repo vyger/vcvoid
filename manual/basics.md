@@ -2798,6 +2798,22 @@ Note: If you get your *start animation* with just white LEDs instead of colored 
 | green | **Internal patch cable misused**: One of your internal patch cables (see page [60](basics.md)) is not properly used: **1. No input:** One patch cable is only used as output. **2. No output:** One patch cable is only used as input. **3. Double output:** One patch cable is used twice as an output. |
 | magenta | **1. Invalid header of circuit**: DROID was expecting an opening square bracket `[`, but found something else. **2. Invalid parameter line**: DROID was expecting something like `clock = I7`, but found something completely different. Parameters always start with a letter. This is followed by an equals sign. **3. Invalid parameter value**: Your parameter has an invalid value. Please checkout this manual about allowed values for parameters and their exact syntax. |
 
+> **vcvoid note (not DROID).** The emulation reproduces these blink codes on the
+> **master**'s 4 × 4 matrix: the same colours, the same tens/ones/white-hundreds
+> line encoding. Two deliberate differences, and one addition:
+>
+> - A master with **no patch loaded** keeps its matrix **dark** instead of
+>   flashing yellow "patch not found" — a freshly placed Rack module has no
+>   patch by definition, and a module that strobes on sight is noise.
+> - The **master18** has no rear LEDs in Rack, so it shows no blink code at all.
+> - Both masters instead carry a coloured **ring around the module** (grey = no
+>   patch, red = not running, amber = running with warnings), a hover tooltip,
+>   and a context-menu card with the message, the offending line, and actions to
+>   reload the patch, open it in an editor, or copy the errors. A few of
+>   vcvoid's checks are stricter than the hardware's and map onto the nearest
+>   code in the tables above; the full mapping is in
+>   `plugin/src/MasterStatus.hpp`. See issue #46.
+
 ### 5.5 Inputs, outputs and other registers
 
 Your master has lots of inputs and outputs. Also the LEDs on the MASTER and in the buttons of your controllers behave like outputs. Buttons and pots behave like inputs. All these are called *registers*, because they behave like things that can store values. Each register is named with one special character followed by a number or number combination.

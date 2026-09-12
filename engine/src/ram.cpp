@@ -125,7 +125,8 @@ unsigned computeRam(const CompiledPatch& p, MasterType master,
         unsigned mem = cc.def->ramSize;
         for (auto& pp : cc.params) mem += jackCost(pp);
         if (used + mem + stuff > budget)
-            errorsOut.push_back({cc.line, "This circuit exceeds the available memory"});
+            errorsOut.push_back({cc.line, "This circuit exceeds the available memory",
+                                 ErrorCode::OutOfMemory});
         used += mem;
     }
     return used + stuff;

@@ -212,7 +212,7 @@ ParseResult parsePatch(const std::string& text) {
 
         if (line.front() == '[') {
             if (line.back() != ']' || line.size() < 3) {
-                pr.errors.push_back({lineNo, "malformed section header"});
+                pr.errors.push_back({lineNo, "malformed section header", ErrorCode::InvalidSyntax});
                 continue;
             }
             pr.sections.push_back({line.substr(1, line.size() - 2), lineNo, {}});
@@ -221,11 +221,11 @@ ParseResult parsePatch(const std::string& text) {
         }
         size_t eq = line.find('=');
         if (eq == std::string::npos) {
-            pr.errors.push_back({lineNo, "expected 'parameter = value' or '[circuit]'"});
+            pr.errors.push_back({lineNo, "expected 'parameter = value' or '[circuit]'", ErrorCode::InvalidSyntax});
             continue;
         }
         if (!cur) {
-            pr.errors.push_back({lineNo, "parameter outside of any [circuit] section"});
+            pr.errors.push_back({lineNo, "parameter outside of any [circuit] section", ErrorCode::InvalidSyntax});
             continue;
         }
         ParamLine p;
@@ -235,17 +235,17 @@ ParseResult parsePatch(const std::string& text) {
             std::string n = line.substr(0, eq);
             size_t nb = n.find_first_not_of(" \t");
             size_t ne = n.find_last_not_of(" \t");
-            if (nb == std::string::npos) { pr.errors.push_back({lineNo, "missing parameter name"}); continue; }
+            if (nb == std::string::npos) { pr.errors.push_back({lineNo, "missing parameter name", ErrorCode::InvalidSyntax}); continue; }
             n = n.substr(nb, ne - nb + 1);
             for (auto& c : n) c = char(std::tolower((unsigned char)c));
             p.name = n;
         }
         bool unterminated = false;
         auto toks = tokenizeExpr(line.substr(eq + 1), unterminated);
-        if (unterminated) { pr.errors.push_back({lineNo, "unterminated text parameter"}); continue; }
-        if (toks.empty()) { pr.errors.push_back({lineNo, "missing value"}); continue; }
+        if (unterminated) { pr.errors.push_back({lineNo, "unterminated text parameter", ErrorCode::InvalidSyntax}); continue; }
+        if (toks.empty()) { pr.errors.push_back({lineNo, "missing value", ErrorCode::InvalidSyntax}); continue; }
         std::string err = canonicalize(toks, p, pr.texts);
-        if (!err.empty()) { pr.errors.push_back({lineNo, err}); continue; }
+        if (!err.empty()) { pr.errors.push_back({lineNo, err, ErrorCode::InvalidSyntax}); continue; }
         cur->params.push_back(std::move(p));
     }
     return pr;

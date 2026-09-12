@@ -371,6 +371,15 @@ g8-first row pins `chainError` and freezes the G8 gates).
    `uat-err-inputasoutput.ini` in turn → both `.statusLine` matches
    `^LOAD ERROR`; the cable error is known to report "line 0", so assert
    message content, not a specific line number for that one.
+2b. ☐ Visible error state (issue #46): with an errored patch loaded,
+   `GET /master/{id}/status` → `.state == "load-failed"`; the module has a **red
+   ring**, its 4 × 4 matrix flashes the hardware blink code (yellow input LEDs
+   1+8 / output LEDs 1+8 for the `O9` error on line 99 of a 99-line patch — see
+   basics.md §5.3), hovering the empty faceplate shows the error, and the
+   context menu's card quotes the offending line. Then check the other states:
+   no patch → `"no-patch"` + grey ring + dark matrix; a deprecated-circuit patch
+   → `"warnings"` + amber ring, still running; a broken chain → `"chain-error"`
+   + red ring, clearing to `"running"` (no ring) the moment the chain is fixed.
 3. ☐ Recovery: fix the error in a scratch copy of the errored
    `.ini` on disk (e.g. `O9`→`O1`) while it's the loaded path; poll
    `GET /master/{id}/status` for `.statusLine` to flip to `^ok` within

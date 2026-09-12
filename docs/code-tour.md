@@ -195,6 +195,8 @@ freshly loaded engine (`engine->setX7Present`) — ISSUE-1.
 | Chain protocol (POD contract) | `engine/src/chain.hpp`, `chain.cpp` |
 | Per-patch circuit state | `engine/src/patchstate.hpp`, `patchstate.cpp`, `Engine::saveState/restoreState/migrateState` |
 | Master Rack host (all masters) | `plugin/src/MasterBase.hpp` |
+| Visible error state (model) | `plugin/src/MasterStatus.hpp`, `tests/unit/test_masterstatus.cpp` |
+| Visible error state (paint) | `plugin/src/StatusRing.hpp`, `DroidMaster.cpp` matrix modes |
 | Expander relay base | `plugin/src/ChainModule.hpp` |
 | MIDI bridge | `plugin/src/X7.cpp`, `engine/src/midi.hpp` |
 | Panel positions | `plugin/src/Layout.hpp` |

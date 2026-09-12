@@ -70,6 +70,15 @@ Downloads) — it is intentionally not redistributed here.
 **Button chords:** **Shift+click** holds a button down while Shift is held, so
 you can Shift+click a second one; right-click → **Latch** holds until unticked.
 
+**When something is wrong:** a master that is not running says so with a ring
+around the module — grey for "no patch", amber for "loaded with warnings", red
+for a refused patch or a controller chain that doesn't match. Hover the panel
+for the reason; the **master**'s LED matrix also flashes the hardware's own
+[error blink code](manual/basics.md#53-finding-a-problem-in-your-droid-patch),
+and its context menu quotes the offending line and offers to reload, open the
+file. "Open file" uses your system's default app for
+`.ini` files — associate that with the DROID Forge and it opens there.
+
 **Patch state:** like the hardware, a master remembers buttons, fader positions,
 sequences and presets — but per patch, so switching patches never mixes them up.
 The master's menu shows where the current state came from; details in

@@ -5,6 +5,8 @@
 #include "ChainModule.hpp"  // droid::chain protocol + ChainModule::isChain{Left,Right}Neighbor
 #include "Layout.hpp"
 #include "RegisterLabels.hpp"   // issue #26: patch labels -> tooltips + panel chips
+#include "MasterStatus.hpp"     // issue #46: the visible error state (Rack-free model)
+#include "StatusRing.hpp"       // issue #46: the module halo
 #include "uatbridge/Bridge.hpp"   // forward-declares Rack types only; safe here
 #include "AdaptiveRate.hpp"
 #include "BuildInfo.hpp"
@@ -105,6 +107,115 @@ struct DroidMasterBase : Module {
     // Off by default so a patch built here stays hardware-compatible; same
     // threading note as ignoreHwMemoryLimits above.
     bool allowExperimentalCircuits = false;
+
+    // --- visible error state (issue #46) ---------------------------------
+    // A master that refuses to run used to look exactly like one that is
+    // running: the only trace was a line in the context menu, which nobody
+    // opens until they already suspect something. These carry the verdict out
+    // to the panel — the ring around the module, the MASTER's blink code, the
+    // hover tooltip and the menu card.
+    //
+    // The MODEL is Rack-free and unit-tested (MasterStatus.hpp): everything
+    // here is plumbing. `patchUnreadable` is the one piece of state the load
+    // path did not already record — loadPatchFile returns early when the file
+    // cannot be opened, leaving the PREVIOUS engine running, so "the file I am
+    // pointed at is gone" is not visible in lastResult at all.
+    bool patchUnreadable = false;        // engineMutex, like patchStatus
+    // Set by anything that can change the verdict (a load, a chain
+    // revalidation); consumed by the widget's step(), which republishes the
+    // lock-free halves below. Starting true makes a fresh module publish once.
+    std::atomic<bool> statusDirty{true};
+    // The state enum, for the ring. Read every frame by the widget's
+    // drawLayer(); written only by publishStatus(), i.e. only on a UI frame —
+    // anything that has just changed the verdict off the UI thread reports
+    // currentState() instead (see below).
+    std::atomic<int> uiState{(int) vcvoid::status::State::NoPatch};
+    // What the MASTER's 4x4 matrix should do, and the blink-code colours when
+    // that is Blink. Read by the AUDIO thread (DroidMaster::process), hence
+    // atomics rather than the plain struct: 16 relaxed loads per tick frame is
+    // nothing, and it makes the hand-off race-free instead of
+    // "torn read costs one frame". Each entry is 0x00RRGGBB; 0 = dark.
+    std::atomic<int> matrixMode{(int) vcvoid::status::Matrix::Dark};
+    std::atomic<uint32_t> matrixBlink[16] = {};
+    // The one-line status ("LOAD ERROR · line 99 — Unknown register 'O9' …"),
+    // UI thread only. Shown as the hover tooltip and appended to the matrix
+    // LEDs' light descriptions, so hovering the blinking code decodes it.
+    std::string statusLine;
+
+    // Everything the status model needs, copied out under the lock. Cheap
+    // enough to call on a menu open or a hover; not called per frame.
+    vcvoid::status::Report statusReport() {
+        vcvoid::status::Report r;
+        {
+            std::lock_guard<std::mutex> lock(engineMutex);
+            r.havePatch = !patchPath.empty();
+            r.fileUnreadable = patchUnreadable;
+            r.loadOk = (engine != nullptr) && lastResult.ok;
+            r.errorCount = (int) lastResult.errors.size();
+            if (!lastResult.errors.empty()) {
+                r.errorLine = lastResult.errors[0].line;
+                r.errorCode = lastResult.errors[0].code;
+                r.errorMessage = lastResult.errors[0].message;
+            }
+            if (r.fileUnreadable) {
+                r.errorCount = 1;
+                r.errorLine = 0;
+                r.errorMessage = patchStatus;   // "cannot open <path>"
+            }
+            r.warningCount = (int) lastResult.warnings.size();
+            if (!lastResult.warnings.empty()) r.warningMessage = lastResult.warnings[0];
+            r.fileName = patchPath.empty() ? std::string() : system::getFilename(patchPath);
+        }
+        // chainError is UI-thread-only (written by the widget's step()), so it
+        // is deliberately read outside the lock, like the menu already does.
+        r.chainError = chainError;
+        return r;
+    }
+
+    // Recompute the verdict and publish the parts other threads read. UI thread
+    // only — it writes std::strings and LightInfo descriptions that Rack's
+    // tooltips read while drawing.
+    void publishStatus() {
+        vcvoid::status::Status s = vcvoid::status::evaluate(statusReport());
+        for (int i = 0; i < 16; i++) {
+            const vcvoid::status::RGB& c = s.blink.led[i];
+            uint32_t packed = (uint32_t(rack::math::clamp(c.r, 0.f, 1.f) * 255.f + 0.5f) << 16)
+                            | (uint32_t(rack::math::clamp(c.g, 0.f, 1.f) * 255.f + 0.5f) << 8)
+                            |  uint32_t(rack::math::clamp(c.b, 0.f, 1.f) * 255.f + 0.5f);
+            matrixBlink[i].store(packed, std::memory_order_relaxed);
+        }
+        // Release AFTER the colours: an audio thread that sees Blink is
+        // guaranteed to see the pattern that goes with it.
+        matrixMode.store((int) s.matrix, std::memory_order_release);
+        uiState.store((int) s.state, std::memory_order_release);
+        // Wrapped: the tooltip (and the matrix LEDs' descriptions, which append
+        // it) are sized by Rack to their widest line, and a single-line
+        // "Circuit '…' is experimental (…)" ran the tooltip off the window.
+        statusLine = vcvoid::status::wrapText(vcvoid::status::oneLine(s));
+        applyOwnLabels();   // re-stamp the LED descriptions with the new line
+    }
+
+    // The last PUBLISHED state. Lock-free and cheap, for the per-frame readers
+    // (the ring's drawLayer) — but it only moves when the widget's step()
+    // consumes statusDirty, i.e. on the next UI frame.
+    vcvoid::status::State statusState() const {
+        return (vcvoid::status::State) uiState.load(std::memory_order_acquire);
+    }
+
+    // The state as of RIGHT NOW, recomputed instead of read back from the last
+    // publish. A caller that has just CHANGED the verdict and has to report it
+    // in the same breath must use this: the UAT bridge loads a patch straight
+    // from its HTTP thread (loadPatchFile is engine-only and engineMutex-
+    // guarded), so at the moment it serialises its reply the UI thread has not
+    // run a frame yet and statusState() still holds the pre-load verdict —
+    // loading a broken patch over a running one answered "running". Same lock
+    // discipline as every other caller: statusReport() takes engineMutex
+    // itself, and reads the UI-thread-only chainError outside it exactly as
+    // the bridge's status handler and the context menu already do (a chain
+    // revalidation the load just armed lands on the next UI frame either way).
+    vcvoid::status::State currentState() {
+        return vcvoid::status::evaluate(statusReport()).state;
+    }
 
     // Master type + I/O geometry (set once by the subclass constructor).
     droid::MasterType masterType_;
@@ -462,6 +573,12 @@ public:
                 std::lock_guard<std::mutex> lock(engineMutex);
                 patchPath = path;
                 patchStatus = "cannot open " + path;
+                // #46: the previous engine keeps running, so nothing in
+                // lastResult says the file we are pointed at has gone. This
+                // flag is what turns the ring red and flashes the hardware's
+                // "patch not found" code.
+                patchUnreadable = true;
+                statusDirty.store(true);
                 return;
             }
             std::stringstream ss; ss << f.rdbuf(); text = ss.str();
@@ -511,6 +628,7 @@ public:
         disarmWatch();
         lastResult = r;
         patchPath = path;
+        patchUnreadable = false;   // we read it; whatever is wrong is in `r` now
         sharedLabels = std::move(labels);
         // Publish last: a widget that sees the new generation must find the
         // labels already in place.
@@ -611,6 +729,7 @@ public:
         // error at once, not after the ISSUE-5 hot-plug tolerance window.
         chainForce.store(true);
         chainDirty.store(true);
+        statusDirty.store(true);   // #46: ring / blink code / tooltip / menu card
     }
 
     // UAT bridge (M9): fresh-boot the currently loaded patch without recreating
@@ -1304,6 +1423,92 @@ public:
     }
 };
 
+// --- context-menu error card (issue #46) ---------------------------------
+// The top of a master's menu used to be one grey `patchStatus` line. It is the
+// place someone lands when the panel's ring has told them something is wrong,
+// so it became the card that actually explains and fixes it: a coloured title,
+// the message, the offending line quoted from the file, where the patch and its
+// circuit state came from, and the three actions worth having right there.
+
+// The card's title row: a coloured square in the state's ring colour, then the
+// title. Not a MenuItem — there is nothing to click, and a disabled MenuItem
+// greys exactly the text that has to stand out.
+struct StatusTitleLabel : ui::MenuLabel {
+    NVGcolor color = nvgRGB(0x80, 0x80, 0x80);
+    static constexpr float kIndent = 16.f;
+
+    void step() override {
+        MenuLabel::step();
+        box.size.x += kIndent;
+    }
+    void draw(const DrawArgs& args) override {
+        float s = 8.f;
+        nvgBeginPath(args.vg);
+        nvgRect(args.vg, 6.f, (box.size.y - s) / 2.f, s, s);
+        nvgFillColor(args.vg, color);
+        nvgFill(args.vg);
+        bndMenuLabel(args.vg, kIndent, 0.f, box.size.x - kIndent, box.size.y,
+                     -1, text.c_str());
+    }
+};
+
+// One line of the patch file, quoted with its number. Monospaced on purpose:
+// the whole point of showing the line is that the reader can see WHERE in it
+// the problem is, and a proportional font moves the column under them.
+struct StatusCodeLabel : ui::MenuLabel {
+    int line = 0;
+    static constexpr float kFontSize = 12.f;
+
+    void step() override {
+        MenuLabel::step();
+        // MenuLabel sizes for the theme font; the mono font is wider per
+        // character, so measure it here or the menu clips the line.
+        box.size.x = std::max(box.size.x, 40.f + kFontSize * 0.62f
+                              * float(text.size() + 5));
+    }
+    void draw(const DrawArgs& args) override {
+        std::shared_ptr<rack::Font> font = APP->window->loadFont(
+            rack::asset::system("res/fonts/ShareTechMono-Regular.ttf"));
+        if (!font || font->handle < 0) {   // no font: fall back, never crash
+            MenuLabel::draw(args);
+            return;
+        }
+        nvgBeginPath(args.vg);
+        nvgRoundedRect(args.vg, 6.f, 1.f, box.size.x - 12.f, box.size.y - 2.f, 2.f);
+        nvgFillColor(args.vg, nvgRGB(0x10, 0x10, 0x10));
+        nvgFill(args.vg);
+        nvgFontFaceId(args.vg, font->handle);
+        nvgFontSize(args.vg, kFontSize);
+        nvgTextAlign(args.vg, NVG_ALIGN_LEFT | NVG_ALIGN_MIDDLE);
+        float y = box.size.y / 2.f;
+        std::string num = string::f("%d", line);
+        nvgFillColor(args.vg, nvgRGB(0x6f, 0x6f, 0x6f));
+        nvgText(args.vg, 12.f, y, num.c_str(), NULL);
+        nvgFillColor(args.vg, nvgRGB(0xd8, 0xd8, 0xd8));
+        nvgText(args.vg, 12.f + kFontSize * 0.62f * 5.f, y, text.c_str(), NULL);
+    }
+};
+
+// Read one 1-based line out of a patch file, trimmed of trailing whitespace and
+// clipped to the card's column (status::kWrapWidth) so a pathological line
+// cannot stretch the menu off the screen. Clipped rather than wrapped: the
+// quote is one numbered line of the file and must stay one line.
+// Returns "" when the file or the line is not there — the card then simply
+// omits the quote, which is also what happens for a whole-patch error.
+inline std::string readPatchLine(const std::string& path, int line) {
+    if (path.empty() || line <= 0) return std::string();
+    std::ifstream f(path);
+    if (!f) return std::string();
+    std::string s;
+    for (int i = 0; i < line; i++)
+        if (!std::getline(f, s)) return std::string();
+    while (!s.empty() && (s.back() == '\r' || s.back() == ' ' || s.back() == '\t'))
+        s.pop_back();
+    if (s.size() > vcvoid::status::kWrapWidth)
+        s = s.substr(0, vcvoid::status::kWrapWidth - 3) + "...";
+    return s;
+}
+
 // Shared master widget behaviour: patch-load menu, hot reload, and chain
 // revalidation. Both MASTER and MASTER18 derive this; each subclass constructor
 // adds its own panel image, ports, and (MASTER only) LED matrix. Operates on the
@@ -1324,6 +1529,78 @@ struct DroidMasterBaseWidget : ModuleWidget {
     uint32_t lastLabelGen = 0;
     std::vector<Module*> lastLabelChain;
     bool labelsPublished = false;
+    // #46: the hover tooltip for the master's error state. Owned here and
+    // parented to the scene (Rack's own convention for tooltips — a tooltip
+    // inside the module would be clipped by, and scroll with, the rack).
+    ui::Tooltip* statusTooltip = nullptr;
+
+    ~DroidMasterBaseWidget() override { destroyStatusTooltip(); }
+
+    // --- the module halo (issue #46) -------------------------------------
+    // Layer 1 is Rack's LED pass: it runs after every module's panel (so a
+    // neighbour cannot paint over the ring) and it is not clipped to the module
+    // box (so the glow can bleed over the rails like a bright edge LED).
+    void drawLayer(const DrawArgs& args, int layer) override {
+        ModuleWidget::drawLayer(args, layer);
+        if (layer != 1) return;
+        // Framebuffer passes are the module browser's preview and Rack's own
+        // screenshot mode (`Rack -t`, which tools/panelshots.sh drives). Rack's
+        // LightWidget::drawHalo bows out of those the same way, and it keeps
+        // the panel-shot baselines in tests/panel-baseline a picture of the
+        // PANEL rather than of whatever state a scratch module happened to be
+        // in.
+        if (args.fb) return;
+        DroidMasterBase* m = getModule<DroidMasterBase>();
+        if (!m) return;   // browser preview: no module, no state to report
+        vcvoid::status::RGB c;
+        if (!vcvoid::status::ringColor(m->statusState(), c)) return;   // running: no ring
+        dw::drawStatusRing(args.vg, box.size, dw::toNVG(c));
+    }
+
+    // --- the hover tooltip (issue #46) ------------------------------------
+    // Rack delivers Enter/Leave to the DEEPEST widget under the pointer, and
+    // every control on a master (ports, matrix LEDs) consumes hover itself, so
+    // this fires exactly over empty faceplate — the jacks and LEDs keep their
+    // own tooltips, which carry the same text (see applyOwnLabels).
+    void onEnter(const EnterEvent& e) override {
+        ModuleWidget::onEnter(e);
+        createStatusTooltip();
+    }
+    void onLeave(const LeaveEvent& e) override {
+        ModuleWidget::onLeave(e);
+        destroyStatusTooltip();
+    }
+
+    void createStatusTooltip() {
+        if (statusTooltip || !settings::tooltips) return;
+        DroidMasterBase* m = getModule<DroidMasterBase>();
+        if (!m || m->statusLine.empty()) return;   // running: nothing to say
+        auto* tt = new ui::Tooltip;
+        tt->text = m->statusLine;
+        APP->scene->addChild(tt);
+        statusTooltip = tt;
+    }
+    void destroyStatusTooltip() {
+        if (!statusTooltip) return;
+        APP->scene->removeChild(statusTooltip);
+        delete statusTooltip;
+        statusTooltip = nullptr;
+    }
+    // The state can change under a resting pointer (a chain error clears the
+    // moment the missing controller is plugged in, a watched file reloads), so
+    // a visible tooltip follows it instead of going stale until the next hover.
+    void refreshStatusTooltip() {
+        DroidMasterBase* m = getModule<DroidMasterBase>();
+        if (!statusTooltip) {
+            // A master that goes wrong under a resting pointer had nothing to
+            // say when the pointer arrived, so there is no tooltip to update —
+            // make one now rather than wait for a re-hover.
+            if (APP->event->hoveredWidget == this) createStatusTooltip();
+            return;
+        }
+        if (!m || m->statusLine.empty()) destroyStatusTooltip();
+        else statusTooltip->text = m->statusLine;
+    }
 
     // Hand the patch's register labels to this master and to every module on
     // its chain, numbering them exactly as the chain protocol does. UI thread:
@@ -1429,6 +1706,15 @@ struct DroidMasterBaseWidget : ModuleWidget {
                 m->chainDebounce.invalidFrames = 0;
                 chainRevalPending = false;
             }
+            m->statusDirty.store(true);   // the chain verdict just moved (#46)
+        }
+        // #46: republish the ring state / blink code / tooltip line whenever
+        // the load result or the chain verdict changed. Gated on the flag so
+        // the common case is one atomic exchange per frame, not a lock plus a
+        // handful of string builds.
+        if (m->statusDirty.exchange(false)) {
+            m->publishStatus();
+            refreshStatusTooltip();
         }
         // Copy patchPath out under the lock — the HTTP bridge thread can be
         // writing it concurrently via loadPatchFile.
@@ -1461,6 +1747,94 @@ struct DroidMasterBaseWidget : ModuleWidget {
         appendBuildInfoMenu(menu);
     }
 
+    // The error card (issue #46): the top of the master's menu, and the one
+    // place that both explains a refused patch and offers the fixes. Built from
+    // the same status model the ring and the tooltip use, so the three can
+    // never say different things.
+    void appendStatusCard(Menu* menu, DroidMasterBase* m,
+                          const std::string& patchPath,
+                          const std::string& stateStatus, unsigned ramUsed,
+                          const std::vector<std::string>& declared,
+                          const std::vector<std::string>& physical) {
+        vcvoid::status::Report rep = m->statusReport();
+        vcvoid::status::Status s = vcvoid::status::evaluate(rep);
+        std::string fileName = patchPath.empty() ? std::string()
+                                                 : system::getFilename(patchPath);
+        // Rack sizes a menu to its widest child, so every sentence the card
+        // shows goes in one wrapped line at a time (issue #46 review): one
+        // 190-character error message used to make this menu 1900 px wide.
+        // The title row is exempt on purpose — it is generated ("LOAD ERROR ·
+        // line 99", "Running with 3 warnings"), never free text, and the
+        // coloured square has to sit on the same row as its words.
+        auto addWrapped = [&menu](const std::string& text) {
+            for (const std::string& l : vcvoid::status::wrapLines(text))
+                menu->addChild(createMenuLabel(l));
+        };
+
+        if (!s.title.empty()) {
+            auto* title = new StatusTitleLabel;
+            title->text = s.title;
+            vcvoid::status::RGB c;
+            if (vcvoid::status::ringColor(s.state, c))
+                title->color = dw::toNVG(c);
+            menu->addChild(title);
+        }
+        if (!s.message.empty())
+            addWrapped(s.message);
+        // A chain error's fix is "plug in what the patch asks for", so spell out
+        // both sides rather than only the slot that differs.
+        if (s.state == vcvoid::status::State::ChainError) {
+            auto list = [](const std::vector<std::string>& v) {
+                if (v.empty()) return std::string("nothing");
+                std::string out;
+                for (size_t i = 0; i < v.size(); i++) out += (i ? ", " : "") + v[i];
+                return out;
+            };
+            addWrapped("patch declares: " + list(declared));
+            addWrapped("chain has: " + list(physical));
+        }
+        // The offending line, quoted from the file. Line errors only: a
+        // whole-patch error (too big, out of memory, a register used only as an
+        // input) has no single line to point at.
+        std::string code = readPatchLine(patchPath, s.line);
+        if (!code.empty()) {
+            auto* cl = new StatusCodeLabel;
+            cl->line = s.line;
+            cl->text = code;
+            menu->addChild(cl);
+        }
+        // Where the patch and its circuit state came from (issue #42), on one
+        // row: it answers the same "it loaded but does nothing" question the
+        // rest of the card answers, so it belongs with it.
+        // The file name is elided in the middle rather than wrapped: a name is
+        // recognised by its two ends, and a row that starts mid-word reads as a
+        // different file.
+        std::string shortName = vcvoid::status::elideMiddle(fileName, 32);
+        if (!fileName.empty()) {
+            std::string line = shortName;
+            if (ramUsed) line += string::f(" · %u bytes RAM", ramUsed);
+            if (!stateStatus.empty()) line += " · " + stateStatus;
+            addWrapped(line);
+        }
+
+        menu->addChild(createMenuItem("Reload patch", "", [m, patchPath]() {
+            if (!patchPath.empty()) m->loadPatchFile(patchPath);
+        }, patchPath.empty()));
+        if (!patchPath.empty()) {
+            // Hands the file to the platform's default application for .ini —
+            // a text editor, on every platform anyone has set one up on. There
+            // is no portable way to ask it to jump to a line (every editor
+            // spells that differently, and Rack gives a plugin no editor
+            // preference to read), so the line rides along as the item's right
+            // text and the reader types it into their own Go-to-line.
+            std::string label = "Open " + shortName + " in editor";
+            std::string right = s.line > 0 ? string::f("line %d", s.line) : "";
+            menu->addChild(createMenuItem(label, right, [patchPath]() {
+                system::openBrowser(patchPath);
+            }));
+        }
+    }
+
     // The master-common menu body, separate from appendContextMenu so
     // DroidMaster18Widget can insert its MIDI submenus between this and the
     // trailing build-info line.
@@ -1475,13 +1849,20 @@ struct DroidMasterBaseWidget : ModuleWidget {
         // (ISSUE-4) at its chain position (always the head, nearest the master) so
         // the line confirms X7 presence. Copy everything out before building the
         // menu so the lock isn't held across menu construction.
-        std::string patchStatus, stateStatus, patchPath, chainLine;
+        std::string stateStatus, patchPath, chainLine;
+        std::vector<std::string> declared, physical;
+        unsigned ramUsed = 0;
         bool midiWarn = false;
         {
             std::lock_guard<std::mutex> lock(m->engineMutex);
-            patchStatus = m->patchStatus;
             stateStatus = m->stateStatus;
             patchPath = m->patchPath;
+            if (m->engine && m->lastResult.ok) ramUsed = m->lastResult.ramUsed;
+            // #46: a chain error names the offending slot; the card also shows
+            // the whole expected-vs-found pair, which is what actually tells
+            // someone what to plug in.
+            if (m->engine) declared = m->engine->declaredControllers();
+            physical = m->chainPhysical;
             std::vector<std::string> parts;
             if (m->x7Present) parts.push_back("x7");
             for (auto& c : m->chainPhysical) parts.push_back(c);
@@ -1496,23 +1877,15 @@ struct DroidMasterBaseWidget : ModuleWidget {
             // off. Flag it so the failure is diagnosable from the UI.
             midiWarn = m->engine && m->engine->patchUsesMidi() && !m->engine->midiAvailable();
         }
-        menu->addChild(createMenuLabel(patchStatus));
-        // Where this patch's circuit state came from (issue #42). Omitted when
-        // no patch is loaded — there is nothing to say.
-        if (!stateStatus.empty())
-            menu->addChild(createMenuLabel(stateStatus));
+        appendStatusCard(menu, m, patchPath, stateStatus, ramUsed, declared, physical);
+        menu->addChild(new MenuSeparator);
         menu->addChild(createMenuLabel("chain: " + chainLine));
-        if (!m->chainError.empty())
-            menu->addChild(createMenuLabel("CHAIN ERROR: " + m->chainError));
         if (midiWarn)
             menu->addChild(createMenuLabel("patch uses MIDI but no X7 detected"));
         menu->addChild(createMenuItem("Load DROID patch…", "", [m]() {
             char* path = osdialog_file(OSDIALOG_OPEN, nullptr, nullptr, nullptr);
             if (path) { m->loadPatchFile(path); free(path); }
         }));
-        menu->addChild(createMenuItem("Reload patch", "", [m, patchPath]() {
-            if (!patchPath.empty()) m->loadPatchFile(patchPath);
-        }, patchPath.empty()));
         // Mirrors the Forge's View -> Show register labels (F3), but per module
         // rather than per application, since a Rack patch can hold several
         // independent DROID systems.
