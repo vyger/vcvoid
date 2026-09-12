@@ -127,7 +127,8 @@ LoadResult Engine::load(const std::string& patchText, const LoadOptions& opts) {
     for (auto& cc : cp.circuits)
         if (!makeCircuit(cc.def->name)) {
             res.errors.push_back({cc.line, std::string("circuit '") + cc.def->name +
-                                           "' is not yet implemented in vcvoid"});
+                                           "' is not yet implemented in vcvoid",
+                                  ErrorCode::UnknownCircuit});
             res.ok = false;
         }
     if (!res.ok) return res;

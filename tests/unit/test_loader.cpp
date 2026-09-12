@@ -259,3 +259,83 @@ TEST(loader_size_limit) {
     for (int i = 0; i < 4000; i++) huge += "[copy]\ninput=I1\noutput=_X\n";
     CHECK(hasError(compile(huge, cp), "maximum size"));
 }
+
+// --- hardware error codes (issue #46) ------------------------------------
+// Every load error carries the DROID error code it belongs to (types.hpp,
+// manual/basics.md §5.4), because the MASTER's blink code is a colour and the
+// colour comes from that table. The mapping is documented in
+// plugin/src/MasterStatus.hpp; these pin it so it cannot drift silently.
+
+static ErrorCode codeOf(const LoadResult& r, const std::string& sub) {
+    for (auto& e : r.errors)
+        if (e.message.find(sub) != std::string::npos) return e.code;
+    return ErrorCode::Unmapped;
+}
+
+TEST(loader_error_codes_local) {
+    CompiledPatch cp;
+    // unknown circuit -> red
+    CHECK(codeOf(compile("[lfoo]\n", cp), "Unknown circuit") == ErrorCode::UnknownCircuit);
+    // unknown parameter name -> orange
+    CHECK(codeOf(compile("[copy]\n nosuch = 1\n", cp), "has no parameter")
+          == ErrorCode::UnknownParameter);
+    // unknown register -> yellow
+    CHECK(codeOf(compile("[copy]\n input = I1\n output = O9\n", cp), "There is no register")
+          == ErrorCode::UnknownRegister);
+    // an input register written as an output is still a register fault -> yellow
+    CHECK(codeOf(compile("[copy]\n input = I1\n output = I2\n", cp), "cannot be used as an output")
+          == ErrorCode::UnknownRegister);
+    // syntax -> magenta
+    CHECK(codeOf(compile("this is not a patch\n", cp), "expected") == ErrorCode::InvalidSyntax);
+    CHECK(codeOf(compile("[copy\n", cp), "malformed section header") == ErrorCode::InvalidSyntax);
+    // a bad parameter VALUE is the same magenta code on the hardware
+    CHECK(codeOf(compile("[copy]\n input = I1\n output = 3\n", cp), "single output register")
+          == ErrorCode::InvalidSyntax);
+    // register / patch-cable misuse -> green
+    CHECK(codeOf(compile("[copy]\n input = I1\n output = O1\n"
+                         "[copy]\n input = I2\n output = O1\n", cp), "Duplicate usage")
+          == ErrorCode::CableMisuse);
+    CHECK(codeOf(compile("[copy]\n input = O5\n output = O1\n", cp), "just used as an input")
+          == ErrorCode::CableMisuse);
+    CHECK(codeOf(compile("[copy]\n input = I1\n output = _X\n", cp), "never used as an input")
+          == ErrorCode::CableMisuse);
+    CHECK(codeOf(compile("[copy]\n input = _X\n output = O1\n", cp), "never used as an output")
+          == ErrorCode::CableMisuse);
+}
+
+TEST(loader_error_codes_global) {
+    CompiledPatch cp;
+    std::string huge = "[copy]\n input = I1\n output = O1\n";
+    while (huge.size() < kMaxPatchSize * 2) huge += "[copy]\n input = I2\n output = _C\n";
+    CHECK(codeOf(compile(huge, cp), "exceeds the maximum size") == ErrorCode::PatchTooBig);
+
+    std::string fat;
+    for (int i = 0; i < 40; i++) fat += "[cvlooper]\n";   // ~18 kB each: blows the budget
+    CHECK(codeOf(compile(fat, cp), "exceeds the available memory") == ErrorCode::OutOfMemory);
+}
+
+TEST(loader_every_error_carries_a_code) {
+    // The blink code is only as good as its coverage: a new error site that
+    // forgets its code would silently leave the matrix dark.
+    const char* patches[] = {
+        "[lfoo]\n",
+        "[copy]\n nosuch = 1\n",
+        "[copy]\n input = I1\n output = O9\n",
+        "this is not a patch\n",
+        "[copy\n",
+        "[copy]\n input = _X\n output = O1\n",
+        "[copy]\n input = I1\n output = 3\n",
+        "[copy]\n input = O5\n output = O1\n",
+        "[vcotuner]\n",                      // MASTER18-only circuit on a MASTER
+        "[trigseq]\n",                       // experimental, not enabled
+    };
+    for (const char* p : patches) {
+        CompiledPatch cp;
+        auto r = compile(p, cp);
+        CHECK(!r.ok);
+        for (auto& e : r.errors)
+            if (e.code == ErrorCode::Unmapped)
+                std::printf("FAIL unmapped error code: \"%s\" (line %d)\n",
+                            e.message.c_str(), e.line), failCount()++;
+    }
+}

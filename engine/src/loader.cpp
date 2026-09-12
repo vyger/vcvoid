@@ -170,7 +170,7 @@ LoadResult compilePatch(const std::string& text, MasterType master, CompiledPatc
         if (opts.ignoreMemoryLimits) {
             res.warnings.push_back(msg + " (loaded anyway: hardware memory limits ignored)");
         } else {
-            res.errors.push_back({0, msg});
+            res.errors.push_back({0, msg, ErrorCode::PatchTooBig});
             return res;
         }
     }
@@ -187,7 +187,8 @@ LoadResult compilePatch(const std::string& text, MasterType master, CompiledPatc
         }
         const gen::CircuitDef* cdef = gen::findCircuit(sec.name);
         if (!cdef) {
-            res.errors.push_back({sec.line, "Unknown circuit '" + sec.name + "'"});
+            res.errors.push_back({sec.line, "Unknown circuit '" + sec.name + "'",
+                                  ErrorCode::UnknownCircuit});
             continue;
         }
         if (cdef->deprecated)
@@ -199,13 +200,15 @@ LoadResult compilePatch(const std::string& text, MasterType master, CompiledPatc
             res.errors.push_back({sec.line,
                 "Circuit '" + sec.name + "' is experimental (vcvoid only, not "
                 "available on DROID hardware). Enable \"Allow experimental "
-                "circuits\" in the module's context menu to load this patch."});
+                "circuits\" in the module's context menu to load this patch.",
+                ErrorCode::UnknownCircuit});
         // vcotuner + sinfonionlink use MASTER18-only hardware (Forge parity:
         // droidfirmware.cpp circuitNeedsMaster18).
         if (master == MasterType::Master16 &&
             (sec.name == "vcotuner" || sec.name == "sinfonionlink"))
             res.errors.push_back({sec.line,
-                "Circuit '" + sec.name + "' needs a MASTER18"});
+                "Circuit '" + sec.name + "' needs a MASTER18",
+                ErrorCode::UnknownCircuit});
 
         CompiledCircuit cc;
         cc.def = cdef;
@@ -216,7 +219,8 @@ LoadResult compilePatch(const std::string& text, MasterType master, CompiledPatc
             int idx = 1;
             const gen::JackDef* jd = gen::findJack(*cdef, p.name, idx);
             if (!jd) {
-                res.errors.push_back({p.line, "Circuit '" + sec.name + "' has no parameter '" + p.name + "'"});
+                res.errors.push_back({p.line, "Circuit '" + sec.name + "' has no parameter '" + p.name + "'",
+                                      ErrorCode::UnknownParameter});
                 continue;
             }
             CompiledParam cp{jd, idx, p.a, p.b, p.c, p.simple, p.line};
@@ -225,7 +229,8 @@ LoadResult compilePatch(const std::string& text, MasterType master, CompiledPatc
                 if (a->kind == Atom::Kind::Register) a->reg = canonicalize(a->reg, master);
             if (!jd->isInput) {
                 if (!cp.simple || cp.a.kind == Atom::Kind::Number) {
-                    res.errors.push_back({p.line, "output must be a single output register or internal cable"});
+                    res.errors.push_back({p.line, "output must be a single output register or internal cable",
+                                          ErrorCode::InvalidSyntax});
                     continue;
                 }
                 // Input-only registers cannot be written. I/P/B/S are inputs; E
@@ -235,7 +240,8 @@ LoadResult compilePatch(const std::string& text, MasterType master, CompiledPatc
                     (cp.a.reg.type == 'I' || cp.a.reg.type == 'P' ||
                      cp.a.reg.type == 'B' || cp.a.reg.type == 'S' ||
                      cp.a.reg.type == 'E')) {
-                    res.errors.push_back({p.line, "register " + toString(cp.a.reg) + " cannot be used as an output"});
+                    res.errors.push_back({p.line, "register " + toString(cp.a.reg) + " cannot be used as an output",
+                                          ErrorCode::UnknownRegister});
                     continue;
                 }
             }
@@ -258,7 +264,7 @@ LoadResult compilePatch(const std::string& text, MasterType master, CompiledPatc
                 if (a.kind == Atom::Kind::Register) {
                     std::string err;
                     if (!validRegister(a.reg, master, out.controllers, err))
-                        res.errors.push_back({p.line, err});
+                        res.errors.push_back({p.line, err, ErrorCode::UnknownRegister});
                     if (a.reg.type == 'O') {
                         if (isOutputPosition) oUsedAsOutput.insert(pack(a.reg));
                         else oUsedAsInput.insert(pack(a.reg));
@@ -275,7 +281,8 @@ LoadResult compilePatch(const std::string& text, MasterType master, CompiledPatc
                     (p.a.reg.type == 'O' || p.a.reg.type == 'N')) {
                     uint32_t k = pack(p.a.reg);
                     if (outputUse.count(k))
-                        res.errors.push_back({p.line, "Duplicate usage of " + toString(p.a.reg) + " as output"});
+                        res.errors.push_back({p.line, "Duplicate usage of " + toString(p.a.reg) + " as output",
+                                              ErrorCode::CableMisuse});
                     else outputUse.insert(k);
                 }
             }
@@ -284,18 +291,22 @@ LoadResult compilePatch(const std::string& text, MasterType master, CompiledPatc
     for (uint32_t k : oUsedAsInput)
         if (!oUsedAsOutput.count(k)) {
             RegId r{'O', uint8_t((k >> 8) & 0xff), uint8_t(k & 0xff)};
-            res.errors.push_back({0, "Output register " + toString(r) + " is just used as an input"});
+            res.errors.push_back({0, "Output register " + toString(r) + " is just used as an input",
+                                  ErrorCode::CableMisuse});
         }
     for (auto& [name, lines] : cableWrites) {
         if (lines.size() > 1)
-            res.errors.push_back({lines[1], "Duplicate usage of patch cable " + name + " as output"});
+            res.errors.push_back({lines[1], "Duplicate usage of patch cable " + name + " as output",
+                                  ErrorCode::CableMisuse});
         if (!cableReads.count(name))
-            res.errors.push_back({lines[0], "Patch cable " + name + " is never used as an input"});
+            res.errors.push_back({lines[0], "Patch cable " + name + " is never used as an input",
+                                  ErrorCode::CableMisuse});
         out.cableNames.push_back(name);
     }
     for (auto& [name, lines] : cableReads)
         if (!cableWrites.count(name))
-            res.errors.push_back({lines[0], "Patch cable " + name + " is never used as an output"});
+            res.errors.push_back({lines[0], "Patch cable " + name + " is never used as an output",
+                                  ErrorCode::CableMisuse});
     std::sort(out.cableNames.begin(), out.cableNames.end());
 
     std::vector<LoadError> ramErrors;
