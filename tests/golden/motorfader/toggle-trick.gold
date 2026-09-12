@@ -1,0 +1,72 @@
+# motorfader: the TOGGLE TRICK (issue #45) — `button = _T` + `clear = _T` on one
+# fader, wired back into `startvalue`, turns the touch plate into a toggle. The
+# Forge's MFPS generator uses exactly this shape for the clock mute:
+#
+#     output     = _V
+#     button     = _T          # plate press
+#     clear      = _T          # ...re-seeds startvalue
+#     startvalue = -1 * _V + 1 # ...to the INVERSE of the current value
+#
+# The recall must STAY. On hardware the motor is disabled while a finger is on
+# the fader/plate, so the fader does not physically follow the recall until the
+# hand comes off — yet the virtual value is the recalled one from the recall tick
+# onward. vcvoid's panel echoes the (unchanged) physical position into the engine
+# every frame while the fader counts as held (plugin/src/MasterBase.hpp feeds
+# moveFader under the touch gate), which is what `move F1 <same position>` below
+# models: that echo must NOT overwrite the recall.
+#
+#   @0    boots at dent 1 (startvalue = -1 * 0 + 1)
+#   @1    plate down -> _T high
+#   @2    clear fires -> recall to dent 0
+#   @3-4  panel keeps echoing the stale (pre-recall) position while held -> stays 0
+#   @6    plate released, the motor has moved the fader; the panel catches up
+#   @7-10 second press toggles back to dent 1 and stays there
+tickrate 100
+patch <<<
+[m4]
+
+[motorfader]
+    fader      = 1
+    notches    = 2
+    output     = _V
+    button     = _T
+    clear      = _T
+    startvalue = -1 * _V + 1
+
+[copy]
+    input  = _V
+    output = O1
+>>>
+@0 expect O1 1 tol 1e-4
+@0 expect F1 1 tol 1e-4
+# --- first press: toggle 1 -> 0 -------------------------------------------
+@1 touch F1 1
+@1 move F1 1
+@1 expect O1 1 tol 1e-4
+@2 move F1 1
+@2 expect O1 0 tol 1e-4
+@2 expect F1 0 tol 1e-4
+# the plate is still held: the stale physical position must not win it back
+@3 move F1 1
+@3 expect O1 0 tol 1e-4
+@4 move F1 1
+@4 expect O1 0 tol 1e-4
+@5 touch F1 0
+@5 expect O1 0 tol 1e-4
+# released: the motor has taken the fader to the recalled dent, the panel echo
+# now reports that position -- still 0, and the hold is over
+@6 move F1 0
+@6 expect O1 0 tol 1e-4
+# --- second press: toggle 0 -> 1 ------------------------------------------
+@7 touch F1 1
+@7 move F1 0
+@7 expect O1 0 tol 1e-4
+@8 move F1 0
+@8 expect O1 1 tol 1e-4
+@8 expect F1 1 tol 1e-4
+@9 move F1 0
+@9 expect O1 1 tol 1e-4
+@10 move F1 0
+@10 expect O1 1 tol 1e-4
+@11 touch F1 0
+@12 expect O1 1 tol 1e-4

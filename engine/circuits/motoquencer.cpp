@@ -20,6 +20,7 @@ public:
     void editSurface(EngineState& s, int page, int fm, int bm, bool recall,
                      bool faders, bool buttons) override {
         int Nfeel = notchesFor(s, fm);
+        if ((int)hold_.size() < numFaders_) hold_.resize(numFaders_);
         for (int i = 0; i < numFaders_; i++) {
             int step = page * numFaders_ + i;
             if (step >= numsteps_) continue;
@@ -39,11 +40,19 @@ public:
 
             if (!faders) continue;                         // another chain member's faders
             if (recall || !wasSelected_) {                // motorized recall
-                s.controllers.commandFader(fdr, storedPos(s, fm, step));
+                float stored = storedPos(s, fm, step);
+                fc::source(hold_[i], true, stored, f->position, f->touched);   // arm (#45)
+                s.controllers.commandFader(fdr, stored);
                 f->notches = Nfeel <= 25 ? Nfeel : 0;
             } else {                                       // read user movement
                 float snapped;
-                bool changed = applyEdit(s, fm, step, f->position, snapped);
+                // A recall on a HELD fader stays authoritative until the fader
+                // physically moves: the motor is off under a finger, so the
+                // unchanged position must not be read back as an edit (#45,
+                // fadercore.hpp RecallHold).
+                float pos = fc::source(hold_[i], false, storedPos(s, fm, step),
+                                       f->position, f->touched);
+                bool changed = applyEdit(s, fm, step, pos, snapped);
                 s.controllers.commandFader(fdr, snapped);
                 f->notches = Nfeel <= 25 ? Nfeel : 0;
                 if (changed && fm == 0) { cur_.gate[step] = true; onCvEdited(s, step); }  // auto-on + compose audition
@@ -51,6 +60,10 @@ public:
         }
         wasSelected_ = true;
     }
+
+    // One recall hold per LANE (fader), not per step: it guards the physical
+    // fader, so a page change re-arms it through the recall branch above.
+    std::vector<fc::RecallHold> hold_;
 
     void setLaneLed(EngineState& s, int lane, float bright, float color) override {
         if (FaderState* f = s.controllers.fader(firstFader_ + lane)) {

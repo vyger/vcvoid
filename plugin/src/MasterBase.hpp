@@ -136,6 +136,18 @@ struct DroidMasterBase : Module {
     // spurious jump against a stale baseline.
     uint32_t lastDetent[droid::chain::kMaxChainModules *
                         droid::chain::kMaxEncodersPerModule] = {};
+    // Per-motor-fader last-seen PANEL position, indexed by 0-based GLOBAL fader
+    // number, and whether a value has been seen at all. The fader feed below
+    // pushes a position into the engine only when it DIFFERS from this baseline
+    // — i.e. only when the user (or the widget's motor animation) actually moved
+    // the panel. A frame-by-frame echo of an unchanged position is not user
+    // movement, and while a fader is held (motor off, panel frozen) that echo
+    // used to overwrite a `clear`/preset/startvalue recall one tick after the
+    // engine commanded it — issue #45. Same threading/reset rules as lastDetent.
+    float lastFaderPos[droid::chain::kMaxChainModules *
+                       droid::chain::kMaxFadersPerModule] = {};
+    bool lastFaderPosSeen[droid::chain::kMaxChainModules *
+                          droid::chain::kMaxFadersPerModule] = {};
     // --- X7 expander / MIDI feed (M5) ---
     // controllerModels() skips the X7, so X7 presence/placement is tracked here
     // separately. All touched ONLY inside process()/step() under engineMutex,
@@ -720,6 +732,7 @@ public:
             if (chainChanged) {
                 chainPhysical = models;
                 for (auto& d : lastDetent) d = 0;   // chain changed: drop stale detent baselines
+                for (auto& seen : lastFaderPosSeen) seen = false;   // ...and fader baselines
             }
             // X7 presence + placement (controllerModels() skips the X7). x7Now = an
             // X7 at the chain head; x7err catches a misplaced/duplicate X7. On any
@@ -815,9 +828,15 @@ public:
             }
             // --- motor faders (M4: 4; cm->faders is 0 for other models) -----------
             // Addressed by GLOBAL number "F<g>" (faders have no register form).
-            // moveFader is TOUCH-GATED: an untouched position echo — the widget
-            // animating toward the motorTarget — must never register as user
-            // movement. The PLATE (plateTouch, TOUCH_PARAMS only — never a drag)
+            // moveFader is TOUCH-GATED *and* CHANGE-GATED: an untouched position
+            // echo — the widget animating toward the motorTarget — must never
+            // register as user movement, and neither must a held fader's
+            // unchanged position, repeated every frame while the motor is off
+            // under the finger. Re-pushing it undid a `clear`/preset/startvalue
+            // recall the tick after the engine commanded the motor, which is
+            // what broke the `button = _T` / `clear = _T` toggle trick (#45);
+            // the engine's fadercore RecallHold guards the same window from the
+            // other side. The PLATE (plateTouch, TOUCH_PARAMS only — never a drag)
             // drives the plate button B<ctrl>.<f> here (M4's single B source,
             // skipped in the generic loop above) and the engine's plate surface
             // (motoquencer step buttons, `button` outputs). A drag counts as
@@ -828,8 +847,12 @@ public:
                 bool plate = (up.block[i].plateTouch >> (f - 1)) & 1u;
                 engine->touchFader(g, touched);
                 engine->pressFaderPlate(g, plate);
-                if (touched)
-                    engine->moveFader(g, up.block[i].faderPos[f - 1]);
+                float pos = up.block[i].faderPos[f - 1];
+                bool posChanged = !lastFaderPosSeen[fad] || pos != lastFaderPos[fad];
+                lastFaderPos[fad] = pos;
+                lastFaderPosSeen[fad] = true;
+                if (touched && posChanged)
+                    engine->moveFader(g, pos);
                 engine->setRegister({'B', ctrl, f}, plate ? 1.f : 0.f);
                 fad++;
             }

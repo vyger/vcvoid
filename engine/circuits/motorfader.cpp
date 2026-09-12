@@ -18,7 +18,12 @@
 //     value — it instead drives the motor to the stored value (pickup-free
 //     motorized takeover: unlike a pot, the motor physically moves to show the
 //     value, so no pickup tracking is needed; motorfader.md "the motor faders
-//     act as a display for showing you the current values").
+//     act as a display for showing you the current values"). That recalled value
+//     then STAYS the source until the physical position really changes — see
+//     fadercore.hpp RecallHold, issue #45: a finger on the fader disables the
+//     motor, so the unmoved physical position must not undo the recall on the
+//     next tick (this is what makes the `button = _T` / `clear = _T` toggle
+//     trick work).
 //   * While DESELECTED it freezes the value and does NOT touch the fader, but
 //     still emits `output` (motorfader.md: "even if the circuit is currently not
 //     selected, it will nevertheless ... process ... its outputs").
@@ -74,7 +79,7 @@ public:
         // --- value update & motor command -----------------------------------
         if (f && selected) {
             bool takeover = !wasSelected_ || recall;
-            float src = takeover ? value_ : f->position;
+            float src = fc::source(hold_, takeover, value_, f->position, touched);
             fc::Result r = fc::evaluate(src, notches, touched);
             value_ = r.position;
             s.controllers.commandFader(faderIdx_, r.position);
@@ -224,6 +229,7 @@ private:
     float preset_[kPresets] = {};
     int   prevPreset_ = 0;
     bool  wasSelected_ = false;
+    fc::RecallHold hold_;        // keeps a recall authoritative while held (#45)
     // sharewithnext coupling
     bool  shareSuppressOutput_ = false;
     Motorfader* shareTarget_ = nullptr;
