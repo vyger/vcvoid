@@ -512,6 +512,32 @@ protected:
         }
     }
 
+    // ---- the played range (startstep / endstep) ----------------------------
+    // ONE accessor pair for every consumer of the range — the play order, the
+    // buttonmode-1 LEDs, `luckyscope` and the startstepout / endstepout
+    // outputs — so they cannot drift apart.
+    //
+    // The range belongs to the chain MAIN. A linked member "does not react to
+    // clock, reset, startstep, endstep, form, direction, pingpong, pattern,
+    // autoreset, shiftsteps [...] Instead the current step number of the linked
+    // sequencer will always be the same as the step number of the main
+    // sequencer" (motoquencer.md:677) — so its own startstep / endstep inputs
+    // are ignored everywhere, not just in the transport, and the range it
+    // reports and scopes lucky ops to is the one it actually plays.
+    SeqCore* rangeOwner() { return chainMain_ ? chainMain_ : this; }
+
+    // 0-based, clamped into this instance's step count.
+    int rangeStart0(EngineState& s) {
+        SeqCore* o = rangeOwner();
+        return clampi((int)std::lround(o->in("startstep").value(s)) - 1, 0, numsteps_ - 1);
+    }
+    int rangeEnd0(EngineState& s) {
+        SeqCore* o = rangeOwner();
+        long es = o->in("endstep").connected()
+                ? std::lround(o->in("endstep").value(s)) : (long)o->numsteps_;
+        return clampi((int)es - 1, 0, numsteps_ - 1);
+    }
+
     // ---- I Feel Lucky ------------------------------------------------------
     // One-time randomization triggers (manual "I Feel Lucky"). Each trigger, when
     // it rises, permanently rerolls a subset of the dialed steps. `applyLucky`
@@ -552,10 +578,7 @@ protected:
     std::vector<int> luckyTargets(EngineState& s, int page) {
         int scope = (int)std::lround(in("luckyscope").value(s));
         float chance = clampf(in("luckychance").value(s), 0.0f, 1.0f);
-        long ss = std::lround(in("startstep").value(s));
-        long es = in("endstep").connected() ? std::lround(in("endstep").value(s)) : numsteps_;
-        int s0 = clampi((int)ss - 1, 0, numsteps_ - 1);
-        int e0 = clampi((int)es - 1, 0, numsteps_ - 1);
+        int s0 = rangeStart0(s), e0 = rangeEnd0(s);
         int lo = std::min(s0, e0), hi = std::max(s0, e0);
         int pLo = page * numFaders_, pHi = std::min(pLo + numFaders_ - 1, numsteps_ - 1);
         std::vector<int> out;
@@ -726,10 +749,7 @@ protected:
             return;
         }
         ledsLit_ = true;
-        long ss = std::lround(in("startstep").value(s));
-        long es = in("endstep").connected() ? std::lround(in("endstep").value(s)) : numsteps_;
-        int start0 = clampi((int)ss - 1, 0, numsteps_ - 1);
-        int end0   = clampi((int)es - 1, 0, numsteps_ - 1);
+        int start0 = rangeStart0(s), end0 = rangeEnd0(s);
         static constexpr float kPatColor[4] = {kLedCyan, kLedPink, kLedOrange, kLedYellow};
         for (int i = 0; i < numFaders_; i++) {
             int step = page * numFaders_ + i;
@@ -798,10 +818,7 @@ protected:
 
     // Build the logical play order for one full cycle (range + direction + pingpong).
     std::vector<int> playOrder(EngineState& s) {
-        long ss = std::lround(in("startstep").value(s));
-        long es = in("endstep").connected() ? std::lround(in("endstep").value(s)) : numsteps_;
-        int start0 = clampi((int)ss - 1, 0, numsteps_ - 1);
-        int end0   = clampi((int)es - 1, 0, numsteps_ - 1);
+        int start0 = rangeStart0(s), end0 = rangeEnd0(s);
         std::vector<int> o;
         if (start0 <= end0) for (int i = start0; i <= end0; i++) o.push_back(i);
         else                for (int i = start0; i >= end0; i--) o.push_back(i);
@@ -1130,10 +1147,8 @@ protected:
         out("currentpage").set(s, (float)((playStep_ < 0 ? 0 : playStep_) / numFaders_));
         out("accumulator").set(s, (float)acc_);
 
-        long ss = std::lround(in("startstep").value(s));
-        long es = in("endstep").connected() ? std::lround(in("endstep").value(s)) : numsteps_;
-        out("startstepout").set(s, (float)clampi((int)ss, 1, numsteps_));
-        out("endstepout").set(s, (float)clampi((int)es, 1, numsteps_));
+        out("startstepout").set(s, (float)(rangeStart0(s) + 1));   // 1-based
+        out("endstepout").set(s, (float)(rangeEnd0(s) + 1));
     }
 
     // ---- presets / select --------------------------------------------------

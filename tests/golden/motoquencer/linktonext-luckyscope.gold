@@ -1,0 +1,56 @@
+# motoquencer linktonext: `luckyscope` 0 on a linked member means "all steps
+# between the current start and end step" — and the member's range is the CHAIN
+# MAIN's, since motoquencer.md:677 lists `startstep` / `endstep` among the
+# inputs a linked sequencer ignores. The member wires neither, so if it read its
+# own inputs its scope would be the full 1..4 instead of the main's 2..3.
+#
+# Both lanes start with every gate on. The MAIN's range is narrowed to steps
+# 2..3, then `luckygates` at luckyamount = 0 is fired on the MEMBER: only its
+# steps 2 and 3 may lose their gate. The main's range is then widened so all
+# four steps are played, and the member's gate must read on, off, off, on.
+tickrate 100
+patch <<<
+[m4]
+[motoquencer]
+    clock       = I1
+    numsteps    = 4
+    numfaders   = 4
+    linktonext  = 1
+    quantize    = 0
+    defaultgate = 1
+    startstep   = I4
+    endstep     = I5
+    gate        = O2
+[motoquencer]
+    quantize    = 0
+    defaultgate = 1
+    gate        = O4
+    luckygates  = I2
+    luckyamount = I3
+>>>
+# narrow the MAIN's range to steps 2..3, then clear the member's gates there
+@0 set I4 2
+@0 set I5 3
+@1 set I3 0
+@2 set I2 1
+@3 set I2 0
+# widen the main's range back to all four steps before the first clock edge
+@4 set I4 1
+@4 set I5 4
+# step 1: outside the lucky range -> the member still gates
+@5 set I1 1
+@5 expect O4 1 tol 1e-4
+@6 set I1 0
+# steps 2 and 3: cleared on the member (the main keeps its own gates)
+@7 set I1 1
+@7 expect O2 1 tol 1e-4
+@7 expect O4 0 tol 1e-4
+@8 set I1 0
+@9 set I1 1
+@9 expect O2 1 tol 1e-4
+@9 expect O4 0 tol 1e-4
+@10 set I1 0
+# step 4: outside the range again
+@11 set I1 1
+@11 expect O4 1 tol 1e-4
+@12 set I1 0
