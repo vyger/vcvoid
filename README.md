@@ -67,6 +67,9 @@ page renders (diagrams, tables, worked figures), download the **blue-7 DROID
 manual** from Der Mann mit der Maschine (shop.dermannmitdermaschine.de →
 Downloads) — it is intentionally not redistributed here.
 
+**Button chords:** **Shift+click** holds a button down while Shift is held, so
+you can Shift+click a second one; right-click → **Latch** holds until unticked.
+
 ### Experimental circuits
 
 vcvoid can also run a small number of **experimental circuits** — circuits that

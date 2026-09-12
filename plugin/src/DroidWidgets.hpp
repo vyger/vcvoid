@@ -6,6 +6,7 @@
 #include "plugin.hpp"
 #include "Layout.hpp"
 #include "BuildInfo.hpp"
+#include "HoldWidget.hpp"    // Shift-hold / Latch, shared with the encoders (issue #39)
 #include "ChainModule.hpp"   // ChainModule::registerLabels (issue #26)
 #include "uatbridge/Bridge.hpp"
 
@@ -176,8 +177,98 @@ struct DroidKnobSmall : DroidKnob {
     }
 };
 
+// ---- holding a momentary button down (issue #39) --------------------------
+//
+// The gestures and the single-hold rule are documented in ButtonHold.hpp,
+// the shared Rack-side machinery in HoldWidget.hpp; this is the button flavour
+// of it. Everything here is UI-thread only.
+
+// Shift-hold + Latch for any momentary Rack Switch. Mixed into the drawn DROID
+// button (below) and the M4's light bezel, which are different widget
+// hierarchies but the same gesture.
+template <typename TBase>
+struct HoldableButton : TBase, HoldableControl {
+    vcvoid::ButtonHold hold;
+    bool heldLast = false;     // for the one release write when a hold ends
+    bool firstStep = true;
+
+    // The arbiter compares ids but never dereferences them, so a stale one is
+    // harmless — but a recycled address must not inherit the hold.
+    ~HoldableButton() override { holdArbiter().forget(this); }
+
+    void releaseHold() override {
+        hold.latched = false;
+        holdArbiter().forget(this);
+    }
+
+    // Dependent base: these event types must be named through rack::widget.
+    void onButton(const rack::widget::Widget::ButtonEvent& e) override {
+        if (e.action == GLFW_PRESS && e.button == GLFW_MOUSE_BUTTON_LEFT)
+            holdArbiter().press(this, isHoldModPress(e));
+        TBase::onButton(e);
+    }
+
+    void onDragStart(const rack::widget::Widget::DragStartEvent& e) override {
+        if (e.button == GLFW_MOUSE_BUTTON_LEFT) hold.mouseDown = true;
+        TBase::onDragStart(e);
+    }
+
+    void onDragEnd(const rack::widget::Widget::DragEndEvent& e) override {
+        if (e.button == GLFW_MOUSE_BUTTON_LEFT) hold.mouseDown = false;
+        // While held, do NOT let the base schedule its momentary release.
+        // Forwarding and then re-asserting the param in step() would work too,
+        // but it writes min and max in the same frame; the engine samples the
+        // param from the audio thread and could land between them, which the
+        // patch would see as a real falling edge — enough to fire a
+        // togglebutton. Not forwarding means the release is never written.
+        if (!hold.held()) TBase::onDragEnd(e);
+    }
+
+    void step() override {
+        pollHoldModOnce();
+        hold.modHeld = holdArbiter().isHeld(this);
+        TBase::step();
+
+        engine::ParamQuantity* pq = this->getParamQuantity();
+        bool h = hold.held();
+        if (pq) {
+            if (firstStep) {
+                // Holds themselves are never serialized — they live on the
+                // widget, and Rack saves modules, not widgets. But the PARAM is
+                // saved, so a patch stored with a button latched would reload
+                // with the register stuck at 1 and nothing on screen to explain
+                // it. Drop any restored press: a DROID button is momentary, so
+                // a persisted "down" is never meaningful.
+                firstStep = false;
+                if (!hold.pressed() && pq->getValue() > pq->getMinValue())
+                    pq->setMin();
+            }
+            if (h) {
+                if (pq->getValue() < pq->getMaxValue()) pq->setMax();
+            }
+            else if (heldLast && !hold.mouseDown) {
+                // The hold just ended (modifier up, or unlatched) and no finger is
+                // on the button: release it. With the mouse still down, the
+                // base's own onDragEnd now does it instead.
+                pq->setMin();
+            }
+        }
+        heldLast = h;
+    }
+
+    void appendContextMenu(ui::Menu* menu) override {
+        menu->addChild(new MenuSeparator);
+        menu->addChild(createBoolPtrMenuItem("Latch", "", &hold.latched));
+    }
+
+    // The hold ring, OUTSIDE the cap so it never fights the LED.
+    void drawRingIfHeld(NVGcontext* vg, Vec c, float r) {
+        if (hold.held()) drawHoldRing(vg, c, r);
+    }
+};
+
 // ---- button (LED in the cap, like the hardware) ---------------------------
-struct DroidButton : app::Switch {
+struct DroidButton : HoldableButton<app::Switch> {
     int lightId = -1;   // module light index whose brightness tints the cap
     // Visual cap DIAMETER in HP, art-measured: the FULL printed button — outer
     // ring/bezel included — is 214 art px = 9.4 mm = 1.85 HP on every button
@@ -256,6 +347,22 @@ struct DroidButton : app::Switch {
                 nvgFill(args.vg);
             }
         }
+        // Shift-hold / Latch indicator, just outside the drawn cap (issue #39).
+        drawRingIfHeld(args.vg, c, r + hpPx(0.13f));
+    }
+};
+
+// ---- M4 touch plate: Rack's light bezel, made holdable (issue #39) --------
+// The M4's touch plates are momentary B-register buttons like any other, so
+// they take the same Shift-hold/Latch gestures; only the artwork differs (a
+// stock VCVLightBezel carrying the circuit-driven RGB fader LED, since the
+// faceplate is blank there).
+template <typename TLightBase>
+struct DroidTouchBezel : HoldableButton<VCVLightBezel<TLightBase>> {
+    void draw(const rack::widget::Widget::DrawArgs& args) override {
+        HoldableButton<VCVLightBezel<TLightBase>>::draw(args);
+        Vec c = this->box.size.div(2);
+        this->drawRingIfHeld(args.vg, c, std::min(c.x, c.y) - 1.f);
     }
 };
 
@@ -556,8 +663,39 @@ struct VcvoidModuleWidget : rack::app::ModuleWidget {
 
     // Subclasses that override this (X7) must keep the build-info line last.
     void appendContextMenu(Menu* menu) override {
+        appendButtonHoldMenu(menu);
         appendRegisterLabelMenu(menu);
         appendBuildInfoMenu(menu);
+    }
+
+    // "Release all latches" for this module (issue #39). Latching a button is
+    // easy to forget about — it stays down with nothing on screen but a ring to
+    // say so — and a patch can have a dozen of them, so there is one way out
+    // that does not involve hunting for each button's menu. It drops the
+    // rack-wide mod-hold too: the item means "nothing is held any more".
+    // Modules with no momentary buttons (p10, s10, g8, ...) get no item.
+    void appendButtonHoldMenu(Menu* menu) {
+        std::vector<dw::HoldableControl*> holds;
+        collectHoldables(this, holds);
+        if (holds.empty()) return;
+        menu->addChild(new MenuSeparator);
+        menu->addChild(createMenuItem("Release all latches", "", [this]() {
+            std::vector<dw::HoldableControl*> now;
+            collectHoldables(this, now);      // re-scan: the menu outlives the click
+            for (dw::HoldableControl* h : now) h->releaseHold();
+            dw::holdArbiter().releaseAll();
+        }));
+    }
+
+    // Recursive, because holdable controls are not all ParamWidgets:
+    // ModuleWidget::getParams() would miss the E4/DB8E encoder pushes, which
+    // are plain OpaqueWidgets added with addChild().
+    static void collectHoldables(rack::widget::Widget* w,
+                                 std::vector<dw::HoldableControl*>& out) {
+        for (rack::widget::Widget* c : w->children) {
+            if (auto* h = dynamic_cast<dw::HoldableControl*>(c)) out.push_back(h);
+            collectHoldables(c, out);
+        }
     }
 
     // "Show register labels" for the whole DROID system. The flag lives on the
