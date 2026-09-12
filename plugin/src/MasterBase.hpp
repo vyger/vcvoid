@@ -126,7 +126,9 @@ struct DroidMasterBase : Module {
     // lock-free halves below. Starting true makes a fresh module publish once.
     std::atomic<bool> statusDirty{true};
     // The state enum, for the ring. Read every frame by the widget's
-    // drawLayer() and by the UAT bridge; written only by publishStatus().
+    // drawLayer(); written only by publishStatus(), i.e. only on a UI frame —
+    // anything that has just changed the verdict off the UI thread reports
+    // currentState() instead (see below).
     std::atomic<int> uiState{(int) vcvoid::status::State::NoPatch};
     // What the MASTER's 4x4 matrix should do, and the blink-code colours when
     // that is Blink. Read by the AUDIO thread (DroidMaster::process), hence
@@ -193,8 +195,26 @@ struct DroidMasterBase : Module {
         applyOwnLabels();   // re-stamp the LED descriptions with the new line
     }
 
+    // The last PUBLISHED state. Lock-free and cheap, for the per-frame readers
+    // (the ring's drawLayer) — but it only moves when the widget's step()
+    // consumes statusDirty, i.e. on the next UI frame.
     vcvoid::status::State statusState() const {
         return (vcvoid::status::State) uiState.load(std::memory_order_acquire);
+    }
+
+    // The state as of RIGHT NOW, recomputed instead of read back from the last
+    // publish. A caller that has just CHANGED the verdict and has to report it
+    // in the same breath must use this: the UAT bridge loads a patch straight
+    // from its HTTP thread (loadPatchFile is engine-only and engineMutex-
+    // guarded), so at the moment it serialises its reply the UI thread has not
+    // run a frame yet and statusState() still holds the pre-load verdict —
+    // loading a broken patch over a running one answered "running". Same lock
+    // discipline as every other caller: statusReport() takes engineMutex
+    // itself, and reads the UI-thread-only chainError outside it exactly as
+    // the bridge's status handler and the context menu already do (a chain
+    // revalidation the load just armed lands on the next UI frame either way).
+    vcvoid::status::State currentState() {
+        return vcvoid::status::evaluate(statusReport()).state;
     }
 
     // Master type + I/O geometry (set once by the subclass constructor).
