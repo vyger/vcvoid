@@ -271,6 +271,52 @@ TEST(engine_motoquencer_leds_startend) {
     CHECK_NEAR(e.faderLed(4), 0.0f, 1e-6f);
 }
 
+// buttonmode 1 across pages, and against the played step. motoquencer.md "LED
+// colors": green = start step, red = end step, and "the currently played step"
+// is white regardless of buttonmode. A marker that is not on the displayed page
+// shows nothing. Characterises the range as read by updateLeds().
+TEST(engine_motoquencer_leds_startend_pages) {
+    Engine e;
+    auto r = e.load(
+        "[m4]\n"
+        "[motoquencer]\n"
+        "    clock = I1\n"
+        "    numsteps = 8\n"
+        "    numfaders = 4\n"
+        "    page = I2\n"
+        "    defaultgate = 1\n"
+        "    buttonmode = 1\n"
+        "    startstep = 2\n"
+        "    endstep = 7\n"
+        "    cv = O1\n");
+    CHECK(r.ok);
+    e.tick();
+    // page 0 shows steps 1..4: only the green start marker, on step 2.
+    CHECK_NEAR(e.faderLed(1), 0.0f, 1e-6f);
+    CHECK_NEAR(e.faderLed(2), 1.0f, 1e-6f);
+    CHECK_NEAR(e.faderLedColor(2), 0.4f, 1e-6f);   // green start
+    CHECK_NEAR(e.faderLed(3), 0.0f, 1e-6f);
+    CHECK_NEAR(e.faderLed(4), 0.0f, 1e-6f);
+    // page 1 shows steps 5..8: only the red end marker, on step 7 = lane 3.
+    e.setValue("I2", 1.0f); e.tick();
+    CHECK_NEAR(e.faderLed(1), 0.0f, 1e-6f);
+    CHECK_NEAR(e.faderLed(2), 0.0f, 1e-6f);
+    CHECK_NEAR(e.faderLed(3), 1.0f, 1e-6f);
+    CHECK_NEAR(e.faderLedColor(3), 0.8f, 1e-6f);   // red end
+    CHECK_NEAR(e.faderLed(4), 0.0f, 1e-6f);
+    // back to page 0; the first clock edge enters the START step (2), whose
+    // white played-step LED wins over the green marker.
+    e.setValue("I2", 0.0f); e.tick();
+    e.setValue("I1", 1.0f); e.tick();
+    CHECK_NEAR(e.faderLed(2), 1.0f, 1e-6f);
+    CHECK(e.faderLedColor(2) < 0.0f);              // white sentinel
+    // next step: lane 2 is green again, lane 3 goes white.
+    e.setValue("I1", 0.0f); e.tick();
+    e.setValue("I1", 1.0f); e.tick();
+    CHECK_NEAR(e.faderLedColor(2), 0.4f, 1e-6f);
+    CHECK(e.faderLedColor(3) < 0.0f);
+}
+
 // A deselected circuit releases the LEDs: cleared once on the falling edge so
 // another overlaid circuit can drive them (manual `select` semantics).
 TEST(engine_motoquencer_leds_select_release) {
