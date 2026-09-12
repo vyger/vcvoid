@@ -77,8 +77,8 @@ public:
                     // recalled its value -- otherwise it would read the target
                     // fader's stale position as user movement.
                     bool takeover = (wasFader_[r][c] != faderI) || recall;
-                    float src = takeover ? value_[r][c]
-                                         : (f ? f->position : value_[r][c]);
+                    float src = fc::source(hold_[r][c], takeover, value_[r][c],
+                                           f ? f->position : value_[r][c], touched);
                     fc::Result res = fc::evaluate(src, notches, touched);
                     value_[r][c] = res.position;
                     s.controllers.commandFader(gf, res.position);
@@ -236,6 +236,7 @@ private:
     float value_[kMax][kMax] = {};
     float preset_[kPresets][kMax][kMax] = {};
     int   wasFader_[kMax][kMax];   // fader index each cell was on last tick (-1 = none)
+    fc::RecallHold hold_[kMax][kMax];   // recall stays authoritative while held (#45)
     int   prevPreset_ = 0;
     bool  caPrev_ = false, clPrev_ = false, spPrev_ = false, lpPrev_ = false;
 };

@@ -636,8 +636,8 @@ circuits:
       common to all faders, ledvalue1..16 per-fader (panel-only); no
       outputscale/offset. select gates the whole bank (motorized takeover per
       lane on becoming selected); 6 presets store all lanes at once. SPEC-GAPs
-      inherited from motorfader/fadercore (instant motor, haptics + LEDs
-      panel-only). 3 goldens (bank across two M4s, immediate presets with
+      inherited from motorfader/fadercore (instant motor, per-lane recall hold
+      on a held fader, haptics + LEDs panel-only). 3 goldens (bank across two M4s, immediate presets with
       motor recall, shared binary notches)."
   fadermatrix:
     status: done
@@ -657,7 +657,8 @@ circuits:
       selected AND rowcolumn maps it; a cell moving to a different fader
       (rowcolumn swap) or a preset recall triggers motorized takeover, tracked
       per cell by last fader. 6 presets store all 16 cells. SPEC-GAPs: instant
-      motor + haptics/LED panel-only (inherited); the column offset for
+      motor, per-cell recall hold on a held fader + haptics/LED panel-only
+      (all inherited); the column offset for
       sub-4x4 matrices generalised to N (manual only documents 4x4). 3
       goldens (2x2 row/col swap w/ takeover, full 4x4 rowcolumn table,
       per-column notches)."
@@ -1048,7 +1049,8 @@ circuits:
       firstfader/numfaders/numsteps auto-config + paging (page/currentpage);
       all 8 fadermodes (pitch/CV, randomize-CV/accumulator, gate probability,
       repeats, gate pattern, ratchets, gate, skip) with per-mode notch counts
-      + motorized recall on page/mode change (expect F<n>); buttonmodes 0
+      + motorized recall on page/mode change (expect F<n>, held-fader recall
+      hold via fadercore RecallHold -- issue #45); buttonmodes 0
       (gates), 2 (gate-pattern cycle), 3 (skip) via touch plates + gate
       auto-on when a pitch fader moves; composemode (transport freezes; a
       fadermode-0 CV edit jumps to that step, outputs its CV and opens a
@@ -1114,13 +1116,18 @@ circuits:
       takeover (motor drives the fader to the stored value on selection), the
       select-gated touch `button` output, ledvalue (incl. negative magic mode)
       as panel-only FaderState.led, sharewithnext coupling, and 8 presets in
-      the three standard modes. SPEC-GAPs: motor speed instant (no spec);
+      the three standard modes. A recall (clear / preset / startvalue re-seed)
+      on a HELD fader stays authoritative until the physical position really
+      changes (fadercore RecallHold, issue #45): the motor is disabled under a
+      finger, so the unmoved position must not undo the recall on the next
+      tick -- this is what makes the documented `button = _T` / `clear = _T`
+      toggle trick work. SPEC-GAPs: motor speed instant (no spec);
       force-feedback FEEL + LED hardware/panel-only. Known corner
       (approximation): sharewithnext models per-circuit values, so with
       NEITHER member selected the output owner emits its own frozen value even
       if the feeder was edited last (hardware has a single shared value).
       Fader position observable via `expect F<n>`; value math headless,
-      haptics requires-human. 9 goldens."
+      haptics requires-human. 13 goldens."
   multicompare:
     status: done
     difficulty: easy

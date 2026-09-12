@@ -17,7 +17,12 @@
 // The animated fader widget (below) mirrors real hardware: while the user drags
 // a fader the touch bit is set and the param follows the mouse; when released
 // the motor eases the param toward motorTarget with a ~40 ms time constant
-// (kMotorTauSec).
+// (kMotorTauSec). While the fader counts as held the param is FROZEN — the
+// motor is off under a finger, exactly as on hardware — so the position the
+// master publishes upstream stops changing; MasterBase.hpp relies on that and
+// pushes a position into the engine only when it actually changes, so a held
+// fader can no longer echo its stale position over a `clear`/preset recall
+// (issue #45).
 // The hardware touch plate is a real momentary button here (TOUCH_PARAMS):
 // holding it raises the fader's touch bit exactly like holding the fader, and
 // its RGB LED (TOUCH_LIGHTS) shows the circuit-driven faderLed colour. The

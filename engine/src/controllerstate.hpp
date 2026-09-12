@@ -69,6 +69,12 @@ struct EncoderState {
 //     model the motor is instantaneous (SPEC-GAP: no speed spec in the manual,
 //     so we snap — position == motorTarget the moment a circuit commands). It is
 //     kept distinct so a future Rack adapter can animate position -> motorTarget.
+//     The panel (plugin/src/M4.cpp) DOES animate, and lags a command by frames —
+//     or, while the fader is held, never follows it at all, because the motor is
+//     off under a finger. A commanded value is nonetheless authoritative from the
+//     commanding tick on: the panel feed only writes a position that really
+//     changed (MasterBase.hpp) and fadercore.hpp's RecallHold ignores a stale one
+//     that slips through (issue #45).
 //   * touched: the user is holding the fader itself (touchFader()); a level.
 //     Gates edit acceptance and the pitch-bend hold (fadercore auto-return).
 //   * plate: the touch plate BELOW the fader (pressFaderPlate()); a level, read

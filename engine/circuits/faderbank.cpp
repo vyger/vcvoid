@@ -51,7 +51,7 @@ public:
 
             if (f && selected) {
                 bool takeover = !wasSelected_ || recall;
-                float src = takeover ? value_[i] : f->position;
+                float src = fc::source(hold_[i], takeover, value_[i], f->position, touched);
                 fc::Result r = fc::evaluate(src, notches, touched);
                 value_[i] = r.position;
                 s.controllers.commandFader(faderIdx, r.position);
@@ -176,6 +176,7 @@ private:
     float preset_[kPresets][kMaxFaders] = {};
     int   prevPreset_ = 0;
     bool  wasSelected_ = false;
+    fc::RecallHold hold_[kMaxFaders];   // recall stays authoritative while held (#45)
     bool  caPrev_ = false, clPrev_ = false, spPrev_ = false, lpPrev_ = false;
 };
 

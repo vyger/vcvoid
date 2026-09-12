@@ -1,0 +1,85 @@
+# motorfader: a recall HOLDS while the fader is held (issue #45). The motor is
+# disabled while a finger is on the fader/plate, so the physical position stays
+# where it was and vcvoid's panel echoes it into the engine every frame
+# (plugin/src/MasterBase.hpp, touch-gated moveFader) -- modelled here by the
+# repeated `move F1 <same position>`. A `loadpreset` / `clear` / `startvalue`
+# recall must survive that echo until the position REALLY changes.
+#
+#   A (fader 1, selected)   : preset save/load; the recall under test
+#   B (fader 1, deselected) : the overlay that must stay frozen and hands-off
+#   C (fader 2)             : a different fader -- the hold is per fader/circuit
+#
+#   @1-@3   save 0.5 into preset 0, then move to 0.9
+#   @5      grab the fader (touched, panel echo starts)
+#   @6      loadpreset -> recall to 0.5 while still held
+#   @7-@8   the stale echo must NOT win it back                        (c)
+#   @9      a REAL move takes over again                               (d)
+#   throughout: B frozen at its own startvalue, C tracking fader 2     (e)
+tickrate 100
+patch <<<
+[m4]
+
+[motorfader]
+    fader      = 1
+    output     = O1
+    startvalue = 0
+    select     = I6
+    selectat   = 1
+    preset     = I2
+    savepreset = I3
+    loadpreset = I4
+
+[motorfader]
+    fader      = 1
+    output     = O2
+    startvalue = 0.25
+    select     = I6
+    selectat   = 0
+    loadpreset = I4
+
+[motorfader]
+    fader      = 2
+    output     = O3
+    startvalue = 0
+>>>
+@0 set I6 1
+@0 expect O1 0 tol 1e-4
+@0 expect O2 0.25 tol 1e-4
+@1 move F1 0.5
+@1 expect O1 0.5 tol 1e-4
+@2 set I2 0
+@2 set I3 1
+@2 move F2 0.3
+@2 expect O3 0.3 tol 1e-4
+@3 set I3 0
+@3 move F1 0.9
+@3 expect O1 0.9 tol 1e-4
+# the user grabs the fader: from here the panel repeats the same position
+@5 touch F1 1
+@5 move F1 0.9
+@5 expect O1 0.9 tol 1e-4
+# (c) recall while held: the value snaps to the preset and the motor is commanded
+@6 set I4 1
+@6 move F1 0.9
+@6 expect O1 0.5 tol 1e-4
+@6 expect F1 0.5 tol 1e-4
+@7 set I4 0
+@7 move F1 0.9
+@7 move F2 0.6
+@7 expect O1 0.5 tol 1e-4
+@7 expect O3 0.6 tol 1e-4
+@8 move F1 0.9
+@8 expect O1 0.5 tol 1e-4
+# (d) a real move -- the position finally changes -- takes over again
+@9 move F1 0.72
+@9 move F2 0.1
+@9 expect O1 0.72 tol 1e-4
+@9 expect O3 0.1 tol 1e-4
+@10 move F1 0.72
+@10 expect O1 0.72 tol 1e-4
+@11 touch F1 0
+@11 expect O1 0.72 tol 1e-4
+# (e) the deselected overlay never moved and never grabbed the fader; fader 2's
+# own circuit tracked every move of its own fader right through the recall above
+@11 expect O2 0.25 tol 1e-4
+@11 expect F2 0.1 tol 1e-4
