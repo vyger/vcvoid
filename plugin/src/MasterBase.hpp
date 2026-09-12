@@ -1,6 +1,7 @@
 #pragma once
 #include "plugin.hpp"
 #include "src/engine.hpp"   // droid::Engine (via -I../engine)
+#include "src/patchstate.hpp"   // issue #42: per-patch circuit-state store
 #include "ChainModule.hpp"  // droid::chain protocol + ChainModule::isChain{Left,Right}Neighbor
 #include "Layout.hpp"
 #include "RegisterLabels.hpp"   // issue #26: patch labels -> tooltips + panel chips
@@ -17,6 +18,7 @@
 #include <cstring>
 #include <algorithm>
 #include <chrono>
+#include <ctime>
 
 // Copy a symbolic display string into a fixed NUL-terminated field, truncating
 // to fit (the buffer's last byte always stays NUL). Used for the DB8E screen's
@@ -42,12 +44,30 @@ struct DroidMasterBase : Module {
     std::string patchPath;
     std::string patchStatus = "no patch loaded";
     droid::LoadResult lastResult;
-    // Persistent circuit state (DROIDSTA.BIN contract, hardware.md §11.1). Kept
-    // across a patch hot-reload (snapshot the old engine, restore into the new)
-    // and across a Rack save/reopen (serialized into dataToJson, restored after
-    // dataFromJson's patch load). Touched only under engineMutex or on the UI
-    // thread paths that also hold it.
-    droid::StateSnapshot lastSnapshot;
+    // Persistent circuit state (DROIDSTA.BIN contract, hardware.md §11.1),
+    // associated with the PATCH rather than with the module (issue #42). The
+    // hardware keeps one state blob per SD card and reloads it into whatever
+    // patch is on that card; its escape hatch for "different state for a
+    // different patch" is a second card, which a Rack module does not have. So a
+    // master keeps a store of snapshots keyed by the patch's structural
+    // fingerprint, and a load either restores this patch's own snapshot,
+    // migrates one from an earlier revision of the same file (or `# STATE:`
+    // tag), or starts fresh — never silently inherits an unrelated patch's
+    // state. Unbounded by design: nothing is ever evicted.
+    //
+    // `currentPatchId` is the identity the live engine's state belongs to (what
+    // its snapshot is stored under); `legacyState` holds the single blob read
+    // from a Rack patch saved before this store existed, consumed by the next
+    // load; `forceFreshState` is the one-shot "Reset circuit state" flag.
+    // All touched only under engineMutex or on UI-thread paths that hold it.
+    droid::PatchStateStore stateStore;
+    droid::PatchIdentity currentPatchId;
+    droid::StateSnapshot legacyState;
+    bool forceFreshState = false;
+    // One-line provenance for the status menu / UAT status: "state: restored
+    // (saved 12 Sep 11:02)", "state: migrated from …", "state: fresh". Empty
+    // when no patch is loaded. engineMutex, like patchStatus.
+    std::string stateStatus;
     // Register labels from the patch's header comments (issue #26).
     // `sharedLabels` is written by whichever thread loads the patch (UI or the
     // UAT bridge's HTTP thread) under engineMutex; `labelGen` is bumped after
@@ -386,6 +406,36 @@ public:
         return best;
     }
 
+    // The one status line that says where this patch's circuit state came from
+    // (issue #42). Deliberately short — it sits directly under the patch status
+    // in the module menu and is echoed by the UAT bridge's /master/status.
+    static std::string formatStateStatus(droid::StateOrigin origin, int64_t savedAt,
+                                         const std::string& migratedFrom) {
+        switch (origin) {
+            case droid::StateOrigin::Restored: {
+                if (savedAt <= 0) return "state: restored";
+                std::time_t t = (std::time_t) savedAt;
+                char buf[32] = {};
+                std::tm tmv{};
+#ifdef ARCH_WIN
+                localtime_s(&tmv, &t);
+#else
+                localtime_r(&t, &tmv);
+#endif
+                if (!std::strftime(buf, sizeof(buf), "%d %b %H:%M", &tmv))
+                    return "state: restored";
+                return std::string("state: restored (saved ") + buf + ")";
+            }
+            case droid::StateOrigin::Migrated:
+                return migratedFrom.empty()
+                    ? "state: migrated from a previous version of this patch"
+                    : "state: migrated from previous version of " + migratedFrom;
+            case droid::StateOrigin::Fresh:
+            default:
+                return "state: fresh";
+        }
+    }
+
     void loadPatchFile(const std::string& path) {
         std::string text;
         {   // read whole file
@@ -438,6 +488,9 @@ public:
         // half-broken patch is exactly when knowing what a jack was meant to be
         // helps most.
         droid::PatchLabels labels = droid::parseRegisterLabels(text);
+        // Structural identity of the incoming patch (issue #42) — computed from
+        // the same raw text, off the lock, before anything is swapped.
+        droid::PatchIdentity newId = droid::patchIdentity(text, path);
 
         std::lock_guard<std::mutex> lock(engineMutex);
         // Every engine swap/drop invalidates an armed signal watch: its names
@@ -450,17 +503,55 @@ public:
         // Publish last: a widget that sees the new generation must find the
         // labels already in place.
         labelGen.fetch_add(1, std::memory_order_release);
+        // Circuit-state transfer (hardware.md §11.1: "when you press the button
+        // for loading a new patch, the states are saved immediately"). The
+        // OUTGOING engine's state is parked under the OUTGOING patch's own
+        // fingerprint — that is what makes going back and forth between two
+        // patches in one master non-destructive. Done BEFORE the r.ok branch:
+        // the live engine is dropped either way, and a load that turns out to
+        // fail must not cost the previous patch its dialled-in state.
+        int64_t now = (int64_t)std::time(nullptr);
+        if (engine && !currentPatchId.empty())
+            stateStore.store(currentPatchId, engine->saveState(), now);
         if (r.ok) {
-            // Circuit-state transfer (hardware.md §11.1: "when you press the
-            // button for loading a new patch, the states are saved immediately").
-            // A live engine (edit-and-save hot reload) is snapshotted here so the
-            // dialed state survives the swap; on a first load from a Rack reopen
-            // the engine is null and lastSnapshot came from dataFromJson.
-            if (engine)
-                lastSnapshot = engine->saveState();
-            if (!lastSnapshot.empty())
-                fresh->restoreState(lastSnapshot);
+            droid::StateOrigin origin = droid::StateOrigin::Fresh;
+            int64_t restoredAt = 0;
+            std::string migratedFrom;
+            if (forceFreshState) {
+                // "Reset circuit state" / the UAT bridge's reset-state: this one
+                // load must not pick up a migration source either.
+                forceFreshState = false;
+                legacyState = droid::StateSnapshot();
+            } else if (droid::StateLookup lk = stateStore.lookup(newId);
+                       lk.source) {
+                origin = lk.origin;
+                restoredAt = lk.source->savedAt;
+                if (origin == droid::StateOrigin::Restored) {
+                    fresh->restoreState(lk.source->state);
+                } else {
+                    migratedFrom = lk.source->title.empty()
+                        ? system::getFilename(lk.source->path) : lk.source->title;
+                    fresh->migrateState(lk.source->state);
+                }
+                legacyState = droid::StateSnapshot();
+            } else if (!legacyState.empty()) {
+                // A Rack patch saved before the store existed carries a single
+                // blob that, under the old contract, IS this patch's state.
+                // Adopt it as such; it is stored under newId just below.
+                origin = droid::StateOrigin::Restored;
+                fresh->restoreState(legacyState);
+                legacyState = droid::StateSnapshot();
+            }
+            currentPatchId = newId;
+            stateStatus = formatStateStatus(origin, restoredAt, migratedFrom);
             engine = std::move(fresh);
+            // Capture the result immediately for anything but a plain restore:
+            // a migrated patch must keep its migrated state under the NEW
+            // fingerprint (the source entry stays untouched, so the older
+            // revision of the file keeps its own state), and a fresh patch gets
+            // an entry so its path/tag lineage exists from the first load.
+            if (origin != droid::StateOrigin::Restored)
+                stateStore.store(currentPatchId, engine->saveState(), now);
             statValid.store(false);   // stale epoch: previous patch's cost
             // A reload builds a FRESH Engine whose state_.midi.x7 defaults false;
             // the engine's own keepX7 preserve only covers an in-place load() on
@@ -491,6 +582,10 @@ public:
             }
         } else {
             engine.reset();   // hardware stops on a bad patch; so do we
+            // Nothing ran, so nothing has state. The store is untouched: the
+            // last good revision of this file keeps its snapshot, ready to
+            // migrate in once the patch parses again.
+            stateStatus.clear();
             if (!r.errors.empty())
                 patchStatus = string::f("LOAD ERROR line %d: %s",
                     r.errors[0].line, r.errors[0].message.c_str());
@@ -509,13 +604,18 @@ public:
     // UAT bridge (M9): fresh-boot the currently loaded patch without recreating
     // the module — the F5 recreate-the-module dance, minus the recreation.
     // loadPatchFile() alone is NOT enough: when a live engine exists it
-    // snapshots the engine's CURRENT (dialed) state into lastSnapshot and
-    // restores that right back into the fresh engine (the hot-reload transfer,
-    // by design — see loadPatchFile above). So to really wipe state we must
-    // drop the live engine BEFORE calling loadPatchFile: with engine == nullptr
-    // and lastSnapshot cleared, loadPatchFile's "if (engine) lastSnapshot =
-    // engine->saveState()" is skipped and the fresh engine starts from its
-    // circuits' startvalues, same as a cold Rack-reopen with no saved state.
+    // snapshots the engine's CURRENT (dialed) state and parks it under the
+    // current patch's fingerprint, where the reload would find it again (the
+    // hot-reload transfer, by design — see loadPatchFile above). So to really
+    // wipe state we drop the live engine first, drop THIS patch's stored
+    // snapshot, and arm forceFreshState so the reload cannot migrate one in
+    // from an older revision of the same file either. The fresh engine then
+    // starts from its circuits' startvalues, same as a cold Rack-reopen with no
+    // saved state.
+    //
+    // Scope is the CURRENT patch only: every other patch's snapshot in this
+    // master's store is left alone, exactly as pulling one SD card leaves the
+    // others alone.
     void resetCircuitState() {
         std::string path;
         {
@@ -523,7 +623,9 @@ public:
             path = patchPath;
             engine.reset();
             disarmWatch();   // engine dropped: armed names no longer resolvable
-            lastSnapshot = droid::StateSnapshot();
+            stateStore.erase(currentPatchId.fingerprint);
+            legacyState = droid::StateSnapshot();
+            forceFreshState = true;
         }
         if (!path.empty())
             loadPatchFile(path);
@@ -989,8 +1091,21 @@ public:
             json_object_set_new(obj, "type", json_string(e.type.c_str()));
             json_object_set_new(obj, "ord", json_integer(e.ordinal));
             json_object_set_new(obj, "ver", json_integer(e.version));
+            if (!e.signature.empty())
+                json_object_set_new(obj, "sig", json_string(e.signature.c_str()));
             json_t* vals = json_array();
-            for (double d : e.values) json_array_append_new(vals, json_real(d));
+            // Integral values are written as JSON integers rather than reals.
+            // Most of a snapshot is flags, step counts and indices, and jansson
+            // renders a real at 17 significant digits ("0.0", "1.0", and worse
+            // for anything inexact); the store is unbounded, so this is free
+            // size back. json_number_value on the read side accepts both, so
+            // older saves and newer ones parse identically.
+            for (double d : e.values) {
+                if (d == std::floor(d) && std::fabs(d) < 9.007199254740992e15)
+                    json_array_append_new(vals, json_integer((json_int_t)d));
+                else
+                    json_array_append_new(vals, json_real(d));
+            }
             json_object_set_new(obj, "v", vals);
             json_array_append_new(arr, obj);
         }
@@ -1009,6 +1124,11 @@ public:
             if (cs.type.empty()) continue;
             if (json_t* j = json_object_get(obj, "ord")) cs.ordinal = (int)json_integer_value(j);
             if (json_t* j = json_object_get(obj, "ver")) cs.version = (int)json_integer_value(j);
+            // Absent in saves written before issue #42: an empty signature is a
+            // circuit with no migration identity, which simply falls back to the
+            // positional (hardware) rule — the pre-#42 behaviour.
+            if (json_t* j = json_object_get(obj, "sig"))
+                if (const char* s = json_string_value(j)) cs.signature = s;
             if (json_t* vals = json_object_get(obj, "v")) {
                 if (json_is_array(vals)) {
                     size_t k; json_t* d;
@@ -1020,6 +1140,53 @@ public:
         return snap;
     }
 
+    // The per-patch snapshot store (issue #42). One JSON object per stored
+    // patch: its structural fingerprint, the file it came from, its title, its
+    // optional `# STATE:` tag, when it was saved, and the snapshot itself.
+    // Unbounded — the array is as long as the number of distinct patches this
+    // master has run, and nothing is ever dropped to make room.
+    static json_t* storeToJson(const droid::PatchStateStore& store) {
+        json_t* arr = json_array();
+        for (const auto& e : store.entries()) {
+            json_t* obj = json_object();
+            json_object_set_new(obj, "fp", json_string(e.fingerprint.c_str()));
+            json_object_set_new(obj, "path", json_string(e.path.c_str()));
+            if (!e.title.empty())
+                json_object_set_new(obj, "title", json_string(e.title.c_str()));
+            if (!e.tag.empty())
+                json_object_set_new(obj, "tag", json_string(e.tag.c_str()));
+            json_object_set_new(obj, "savedAt", json_integer((json_int_t)e.savedAt));
+            json_object_set_new(obj, "state", snapshotToJson(e.state));
+            json_array_append_new(arr, obj);
+        }
+        return arr;
+    }
+    static droid::PatchStateStore storeFromJson(json_t* arr) {
+        droid::PatchStateStore store;
+        if (!json_is_array(arr)) return store;
+        size_t i;
+        json_t* obj;
+        json_array_foreach(arr, i, obj) {
+            if (!json_is_object(obj)) continue;
+            droid::StoredSnapshot e;
+            if (json_t* j = json_object_get(obj, "fp"))
+                if (const char* s = json_string_value(j)) e.fingerprint = s;
+            if (e.fingerprint.empty()) continue;
+            if (json_t* j = json_object_get(obj, "path"))
+                if (const char* s = json_string_value(j)) e.path = s;
+            if (json_t* j = json_object_get(obj, "title"))
+                if (const char* s = json_string_value(j)) e.title = s;
+            if (json_t* j = json_object_get(obj, "tag"))
+                if (const char* s = json_string_value(j)) e.tag = s;
+            if (json_t* j = json_object_get(obj, "savedAt"))
+                e.savedAt = (int64_t)json_integer_value(j);
+            if (json_t* j = json_object_get(obj, "state"))
+                e.state = snapshotFromJson(j);
+            store.entries().push_back(std::move(e));
+        }
+        return store;
+    }
+
     json_t* dataToJson() override {
         json_t* root = json_object();
         // Rack calls dataToJson on autosave; snapshot the LIVE engine now (under
@@ -1027,10 +1194,24 @@ public:
         // in. patchPath is copied out under the same lock — the HTTP bridge
         // thread can be writing it concurrently via loadPatchFile.
         std::string path;
+        droid::StateSnapshot current;
+        droid::PatchStateStore storeCopy;
         {
             std::lock_guard<std::mutex> lock(engineMutex);
             path = patchPath;
-            if (engine) lastSnapshot = engine->saveState();
+            // Same cadence as before, now filed under the loaded patch's own
+            // fingerprint instead of into one module-wide slot.
+            if (engine && !currentPatchId.empty())
+                stateStore.store(currentPatchId, engine->saveState(),
+                                 (int64_t)std::time(nullptr));
+            if (const droid::StoredSnapshot* e =
+                    stateStore.find(currentPatchId.fingerprint))
+                current = e->state;
+            // Copy out, then serialise OUTSIDE the lock: the audio thread takes
+            // engineMutex every tick frame, and the store is unbounded, so
+            // building the whole JSON tree under it would be a dropout waiting
+            // for a big enough store.
+            storeCopy = stateStore;
         }
         json_object_set_new(root, "patchPath", json_string(path.c_str()));
         json_object_set_new(root, "targetHz", json_real(targetHz));
@@ -1042,7 +1223,12 @@ public:
             json_boolean(allowExperimentalCircuits));
         json_object_set_new(root, "showRegisterLabels",
             json_boolean(registerLabels.show));
-        json_object_set_new(root, "circuitState", snapshotToJson(lastSnapshot));
+        json_object_set_new(root, "circuitStateStore", storeToJson(storeCopy));
+        // Kept for DOWNGRADE compatibility: a vcvoid build from before issue #42
+        // reads only this key, and finds exactly what it used to — the currently
+        // loaded patch's state. Newer builds prefer circuitStateStore and only
+        // fall back to this when the store key is absent.
+        json_object_set_new(root, "circuitState", snapshotToJson(current));
         return root;
     }
     void dataFromJson(json_t* root) override {
@@ -1072,8 +1258,18 @@ public:
         // Load the saved circuit state BEFORE the patch load below, so that
         // loadPatchFile (with no live engine yet) restores it into the fresh
         // engine — the Rack-reopen mirror of the hot-reload transfer.
-        if (json_t* j = json_object_get(root, "circuitState"))
-            lastSnapshot = snapshotFromJson(j);
+        //
+        // Two shapes are accepted (issue #42). The store is authoritative when
+        // present; a Rack patch saved by an older build carries only a single
+        // `circuitState` blob, which under the old contract IS the state of
+        // whatever patch `patchPath` names — so it is held as legacyState and
+        // adopted by the load below under that patch's fingerprint. One reopen
+        // converts an old save to the new shape with no state lost.
+        if (json_t* j = json_object_get(root, "circuitStateStore")) {
+            stateStore = storeFromJson(j);
+        } else if (json_t* j2 = json_object_get(root, "circuitState")) {
+            legacyState = snapshotFromJson(j2);
+        }
         // json_string_value returns NULL for a non-string node; dereferencing
         // that via std::string is UB, so guard the accessor.
         if (json_t* j = json_object_get(root, "patchPath")) {
@@ -1256,11 +1452,12 @@ struct DroidMasterBaseWidget : ModuleWidget {
         // (ISSUE-4) at its chain position (always the head, nearest the master) so
         // the line confirms X7 presence. Copy everything out before building the
         // menu so the lock isn't held across menu construction.
-        std::string patchStatus, patchPath, chainLine;
+        std::string patchStatus, stateStatus, patchPath, chainLine;
         bool midiWarn = false;
         {
             std::lock_guard<std::mutex> lock(m->engineMutex);
             patchStatus = m->patchStatus;
+            stateStatus = m->stateStatus;
             patchPath = m->patchPath;
             std::vector<std::string> parts;
             if (m->x7Present) parts.push_back("x7");
@@ -1277,6 +1474,10 @@ struct DroidMasterBaseWidget : ModuleWidget {
             midiWarn = m->engine && m->engine->patchUsesMidi() && !m->engine->midiAvailable();
         }
         menu->addChild(createMenuLabel(patchStatus));
+        // Where this patch's circuit state came from (issue #42). Omitted when
+        // no patch is loaded — there is nothing to say.
+        if (!stateStatus.empty())
+            menu->addChild(createMenuLabel(stateStatus));
         menu->addChild(createMenuLabel("chain: " + chainLine));
         if (!m->chainError.empty())
             menu->addChild(createMenuLabel("CHAIN ERROR: " + m->chainError));

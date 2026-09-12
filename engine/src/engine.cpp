@@ -63,6 +63,32 @@ static int deriveAutoHeader(const CompiledCircuit& cc, std::vector<std::string>&
     return 0;
 }
 
+// Migration signature (issue #42): what this circuit is WIRED TO, as a stable
+// text key. Outputs first — a circuit is identified far better by the cables it
+// drives (`_T1_CLOCK`, `O3`) than by its position in the file, and those names
+// survive the parameter edits, insertions and reorderings that break the
+// hardware's positional rule. A circuit that binds no outputs at all (a `led`,
+// a `button` used only for its LED) falls back to the targets its inputs read,
+// which is weaker but still far better than nothing. Numbers are deliberately
+// ignored: only register/cable NAMES carry identity.
+static std::string circuitSignature(const CompiledCircuit& cc) {
+    std::vector<std::string> names;
+    auto add = [&](const Atom& a) {
+        if (a.kind == Atom::Kind::Cable) names.push_back(a.cable);
+        else if (a.kind == Atom::Kind::Register) names.push_back(toString(a.reg));
+    };
+    for (const auto& p : cc.params)
+        if (p.def && !p.def->isInput) add(p.a);
+    if (names.empty())
+        for (const auto& p : cc.params)
+            if (p.def && p.def->isInput) { add(p.a); add(p.b); add(p.c); }
+    std::sort(names.begin(), names.end());
+    names.erase(std::unique(names.begin(), names.end()), names.end());
+    std::string sig;
+    for (const auto& n : names) { if (!sig.empty()) sig += ','; sig += n; }
+    return sig;
+}
+
 Engine::Engine(MasterType master, float tickRateHz, uint32_t seed)
     : master_(master), tickRateHz_(tickRateHz), seed_(seed ? seed : 1) {
     state_.rngState = seed_;
@@ -137,6 +163,9 @@ LoadResult Engine::load(const std::string& patchText, const LoadOptions& opts) {
                 drivenRegs_.insert(pack(p.a.reg));
 
     usesMidi_ = false;
+    circuitSignatures_.clear();
+    circuitSignatures_.reserve(cp.circuits.size());
+    for (auto& cc : cp.circuits) circuitSignatures_.push_back(circuitSignature(cc));
     for (auto& cc : cp.circuits) {
         const char* n = cc.def->name;
         // Circuits that need a reachable MIDI PORT. midifileplayer is
@@ -250,7 +279,8 @@ void Engine::tick() {
 StateSnapshot Engine::saveState() const {
     StateSnapshot snap;
     std::unordered_map<std::string, int> ordinal;   // per-type running count
-    for (const auto& c : circuits_) {
+    for (size_t ci = 0; ci < circuits_.size(); ci++) {
+        const auto& c = circuits_[ci];
         if (!c->isStateful()) continue;
         int ord = ++ordinal[c->def->name];           // number ALL of the type
         if (c->dontsaveActive(state_)) continue;      // dontsave: skip saving
@@ -258,6 +288,7 @@ StateSnapshot Engine::saveState() const {
         cs.type = c->def->name;
         cs.ordinal = ord;
         cs.version = c->stateVersion();
+        if (ci < circuitSignatures_.size()) cs.signature = circuitSignatures_[ci];
         StateWriter w{cs.values};
         c->saveState(w);
         snap.entries.push_back(std::move(cs));
@@ -280,6 +311,63 @@ void Engine::restoreState(const StateSnapshot& snap) {
         if (it == byKey.end()) continue;               // extra circuit: defaults
         const CircuitState* e = it->second;
         c->loadState(state_, e->version, e->values);   // circuit validates/ignores
+    }
+}
+
+// Structure-tolerant restore (issue #42) — see the header for the contract.
+// Two passes per circuit type: signature pairing, then positional pairing of
+// whatever is left over. Both walk patch order, so the positional pass is the
+// hardware rule applied to the residue rather than to the whole type.
+void Engine::migrateState(const StateSnapshot& snap) {
+    if (!loaded_) return;
+
+    // Snapshot entries grouped by type, in snapshot order.
+    std::unordered_map<std::string, std::vector<const CircuitState*>> avail;
+    for (const auto& e : snap.entries) avail[e.type].push_back(&e);
+
+    // Eligible target circuits grouped by type, in patch order. dontsave is
+    // honoured here exactly as in restoreState: such a circuit neither saves
+    // nor loads, and must not consume a snapshot entry either.
+    struct Target { Circuit* c; const std::string* sig; };
+    std::unordered_map<std::string, std::vector<Target>> targets;
+    for (size_t ci = 0; ci < circuits_.size(); ci++) {
+        Circuit* c = circuits_[ci].get();
+        if (!c->isStateful() || c->dontsaveActive(state_)) continue;
+        static const std::string kNoSig;
+        targets[c->def->name].push_back(
+            {c, ci < circuitSignatures_.size() ? &circuitSignatures_[ci] : &kNoSig});
+    }
+
+    for (auto& [type, tgts] : targets) {
+        auto it = avail.find(type);
+        if (it == avail.end()) continue;
+        std::vector<const CircuitState*>& pool = it->second;
+        std::vector<bool> taken(pool.size(), false);
+        std::vector<const CircuitState*> assign(tgts.size(), nullptr);
+
+        // Pass 1 — exact signature match. An empty signature is "no identity"
+        // on either side and never matches, so those fall through to pass 2.
+        for (size_t t = 0; t < tgts.size(); t++) {
+            if (tgts[t].sig->empty()) continue;
+            for (size_t p = 0; p < pool.size(); p++) {
+                if (taken[p] || pool[p]->signature != *tgts[t].sig) continue;
+                assign[t] = pool[p];
+                taken[p] = true;
+                break;
+            }
+        }
+        // Pass 2 — positional among the leftovers (hardware rule, residue only).
+        size_t p = 0;
+        for (size_t t = 0; t < tgts.size(); t++) {
+            if (assign[t]) continue;
+            while (p < pool.size() && taken[p]) p++;
+            if (p >= pool.size()) break;          // nothing left: keep defaults
+            assign[t] = pool[p];
+            taken[p++] = true;
+        }
+        for (size_t t = 0; t < tgts.size(); t++)
+            if (assign[t])
+                tgts[t].c->loadState(state_, assign[t]->version, assign[t]->values);
     }
 }
 

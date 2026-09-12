@@ -155,6 +155,20 @@ with a separator gets no labels in either app. `[SHORT]` is what the chip
 shows, so patches meant to be read on-panel should carry one — without it the
 chip falls back to the label text, ellipsized to the ~9 characters that fit.
 
+### Circuit state (per patch)
+
+Stateful circuits persist manual interaction (hardware.md §11.1, `DROIDSTA.BIN`).
+vcvoid keys that state to the **patch**, not the module: each master keeps an
+*unbounded* store of snapshots, one per structural fingerprint (a hash of the
+ordered circuit-type list — `engine/src/patchstate.cpp`), serialised into the
+Rack patch. A load either **restores** an exact fingerprint hit, **migrates** a
+snapshot from the same file path or `# STATE: <id>` header tag (matching
+circuits by the cables/registers their outputs drive, then positionally among
+the leftovers — `Engine::migrateState`), or starts **fresh**. The master's
+context menu shows which. `Engine::restoreState` keeps the plain hardware
+type+ordinal rule untouched for exact hits. See
+[`docs/adr/0002-per-patch-circuit-state.md`](docs/adr/0002-per-patch-circuit-state.md).
+
 ### Key concepts
 
 - **Registers / jacks**: `I1`…`I8` inputs, `O1`…`O8` outputs, `N1`…`N8` input

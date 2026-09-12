@@ -223,6 +223,9 @@ assert_jq '.buttons | has("L1.1")' "leds buttons has L1.1"
 do_http POST "/master/$MASTER_ID/reload"
 assert_code 200 "POST reload"
 assert_jq '.statusLine | test("ok, [0-9]+ bytes RAM")' "reload statusLine ok"
+# issue #42: reloading the SAME patch is an exact fingerprint hit, so the patch
+# gets its own saved state back rather than a foreign one.
+assert_jq '.stateLine | test("^state: restored")' "reload stateLine restored"
 do_http POST "/master/$MASTER_ID/patch" '{"path":"relative.ini"}'
 assert_code 400 "POST patch (non-absolute path)"
 do_http GET "/master/999999999999/status"

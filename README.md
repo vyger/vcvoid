@@ -70,6 +70,11 @@ Downloads) — it is intentionally not redistributed here.
 **Button chords:** **Shift+click** holds a button down while Shift is held, so
 you can Shift+click a second one; right-click → **Latch** holds until unticked.
 
+**Patch state:** like the hardware, a master remembers buttons, fader positions,
+sequences and presets — but per patch, so switching patches never mixes them up.
+The master's menu shows where the current state came from; details in
+[`docs/adr/0002-per-patch-circuit-state.md`](docs/adr/0002-per-patch-circuit-state.md).
+
 ### Experimental circuits
 
 vcvoid can also run a small number of **experimental circuits** — circuits that
