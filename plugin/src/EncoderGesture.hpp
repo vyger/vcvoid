@@ -50,6 +50,24 @@ struct EncoderGesture {
     bool  held = false;        // committed push level
     float pulseLeft = 0.f;     // remaining synthetic click pulse
 
+    // A hold with no mouse on it: Alt-hold or Latch (issue #39). The encoder
+    // push is a B register like any DROID button, so it takes the same two
+    // gestures — a patch that chords CTRL with an encoder push has to be
+    // reachable too.
+    //
+    // Deliberately INDEPENDENT of the phase machine rather than a synthetic
+    // Push phase. Phases describe what the MOUSE is doing, and while a push is
+    // externally held the mouse is free to do something else on the same
+    // encoder — most importantly to TURN it, which is the hardware push+turn
+    // gesture. Leaving the phases alone means that press/turn/release runs its
+    // normal course (detents and all) underneath a level that simply stays
+    // high, and `release()` clearing `held` cannot drop a hold it never took.
+    //
+    // UI thread writes, audio thread reads, same plain-field tolerance as
+    // `held` and the detent counter next door: a torn read costs one frame of
+    // level, never a spurious edge.
+    bool  externalHold = false;
+
     // UI thread: left mouse press on the encoder.
     void press() {
         phase = Phase::Pending;
@@ -103,7 +121,7 @@ struct EncoderGesture {
     }
 
     // The push level to publish upstream this frame.
-    bool level() const { return held || pulseLeft > 0.f; }
+    bool level() const { return held || pulseLeft > 0.f || externalHold; }
 };
 
 } // namespace vcvoid

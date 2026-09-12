@@ -125,3 +125,71 @@ TEST(gesture_click_pulse_outlives_an_engine_tick) {
     // held gestures still read as holds without absurd extra waiting.
     CHECK(EncoderGesture::kHoldSeconds <= 0.5f);
 }
+
+// ---- external hold: Alt-hold / Latch on the push (issue #39) --------------
+// The encoder push is a B register like any DROID button, so a patch can chord
+// with it and it takes the same two gestures. `externalHold` is deliberately
+// independent of the phase machine, so the mouse stays free to turn the
+// encoder underneath a level that simply stays high.
+
+TEST(gesture_external_hold_is_a_continuous_level) {
+    EncoderGesture g;
+    CHECK(!g.level());
+    g.externalHold = true;
+    CHECK(g.level());
+    stepFor(g, 2.f);
+    CHECK(g.level());                        // no timeout, unlike a click pulse
+    g.externalHold = false;
+    CHECK(!g.level());
+}
+
+TEST(gesture_external_hold_survives_a_full_turn_gesture) {
+    // Alt-held, then the user grabs the same encoder and turns it: the detents
+    // must count AND the push level must never dip, which is push+turn.
+    EncoderGesture g;
+    g.externalHold = true;
+    g.press();                               // a fresh press under the hold
+    float out = 0.f;
+    for (int i = 0; i < 6; i++) {
+        out += g.move(1.f);
+        g.step(0.016f);
+        CHECK(g.level());                    // never dips mid-turn
+    }
+    CHECK_NEAR(out, 6.f, 1e-6f);
+    g.release();
+    CHECK(g.level());                        // release of the TURN, not the hold
+    stepFor(g, 1.f);
+    CHECK(g.level());
+    g.externalHold = false;
+    CHECK(!g.level());
+}
+
+TEST(gesture_release_cannot_drop_a_hold_it_never_took) {
+    // release() clears the mouse-committed `held`; it must not touch a hold
+    // that came from Alt or a latch.
+    EncoderGesture g;
+    g.externalHold = true;
+    g.press();
+    stepFor(g, EncoderGesture::kHoldSeconds + 0.05f);   // also commits a real push
+    CHECK(g.level());
+    g.release();
+    CHECK(!g.held);                          // the mouse push is gone ...
+    CHECK(g.level());                        // ... the external hold is not
+    g.externalHold = false;
+    CHECK(!g.level());
+}
+
+TEST(gesture_alt_click_under_a_hold_adds_no_edge) {
+    // The Alt+click that TAKES the hold still runs press/release underneath,
+    // which pulses. Since the level is already high, the pulse must not show
+    // up as a second rising edge — the level is simply high throughout.
+    EncoderGesture g;
+    g.externalHold = true;                   // set at press time by the widget
+    g.press();
+    CHECK(g.level());
+    g.release();                             // click -> synthetic pulse
+    CHECK(g.level());
+    float high = stepFor(g, 1.f);
+    CHECK(g.level());                        // still high after the pulse dies
+    CHECK_NEAR(high, 1.f, 0.01f);            // high for the WHOLE window
+}

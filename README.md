@@ -87,15 +87,17 @@ runs on hardware, and the `B` register still just reads 0 or 1.
   right-click menu has **Release all latches**, which clears every latch on that
   module (and any alt-hold).
 
-A held button draws an **orange ring** around it, so you can always see what is
-down; it is deliberately a different colour from the LED the patch drives.
+A held control draws an **orange ring** around it, so you can always see what
+is down; it is deliberately a different colour from the LED the patch drives.
 Holds and latches are never saved into your Rack patch — a reload starts with
 nothing held.
 
-This works on every momentary DROID button: **p2b8**, **p4b2**, **b32**, the
-**db8e** face buttons and the **m4** touch plates. (The **s10**/**p8s8**
-toggles already latch by their nature, and the **e4**/**db8e** encoder pushes
-are a separate gesture.)
+This works on every momentary DROID button — **p2b8**, **p4b2**, **b32**, the
+**db8e** face buttons and the **m4** touch plates — and on the **e4**/**db8e**
+encoder **pushes**, which are `B` registers too. On an encoder, Alt+click holds
+the push; you can then turn the encoder with the push still down, which is the
+hardware push+turn gesture. Right-click an encoder for its own **Latch** item.
+(The **s10**/**p8s8** toggles already latch by their nature.)
 
 **From a hardware controller:** Rack's stock **MIDI-Map** module (which maps
 MIDI CC messages onto params) works on these buttons too — plain-click a button

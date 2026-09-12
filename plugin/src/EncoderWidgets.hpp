@@ -2,8 +2,10 @@
 #include "plugin.hpp"
 #include "droidcolor.hpp"
 #include "EncoderGesture.hpp"
+#include "HoldWidget.hpp"   // Alt-hold / Latch, shared with the buttons (issue #39)
 #include <cmath>
 #include <algorithm>
+#include <vector>
 
 // Shared endless-encoder + value-ring widgets for the DROID controllers that
 // carry rotary encoders (E4, DB8E). SDK-verified against Rack 2 headers:
@@ -29,10 +31,17 @@
 // DEFERRED inside EncoderGesture: nothing is published until the gesture is
 // a click (synthetic pulse at release), a turn (never a press; withheld
 // travel replayed), or a deliberate hold (real push level, survives turning).
-struct DroidEndlessEncoder : OpaqueWidget {
+struct DroidEndlessEncoder : OpaqueWidget, dw::HoldableControl {
     uint32_t* detentCount = nullptr;           // module-owned monotonic counter (wraps)
     vcvoid::EncoderGesture* gesture = nullptr; // module-owned click/turn/push classifier
     float accum = 0.f;                 // sub-detent drag accumulator (px)
+    // Alt-hold / Latch on the PUSH (issue #39). The push is a B register like
+    // any other DROID button, so a patch can chord with it; the drawn buttons
+    // and this share one arbiter, so alt-holding CTRL on a p2b8 and clicking an
+    // encoder here is a chord like any other. `latched` is widget state and so
+    // is never serialized — the gesture it drives lives on the module, hence
+    // the dtor.
+    bool latched = false;
     static constexpr float kPxPerDetent = 4.f;   // sensitivity (feel; tune in Rack)
     // Visual detents per full revolution for the rotation indicator (feel only;
     // has no bearing on the logical detent count the master consumes).
@@ -49,13 +58,52 @@ struct DroidEndlessEncoder : OpaqueWidget {
         while (accum <= -kPxPerDetent) { if (detentCount) (*detentCount)--; accum += kPxPerDetent; }
         OpaqueWidget::onDragMove(e);
     }
+    ~DroidEndlessEncoder() override {
+        dw::altHoldArbiter().forget(this);
+        // The gesture outlives this widget (it belongs to the module), so a
+        // hold we set must not be left behind on it.
+        if (gesture) gesture->externalHold = false;
+    }
+
+    void releaseHold() override {
+        latched = false;
+        dw::altHoldArbiter().forget(this);
+    }
+
     void onButton(const ButtonEvent& e) override {
+        // Right-click: the encoder is an OpaqueWidget, so it already swallows
+        // the press and no module menu opens here. Put the Latch item on it.
+        if (e.action == GLFW_PRESS && e.button == GLFW_MOUSE_BUTTON_RIGHT
+            && (e.mods & RACK_MOD_MASK) == 0) {
+            ui::Menu* menu = createMenu();
+            menu->addChild(createMenuLabel("Encoder push"));
+            menu->addChild(createBoolPtrMenuItem("Latch", "", &latched));
+            e.consume(this);
+            return;
+        }
         // OpaqueWidget::onButton consumes the left press, enabling DragStart.
         if (e.button == GLFW_MOUSE_BUTTON_LEFT && gesture) {
             if (e.action == GLFW_PRESS)   gesture->press();
             if (e.action == GLFW_RELEASE) gesture->release();
         }
+        // An Alt+click takes the hold. The normal press/release still runs
+        // underneath it: the level is already high from externalHold, so the
+        // click's synthetic pulse adds no edge, and an Alt+click-and-DRAG
+        // classifies as a turn — push+turn in one motion, as on hardware.
+        if (e.action == GLFW_PRESS && e.button == GLFW_MOUSE_BUTTON_LEFT)
+            dw::altHoldArbiter().press(this, dw::isAltPress(e));
         OpaqueWidget::onButton(e);
+    }
+
+    void step() override {
+        dw::pollAltOnce();
+        if (gesture)
+            gesture->externalHold = latched || dw::altHoldArbiter().isAltHeld(this);
+        OpaqueWidget::step();
+    }
+
+    bool isHeld() const {
+        return latched || dw::altHoldArbiter().isAltHeld(this);
     }
     void onDragEnd(const DragEndEvent& e) override {
         // Belt-and-suspenders: a mouse RELEASE outside the widget box never
@@ -107,6 +155,10 @@ struct DroidEndlessEncoder : OpaqueWidget {
         nvgClosePath(args.vg);
         nvgFill(args.vg);
         nvgRestore(args.vg);
+
+        // Alt-hold / Latch indicator (issue #39), inside the cap rim — the
+        // baked LED ring already owns everything outside it.
+        if (isHeld()) dw::drawHoldRing(args.vg, c, r - 1.f);
 
         OpaqueWidget::draw(args);
     }

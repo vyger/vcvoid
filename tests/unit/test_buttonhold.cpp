@@ -131,3 +131,22 @@ TEST(buttonhold_latch_is_independent_of_alt) {
     CHECK(ctrl.pressed());          // still latched
     CHECK(other.pressed());
 }
+
+TEST(buttonhold_one_arbiter_spans_every_kind_of_control) {
+    // The drawn buttons are ParamWidgets and the E4/DB8E encoder pushes are
+    // not, but both are B registers and both share ONE arbiter — otherwise
+    // "alt-hold CTRL on the p2b8, then click an encoder push on the e4" would
+    // quietly become two holds instead of a chord.
+    static const char kEncoderPush[] = "E1.1 push";
+    AltHoldArbiter a;
+    CHECK(a.press(kCtrl, true));              // a button takes the hold
+    CHECK(!a.press(kEncoderPush, true));      // the encoder push chords with it
+    CHECK(a.isAltHeld(kCtrl));
+    CHECK(!a.isAltHeld(kEncoderPush));
+
+    a.pollAlt(false);
+    CHECK(a.press(kEncoderPush, true));       // and the reverse direction
+    CHECK(!a.press(kCtrl, true));
+    CHECK(a.isAltHeld(kEncoderPush));
+    CHECK(!a.isAltHeld(kCtrl));
+}

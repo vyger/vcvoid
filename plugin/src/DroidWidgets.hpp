@@ -6,7 +6,7 @@
 #include "plugin.hpp"
 #include "Layout.hpp"
 #include "BuildInfo.hpp"
-#include "ButtonHold.hpp"    // Alt-hold / Latch decision logic (issue #39)
+#include "HoldWidget.hpp"    // Alt-hold / Latch, shared with the encoders (issue #39)
 #include "ChainModule.hpp"   // ChainModule::registerLabels (issue #26)
 #include "uatbridge/Bridge.hpp"
 
@@ -179,44 +179,15 @@ struct DroidKnobSmall : DroidKnob {
 
 // ---- holding a momentary button down (issue #39) --------------------------
 //
-// The gestures and the single-alt-hold rule are documented in ButtonHold.hpp;
-// this is the Rack side of them. Everything here is UI-thread only.
-
-// The one arbiter for the whole rack — the alt-hold is a rack-wide gesture
-// (you alt-hold CTRL on the p2b8 and chord it with a button on the b32), so it
-// cannot live per widget or per module.
-inline vcvoid::AltHoldArbiter& altHoldArbiter() {
-    static vcvoid::AltHoldArbiter a;
-    return a;
-}
-
-// Poll the PHYSICAL Alt key once per UI frame. Window::getMods() is a raw
-// glfwGetKey of left+right Alt against the main window, so it keeps reporting
-// while a context menu is up or focus has moved — unlike a key-up EVENT, which
-// is delivered to whatever widget is focused and would never reach the button,
-// leaving it stuck down. Every button calls this; the frame stamp makes all but
-// the first call in a frame a no-op. (getFrameTime() is NAN before the first
-// frame, and NAN != NAN, so we simply poll — which is what we want anyway.)
-inline void pollAltOnce() {
-    static double lastFrame = -1.0;
-    double t = APP->window->getFrameTime();
-    if (t == lastFrame) return;
-    lastFrame = t;
-    altHoldArbiter().pollAlt((APP->window->getMods() & GLFW_MOD_ALT) != 0);
-}
-
-// Cross-cast target so a module's context menu can find every holdable button
-// on it (via ModuleWidget::getParams()) without knowing the widget types.
-struct HoldableParam {
-    virtual ~HoldableParam() = default;
-    virtual void releaseHold() = 0;
-};
+// The gestures and the single-alt-hold rule are documented in ButtonHold.hpp,
+// the shared Rack-side machinery in HoldWidget.hpp; this is the button flavour
+// of it. Everything here is UI-thread only.
 
 // Alt-hold + Latch for any momentary Rack Switch. Mixed into the drawn DROID
 // button (below) and the M4's light bezel, which are different widget
 // hierarchies but the same gesture.
 template <typename TBase>
-struct HoldableButton : TBase, HoldableParam {
+struct HoldableButton : TBase, HoldableControl {
     vcvoid::ButtonHold hold;
     bool heldLast = false;     // for the one release write when a hold ends
     bool firstStep = true;
@@ -232,11 +203,8 @@ struct HoldableButton : TBase, HoldableParam {
 
     // Dependent base: these event types must be named through rack::widget.
     void onButton(const rack::widget::Widget::ButtonEvent& e) override {
-        if (e.action == GLFW_PRESS && e.button == GLFW_MOUSE_BUTTON_LEFT) {
-            // Strict match: Alt and nothing else, so Ctrl+Alt etc. stay free.
-            bool altMod = (e.mods & RACK_MOD_MASK) == GLFW_MOD_ALT;
-            altHoldArbiter().press(this, altMod);
-        }
+        if (e.action == GLFW_PRESS && e.button == GLFW_MOUSE_BUTTON_LEFT)
+            altHoldArbiter().press(this, isAltPress(e));
         TBase::onButton(e);
     }
 
@@ -293,16 +261,9 @@ struct HoldableButton : TBase, HoldableParam {
         menu->addChild(createBoolPtrMenuItem("Latch", "", &hold.latched));
     }
 
-    // A ring OUTSIDE the cap, in the panel's orange accent (the P8S8 fader cap
-    // colour) — deliberately not the warm cream the LED glows, so "the patch
-    // lit this" and "you are holding this" never look alike.
-    void drawHoldRing(NVGcontext* vg, Vec c, float r) {
-        if (!hold.held()) return;
-        nvgBeginPath(vg);
-        nvgCircle(vg, c.x, c.y, r);
-        nvgStrokeWidth(vg, 2.0f);
-        nvgStrokeColor(vg, nvgRGBA(0xf7, 0x94, 0x1d, hold.latched ? 0xff : 0xc0));
-        nvgStroke(vg);
+    // The hold ring, OUTSIDE the cap so it never fights the LED.
+    void drawRingIfHeld(NVGcontext* vg, Vec c, float r) {
+        if (hold.held()) drawHoldRing(vg, c, r);
     }
 };
 
@@ -387,7 +348,7 @@ struct DroidButton : HoldableButton<app::Switch> {
             }
         }
         // Alt-hold / Latch indicator, just outside the drawn cap (issue #39).
-        drawHoldRing(args.vg, c, r + hpPx(0.13f));
+        drawRingIfHeld(args.vg, c, r + hpPx(0.13f));
     }
 };
 
@@ -401,7 +362,7 @@ struct DroidTouchBezel : HoldableButton<VCVLightBezel<TLightBase>> {
     void draw(const rack::widget::Widget::DrawArgs& args) override {
         HoldableButton<VCVLightBezel<TLightBase>>::draw(args);
         Vec c = this->box.size.div(2);
-        this->drawHoldRing(args.vg, c, std::min(c.x, c.y) - 1.f);
+        this->drawRingIfHeld(args.vg, c, std::min(c.x, c.y) - 1.f);
     }
 };
 
@@ -714,16 +675,27 @@ struct VcvoidModuleWidget : rack::app::ModuleWidget {
     // rack-wide alt-hold too: the item means "nothing is held any more".
     // Modules with no momentary buttons (p10, s10, g8, ...) get no item.
     void appendButtonHoldMenu(Menu* menu) {
-        bool any = false;
-        for (rack::app::ParamWidget* pw : getParams())
-            if (dynamic_cast<dw::HoldableParam*>(pw)) { any = true; break; }
-        if (!any) return;
+        std::vector<dw::HoldableControl*> holds;
+        collectHoldables(this, holds);
+        if (holds.empty()) return;
         menu->addChild(new MenuSeparator);
         menu->addChild(createMenuItem("Release all latches", "", [this]() {
-            for (rack::app::ParamWidget* pw : getParams())
-                if (auto* h = dynamic_cast<dw::HoldableParam*>(pw)) h->releaseHold();
+            std::vector<dw::HoldableControl*> now;
+            collectHoldables(this, now);      // re-scan: the menu outlives the click
+            for (dw::HoldableControl* h : now) h->releaseHold();
             dw::altHoldArbiter().releaseAll();
         }));
+    }
+
+    // Recursive, because holdable controls are not all ParamWidgets:
+    // ModuleWidget::getParams() would miss the E4/DB8E encoder pushes, which
+    // are plain OpaqueWidgets added with addChild().
+    static void collectHoldables(rack::widget::Widget* w,
+                                 std::vector<dw::HoldableControl*>& out) {
+        for (rack::widget::Widget* c : w->children) {
+            if (auto* h = dynamic_cast<dw::HoldableControl*>(c)) out.push_back(h);
+            collectHoldables(c, out);
+        }
     }
 
     // "Show register labels" for the whole DROID system. The flag lives on the
