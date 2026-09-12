@@ -6,7 +6,7 @@
 #include "plugin.hpp"
 #include "Layout.hpp"
 #include "BuildInfo.hpp"
-#include "HoldWidget.hpp"    // Alt-hold / Latch, shared with the encoders (issue #39)
+#include "HoldWidget.hpp"    // Shift-hold / Latch, shared with the encoders (issue #39)
 #include "ChainModule.hpp"   // ChainModule::registerLabels (issue #26)
 #include "uatbridge/Bridge.hpp"
 
@@ -179,11 +179,11 @@ struct DroidKnobSmall : DroidKnob {
 
 // ---- holding a momentary button down (issue #39) --------------------------
 //
-// The gestures and the single-alt-hold rule are documented in ButtonHold.hpp,
+// The gestures and the single-hold rule are documented in ButtonHold.hpp,
 // the shared Rack-side machinery in HoldWidget.hpp; this is the button flavour
 // of it. Everything here is UI-thread only.
 
-// Alt-hold + Latch for any momentary Rack Switch. Mixed into the drawn DROID
+// Shift-hold + Latch for any momentary Rack Switch. Mixed into the drawn DROID
 // button (below) and the M4's light bezel, which are different widget
 // hierarchies but the same gesture.
 template <typename TBase>
@@ -194,17 +194,17 @@ struct HoldableButton : TBase, HoldableControl {
 
     // The arbiter compares ids but never dereferences them, so a stale one is
     // harmless — but a recycled address must not inherit the hold.
-    ~HoldableButton() override { altHoldArbiter().forget(this); }
+    ~HoldableButton() override { holdArbiter().forget(this); }
 
     void releaseHold() override {
         hold.latched = false;
-        altHoldArbiter().forget(this);
+        holdArbiter().forget(this);
     }
 
     // Dependent base: these event types must be named through rack::widget.
     void onButton(const rack::widget::Widget::ButtonEvent& e) override {
         if (e.action == GLFW_PRESS && e.button == GLFW_MOUSE_BUTTON_LEFT)
-            altHoldArbiter().press(this, isAltPress(e));
+            holdArbiter().press(this, isHoldModPress(e));
         TBase::onButton(e);
     }
 
@@ -225,8 +225,8 @@ struct HoldableButton : TBase, HoldableControl {
     }
 
     void step() override {
-        pollAltOnce();
-        hold.altHeld = altHoldArbiter().isAltHeld(this);
+        pollHoldModOnce();
+        hold.modHeld = holdArbiter().isHeld(this);
         TBase::step();
 
         engine::ParamQuantity* pq = this->getParamQuantity();
@@ -247,7 +247,7 @@ struct HoldableButton : TBase, HoldableControl {
                 if (pq->getValue() < pq->getMaxValue()) pq->setMax();
             }
             else if (heldLast && !hold.mouseDown) {
-                // The hold just ended (Alt up, or unlatched) and no finger is
+                // The hold just ended (modifier up, or unlatched) and no finger is
                 // on the button: release it. With the mouse still down, the
                 // base's own onDragEnd now does it instead.
                 pq->setMin();
@@ -347,14 +347,14 @@ struct DroidButton : HoldableButton<app::Switch> {
                 nvgFill(args.vg);
             }
         }
-        // Alt-hold / Latch indicator, just outside the drawn cap (issue #39).
+        // Shift-hold / Latch indicator, just outside the drawn cap (issue #39).
         drawRingIfHeld(args.vg, c, r + hpPx(0.13f));
     }
 };
 
 // ---- M4 touch plate: Rack's light bezel, made holdable (issue #39) --------
 // The M4's touch plates are momentary B-register buttons like any other, so
-// they take the same Alt-hold/Latch gestures; only the artwork differs (a
+// they take the same Shift-hold/Latch gestures; only the artwork differs (a
 // stock VCVLightBezel carrying the circuit-driven RGB fader LED, since the
 // faceplate is blank there).
 template <typename TLightBase>
@@ -672,7 +672,7 @@ struct VcvoidModuleWidget : rack::app::ModuleWidget {
     // easy to forget about — it stays down with nothing on screen but a ring to
     // say so — and a patch can have a dozen of them, so there is one way out
     // that does not involve hunting for each button's menu. It drops the
-    // rack-wide alt-hold too: the item means "nothing is held any more".
+    // rack-wide mod-hold too: the item means "nothing is held any more".
     // Modules with no momentary buttons (p10, s10, g8, ...) get no item.
     void appendButtonHoldMenu(Menu* menu) {
         std::vector<dw::HoldableControl*> holds;
@@ -683,7 +683,7 @@ struct VcvoidModuleWidget : rack::app::ModuleWidget {
             std::vector<dw::HoldableControl*> now;
             collectHoldables(this, now);      // re-scan: the menu outlives the click
             for (dw::HoldableControl* h : now) h->releaseHold();
-            dw::altHoldArbiter().releaseAll();
+            dw::holdArbiter().releaseAll();
         }));
     }
 

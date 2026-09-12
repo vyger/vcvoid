@@ -126,7 +126,7 @@ TEST(gesture_click_pulse_outlives_an_engine_tick) {
     CHECK(EncoderGesture::kHoldSeconds <= 0.5f);
 }
 
-// ---- external hold: Alt-hold / Latch on the push (issue #39) --------------
+// ---- external hold: Shift-hold / Latch on the push (issue #39) ------------
 // The encoder push is a B register like any DROID button, so a patch can chord
 // with it and it takes the same two gestures. `externalHold` is deliberately
 // independent of the phase machine, so the mouse stays free to turn the
@@ -144,7 +144,7 @@ TEST(gesture_external_hold_is_a_continuous_level) {
 }
 
 TEST(gesture_external_hold_survives_a_full_turn_gesture) {
-    // Alt-held, then the user grabs the same encoder and turns it: the detents
+    // Mod-held, then the user grabs the same encoder and turns it: the detents
     // must count AND the push level must never dip, which is push+turn.
     EncoderGesture g;
     g.externalHold = true;
@@ -166,7 +166,7 @@ TEST(gesture_external_hold_survives_a_full_turn_gesture) {
 
 TEST(gesture_release_cannot_drop_a_hold_it_never_took) {
     // release() clears the mouse-committed `held`; it must not touch a hold
-    // that came from Alt or a latch.
+    // that came from the modifier or a latch.
     EncoderGesture g;
     g.externalHold = true;
     g.press();
@@ -179,8 +179,8 @@ TEST(gesture_release_cannot_drop_a_hold_it_never_took) {
     CHECK(!g.level());
 }
 
-TEST(gesture_alt_click_under_a_hold_adds_no_edge) {
-    // The Alt+click that TAKES the hold still runs press/release underneath,
+TEST(gesture_modified_click_under_a_hold_adds_no_edge) {
+    // The modified click that TAKES the hold still runs press/release underneath,
     // which pulses. Since the level is already high, the pulse must not show
     // up as a second rising edge — the level is simply high throughout.
     EncoderGesture g;

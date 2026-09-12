@@ -50,7 +50,7 @@ struct EncoderGesture {
     bool  held = false;        // committed push level
     float pulseLeft = 0.f;     // remaining synthetic click pulse
 
-    // A hold with no mouse on it: Alt-hold or Latch (issue #39). The encoder
+    // A hold with no mouse on it: Shift-hold or Latch (issue #39). The encoder
     // push is a B register like any DROID button, so it takes the same two
     // gestures — a patch that chords CTRL with an encoder push has to be
     // reachable too.

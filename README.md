@@ -67,7 +67,7 @@ page renders (diagrams, tables, worked figures), download the **blue-7 DROID
 manual** from Der Mann mit der Maschine (shop.dermannmitdermaschine.de →
 Downloads) — it is intentionally not redistributed here.
 
-### Button chords: Alt-hold and Latch
+### Button chords: Shift-hold and Latch
 
 DROID patches are full of **button chords** — hold a "CTRL"/shift button, press
 a second one. The MFPS patch generator, for instance, puts mute, presets,
@@ -76,16 +76,16 @@ mouse can only hold one momentary button at a time, so vcvoid's buttons take
 two extra gestures. Both are pure UI: the patch is identical to the one that
 runs on hardware, and the `B` register still just reads 0 or 1.
 
-- **Alt-hold** — **Alt+click** a button (**Option+click** on macOS) and it
-  stays pressed for as long as you hold the Alt key down. Then, *still holding
-  Alt*, click the second button normally: that is the chord. Only one button
-  can be alt-held at a time, so every click after the first one is an ordinary
-  press. Let go of Alt and the held button releases.
+- **Shift-hold** — **Shift+click** a button and it stays pressed for as long as
+  you keep Shift down. Then, *still holding Shift*, Shift+click the second
+  button: that one is an ordinary press, and the two together are the chord.
+  Only one button can be Shift-held at a time, so every click after the first is
+  a normal press. Let go of Shift and the held button releases.
 - **Latch** — right-click a button and tick **Latch**. A latched button is held
   until you untick it, which suits a CTRL button you want down across several
   actions. Any number of buttons can be latched at once. The module's own
   right-click menu has **Release all latches**, which clears every latch on that
-  module (and any alt-hold).
+  module (and any Shift-hold).
 
 A held control draws an **orange ring** around it, so you can always see what
 is down; it is deliberately a different colour from the LED the patch drives.
@@ -94,17 +94,23 @@ nothing held.
 
 This works on every momentary DROID button — **p2b8**, **p4b2**, **b32**, the
 **db8e** face buttons and the **m4** touch plates — and on the **e4**/**db8e**
-encoder **pushes**, which are `B` registers too. On an encoder, Alt+click holds
-the push; you can then turn the encoder with the push still down, which is the
-hardware push+turn gesture. Right-click an encoder for its own **Latch** item.
-(The **s10**/**p8s8** toggles already latch by their nature.)
+encoder **pushes**, which are `B` registers too. On an encoder, Shift+click
+holds the push; you can then turn the encoder with the push still down, which is
+the hardware push+turn gesture. Right-click an encoder for its own **Latch**
+item. (The **s10**/**p8s8** toggles already latch by their nature.)
+
+> **Why Shift and not Alt?** Rack itself uses **Alt+click-and-drag** to scroll
+> the rack, and it claims that click before any module can see it — an
+> Alt+click on a module never arrives at all. Shift is free over a control, so
+> that is what arms the hold. (Shift+click on the *panel* between controls is
+> still Rack's "add module to selection".)
 
 **From a hardware controller:** Rack's stock **MIDI-Map** module (which maps
 MIDI CC messages onto params) works on these buttons too — plain-click a button
-to make it the touched param (an Alt+click is the hold gesture, not a map
-gesture), then learn a CC onto it. The DROID button follows that control for as
-long as you hold it, which gives you real chords with real fingers and no
-modifier key at all.
+to make it the touched param (a Shift+click is the hold gesture, and Rack only
+arms MIDI-Map on an unmodified click), then learn a CC onto it. The DROID button
+follows that control for as long as you hold it, which gives you real chords
+with real fingers and no modifier key at all.
 
 ### Experimental circuits
 
