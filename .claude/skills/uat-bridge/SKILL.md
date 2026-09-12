@@ -45,6 +45,12 @@ user's session up).
 then `/Applications/Rack.app` in that order if `$RACK` isn't set; `-u`
 pins the autosave dir the script later parses.)
 
+**`make smoke`** (repo root) is the canonical invocation of that script — the
+fast contract gate: every endpoint's status codes and response shapes, the
+`/diagnostics` classes, the state-store lines and the hold/release verbs. It
+attaches to a running bridge when one answers and leaves it running. Env
+overrides pass straight through (`make smoke SKIP_HASH=1`).
+
 **Scripted full UAT**: `tools/uat_run.py` is the canonical executor for the
 whole runbook (`docs/uat/runbook.md`) — it owns this entire lifecycle
 (mktemp session copy, launch, `/ping` hash gate, readiness polls, graceful
@@ -96,7 +102,10 @@ listed here 404 with `{"error":"no such route"}`.
 ### Meta
 | Route | Request | Response 200 | Other codes |
 |---|---|---|---|
-| `GET /ping` | — | `{bridgeVersion:1, gitHash:"<short-sha>"}` | — |
+| `GET /ping` | — | `{bridgeVersion:2, gitHash:"<short-sha>"}` | — |
+
+`bridgeVersion` 2 adds `GET /master/{id}/diagnostics` and the un-timed
+`POST /params/hold` / `POST /params/release` verbs; 1 has neither.
 
 ### Master — patch & status
 | Route | Request | Response 200 | Other codes |
@@ -112,7 +121,50 @@ listed here 404 with `{"error":"no such route"}`.
 Note: `statusLine` carries both the success message (`"ok, N bytes RAM"`) and
 load errors (`"LOAD ERROR line N: ..."`) — there is no separate `ok`/
 `errorLine`/`errorText`/`ramBytes` field despite the design doc's sketch;
-parse `statusLine` with a regex/`test()`.
+parse `statusLine` with a regex/`test()`. **For anything but a quick eyeball,
+prefer `GET /master/{id}/diagnostics` below**: it answers the same questions as
+structured fields, so a check never has to regex a human-readable sentence.
+
+### Master — diagnostics (the structured condition record)
+
+| Route | Request | Response 200 | Other codes |
+|---|---|---|---|
+| `GET /master/{id}/diagnostics` | — | see below | 404 unknown master |
+
+```json
+{
+  "state": "running",          // no_patch | load_failed | chain_error | warnings | running
+  "severity": "ok",            // ok | info | warning | error
+  "code": "",                  // hardware error-code name, "" when none/unclassified
+  "codeColor": "",             // the MASTER matrix blink colour for `code`, "" with it
+  "line": 0,                   // 1-based patch line of a local error; 0 = global/none
+  "title": "Running",
+  "message": "uat-core.ini — ok, 812 bytes RAM",
+  "warnings": [],              // every load warning, plus the MIDI diagnostic when it applies
+  "patchPath": "/abs/path/droid.ini",
+  "stateLine": "state: restored (saved 12 Sep 11:02)",
+  "statusLine": "uat-core.ini — ok, 812 bytes RAM"
+}
+```
+
+- Derived by the pure model in `plugin/src/MasterDiagnostics.hpp`
+  (`vcvoid::diag::diagnose`), which the panel's own error display is meant to
+  share — assert against this, not against pixels or LED brightness.
+- **State precedence** when more than one condition applies:
+  `load_failed` > `chain_error` > `warnings` > `running`. A failed load stops
+  the engine, so it wins over a chain complaint about the same load.
+- `state: "warnings"` means the patch IS running: a deprecated circuit, a
+  memory-limit downgrade (only with "ignore hardware memory limits" on), or the
+  MIDI-without-hardware diagnostic that `/status`'s `midiWarning` reports.
+- `code`/`codeColor` name the hardware's own error code and the colour the
+  MASTER's 4×4 matrix blinks for it (`manual/basics.md` §5.4) — e.g.
+  `unknown_register`/yellow, `unknown_circuit`/red, `cable_misuse`/green,
+  `unknown_parameter`/orange, `invalid_syntax`/magenta, `patch_too_big`/blue
+  (global, `line == 0`), `out_of_memory`/cyan, `patch_not_found`/yellow. An
+  unrecognised engine message reports `""` rather than a guess, so
+  `code == ""` on a `load_failed` means "we have only the text".
+- `line` is the number the hardware encodes in its LEDs — the field to assert
+  when checking that an error points at the right place.
 
 ### Timing mode, adaptive rate, and CPU/profiling (issue #3)
 
@@ -196,7 +248,29 @@ square feeds) read back as **0/1**, not 0/10 — only the Rack-port voltage
 | `POST /cables` | `{outputModuleId, outputId, inputModuleId, inputId}` | `{id}` | 400 invalid body / portId out of range; 404 no such module; 503 ui-not-attached |
 | `DELETE /cables/{id}` | — | `{ok:true}` | 404 no such cable; 503 ui-not-attached |
 | `POST /params` | `{moduleId, paramId, value, holdMs}` — `holdMs` omitted/0 = plain set; `>0` = set now, auto-reset to `0` after `holdMs` ms **of ENGINE SAMPLE TIME** (frame-deadline, anchored when the set lands on the UI thread). Equals wall time when a real audio device drives the engine; with no Audio module, Rack's CPU-clocked fallback engine thread can run up to ~26% slower than wall (observed), so the release can take proportionally longer in wall terms — but the gesture's duration as the DROID engine measures it (longpress thresholds!) is always exactly `holdMs`. | `{ok:true, holdMs?}` (holdMs echoed only if >0) | 400 missing/non-numeric moduleId/paramId, negative paramId, or paramId out of range for the module; 404 no such module; 503 ui-not-attached |
+| `POST /params/hold` | `{moduleId, paramId, value?}` — press and KEEP pressing, with **no deadline** (`value` defaults to `1`). The press survives across engine ticks until something releases it. Idempotent: holding an already-held param re-asserts the value and keeps the original rest value; holding one that is under a timed hold drops that deadline. | `{ok:true, held:true}` | same codes as `POST /params` (400 body/paramId, 404 module, 503 ui-not-attached) |
+| `POST /params/release` | `{moduleId, paramId}` — let go, restoring the value the param had when the hold started (0 for a momentary button, wherever it was for a fader). Releasing an unheld param is a 200 no-op that writes nothing. | `{ok:true}` | same codes as `POST /params` |
 | `GET /probe?moduleId=&portId=&kind=out\|in&ms=500` | query only | `{min, max, avg, edges, periodStddevMs, sampleRateHz}` | 400 missing/invalid moduleId, portId, kind, or ms; 400 portId out of range; 404 no such module (or module removed mid-probe) |
+
+**Timed vs un-timed holds.** `POST /params ... holdMs` is one gesture whose end
+is fixed when it starts — right for a tap or a longpress, wrong for anything
+whose shape is an ORDER. `hold`/`release` express the order directly:
+
+```sh
+# press A, press B, release A, release B (motoquencer start/end; any chord)
+curl -sX POST :2601/params/hold    -d '{"moduleId":12,"paramId":6}'
+curl -sX POST :2601/params/hold    -d '{"moduleId":12,"paramId":4}'
+curl -sX POST :2601/params/release -d '{"moduleId":12,"paramId":6}'
+curl -sX POST :2601/params/release -d '{"moduleId":12,"paramId":4}'
+```
+
+Both verbs are queued onto the UI thread like every other param write, and that
+queue is FIFO — an immediate hold→release pair cannot invert. Everything held
+is released automatically by a patch (re)load (the new patch gives the control
+a different job) and by `POST /rack/quit` (so the autosave cannot persist a
+button the bridge was pressing). Nothing else ends an un-timed hold: if a run
+aborts between hold and release, the finger stays down until the next patch
+load or quit.
 
 `503 {"error":"ui bridge not attached; add any vcvoid module or launch from
 the runbook template"}` is returned by every route that marshals onto the UI
@@ -250,7 +324,9 @@ DROID register: `O1` = outputs[0], `O4` = outputs[3], etc.
 ## Driving knowledge
 
 - `POST /params` with `holdMs≈300` simulates a tap; `holdMs>=1500` simulates
-  a longpress (save/load-preset gestures etc.). UI clicks issued through
+  a longpress (save/load-preset gestures etc.). A CHORD is not two overlapping
+  `holdMs` calls — drive the modifier with `POST /params/hold` +
+  `/params/release` around the tap, so it cannot expire mid-chord. UI clicks issued through
   other tools (e.g. an MCP server's `set_params`) do **not** reliably
   register as holds — always drive longpresses through this bridge's
   `holdMs`, never a scripted click-and-wait.
