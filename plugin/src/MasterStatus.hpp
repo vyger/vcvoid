@@ -64,9 +64,93 @@
 // ones added later.
 #include "src/types.hpp"   // droid::ErrorCode, droid::LoadError (via -I../engine)
 #include <string>
+#include <vector>
 
 namespace vcvoid {
 namespace status {
+
+// --- fitting the words into a window -------------------------------------
+// The messages are sentences, and some of them are long ones ("Circuit 'x' is
+// experimental (vcvoid only, …). Enable "Allow experimental circuits" in the
+// module's context menu to load this patch."). Rack sizes both a tooltip and a
+// menu to the widest line it is given, so an unwrapped message drags the error
+// card clean off the screen. Everything the card and the tooltip show is
+// therefore laid out to a fixed column here, in the model, so the two can never
+// disagree about where a line ends.
+//
+// 64 characters is the width the card is built around: wide enough for the
+// quoted patch line (63 characters is the hardware's own line limit, manual
+// §5.1) and narrow enough that the menu stays roughly as wide as the code quote
+// it already showed.
+constexpr size_t kWrapWidth = 64;
+
+inline bool isWrapSpace(char c) { return c == ' ' || c == '\t'; }
+
+// Greedy word wrap. Breaks only at spaces; a token longer than the width (a
+// path, a cable name) is split at the width rather than allowed to push the
+// line out. Existing newlines are kept as breaks — including blank lines — and
+// runs of spaces collapse, which is what trims the trailing whitespace a
+// concatenated message tends to carry.
+inline std::vector<std::string> wrapLines(const std::string& text,
+                                          size_t width = kWrapWidth) {
+    std::vector<std::string> out;
+    if (width == 0) { out.push_back(text); return out; }
+    size_t pos = 0;
+    for (;;) {
+        size_t nl = text.find('\n', pos);
+        std::string para = (nl == std::string::npos) ? text.substr(pos)
+                                                     : text.substr(pos, nl - pos);
+        std::string cur;
+        bool any = false;
+        size_t i = 0;
+        while (i < para.size()) {
+            while (i < para.size() && isWrapSpace(para[i])) i++;
+            size_t j = i;
+            while (j < para.size() && !isWrapSpace(para[j])) j++;
+            if (j == i) break;
+            std::string word = para.substr(i, j - i);
+            i = j;
+            while (word.size() > width) {     // unbreakable token: hard split
+                if (!cur.empty()) { out.push_back(cur); cur.clear(); any = true; }
+                out.push_back(word.substr(0, width));
+                any = true;
+                word = word.substr(width);
+            }
+            if (cur.empty()) cur = word;
+            else if (cur.size() + 1 + word.size() <= width) cur += " " + word;
+            else { out.push_back(cur); cur = word; }
+        }
+        if (!cur.empty()) { out.push_back(cur); any = true; }
+        if (!any) out.push_back(std::string());   // an empty line stays a line
+        if (nl == std::string::npos) break;
+        pos = nl + 1;
+    }
+    return out;
+}
+
+// The same wrap as one string. rack::ui::Tooltip renders '\n', so this is the
+// tooltip's form of the card's stack of labels.
+inline std::string wrapText(const std::string& text, size_t width = kWrapWidth) {
+    std::vector<std::string> lines = wrapLines(text, width);
+    std::string out;
+    for (size_t i = 0; i < lines.size(); i++) {
+        if (i) out += "\n";
+        out += lines[i];
+    }
+    return out;
+}
+
+// For the one thing that must NOT wrap: a file name, on a row (or a menu item
+// label) that is a single line by construction. Both ends of a path carry
+// meaning, so the middle goes.
+inline std::string elideMiddle(const std::string& text,
+                               size_t width = kWrapWidth) {
+    const std::string ell = "...";
+    if (text.size() <= width || width <= ell.size() + 1) return text;
+    size_t keep = width - ell.size();
+    size_t head = (keep + 1) / 2;
+    return text.substr(0, head) + ell + text.substr(text.size() - (keep - head));
+}
 
 struct RGB { float r = 0.f, g = 0.f, b = 0.f; };
 

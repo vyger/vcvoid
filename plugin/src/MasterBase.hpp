@@ -186,7 +186,10 @@ struct DroidMasterBase : Module {
         // guaranteed to see the pattern that goes with it.
         matrixMode.store((int) s.matrix, std::memory_order_release);
         uiState.store((int) s.state, std::memory_order_release);
-        statusLine = vcvoid::status::oneLine(s);
+        // Wrapped: the tooltip (and the matrix LEDs' descriptions, which append
+        // it) are sized by Rack to their widest line, and a single-line
+        // "Circuit '…' is experimental (…)" ran the tooltip off the window.
+        statusLine = vcvoid::status::wrapText(vcvoid::status::oneLine(s));
         applyOwnLabels();   // re-stamp the LED descriptions with the new line
     }
 
@@ -1467,7 +1470,9 @@ struct StatusCodeLabel : ui::MenuLabel {
 };
 
 // Read one 1-based line out of a patch file, trimmed of trailing whitespace and
-// clipped so a pathological line cannot stretch the menu off the screen.
+// clipped to the card's column (status::kWrapWidth) so a pathological line
+// cannot stretch the menu off the screen. Clipped rather than wrapped: the
+// quote is one numbered line of the file and must stay one line.
 // Returns "" when the file or the line is not there — the card then simply
 // omits the quote, which is also what happens for a whole-patch error.
 inline std::string readPatchLine(const std::string& path, int line) {
@@ -1479,7 +1484,8 @@ inline std::string readPatchLine(const std::string& path, int line) {
         if (!std::getline(f, s)) return std::string();
     while (!s.empty() && (s.back() == '\r' || s.back() == ' ' || s.back() == '\t'))
         s.pop_back();
-    if (s.size() > 60) s = s.substr(0, 57) + "...";
+    if (s.size() > vcvoid::status::kWrapWidth)
+        s = s.substr(0, vcvoid::status::kWrapWidth - 3) + "...";
     return s;
 }
 
@@ -1734,6 +1740,16 @@ struct DroidMasterBaseWidget : ModuleWidget {
         vcvoid::status::Status s = vcvoid::status::evaluate(rep);
         std::string fileName = patchPath.empty() ? std::string()
                                                  : system::getFilename(patchPath);
+        // Rack sizes a menu to its widest child, so every sentence the card
+        // shows goes in one wrapped line at a time (issue #46 review): one
+        // 190-character error message used to make this menu 1900 px wide.
+        // The title row is exempt on purpose — it is generated ("LOAD ERROR ·
+        // line 99", "Running with 3 warnings"), never free text, and the
+        // coloured square has to sit on the same row as its words.
+        auto addWrapped = [&menu](const std::string& text) {
+            for (const std::string& l : vcvoid::status::wrapLines(text))
+                menu->addChild(createMenuLabel(l));
+        };
 
         if (!s.title.empty()) {
             auto* title = new StatusTitleLabel;
@@ -1744,7 +1760,7 @@ struct DroidMasterBaseWidget : ModuleWidget {
             menu->addChild(title);
         }
         if (!s.message.empty())
-            menu->addChild(createMenuLabel(s.message));
+            addWrapped(s.message);
         // A chain error's fix is "plug in what the patch asks for", so spell out
         // both sides rather than only the slot that differs.
         if (s.state == vcvoid::status::State::ChainError) {
@@ -1754,8 +1770,8 @@ struct DroidMasterBaseWidget : ModuleWidget {
                 for (size_t i = 0; i < v.size(); i++) out += (i ? ", " : "") + v[i];
                 return out;
             };
-            menu->addChild(createMenuLabel("patch declares: " + list(declared)));
-            menu->addChild(createMenuLabel("chain has: " + list(physical)));
+            addWrapped("patch declares: " + list(declared));
+            addWrapped("chain has: " + list(physical));
         }
         // The offending line, quoted from the file. Line errors only: a
         // whole-patch error (too big, out of memory, a register used only as an
@@ -1770,11 +1786,15 @@ struct DroidMasterBaseWidget : ModuleWidget {
         // Where the patch and its circuit state came from (issue #42), on one
         // row: it answers the same "it loaded but does nothing" question the
         // rest of the card answers, so it belongs with it.
+        // The file name is elided in the middle rather than wrapped: a name is
+        // recognised by its two ends, and a row that starts mid-word reads as a
+        // different file.
+        std::string shortName = vcvoid::status::elideMiddle(fileName, 32);
         if (!fileName.empty()) {
-            std::string line = fileName;
+            std::string line = shortName;
             if (ramUsed) line += string::f(" · %u bytes RAM", ramUsed);
             if (!stateStatus.empty()) line += " · " + stateStatus;
-            menu->addChild(createMenuLabel(line));
+            addWrapped(line);
         }
 
         menu->addChild(createMenuItem("Reload patch", "", [m, patchPath]() {
@@ -1787,7 +1807,7 @@ struct DroidMasterBaseWidget : ModuleWidget {
             // spells that differently, and Rack gives a plugin no editor
             // preference to read), so the line rides along as the item's right
             // text and the reader types it into their own Go-to-line.
-            std::string label = "Open " + fileName + " in editor";
+            std::string label = "Open " + shortName + " in editor";
             std::string right = s.line > 0 ? string::f("line %d", s.line) : "";
             menu->addChild(createMenuItem(label, right, [patchPath]() {
                 system::openBrowser(patchPath);

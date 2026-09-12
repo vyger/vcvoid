@@ -304,3 +304,97 @@ TEST(status_a_chain_error_outranks_warnings) {
     Status s = evaluate(r);
     CHECK(s.state == State::ChainError);
 }
+
+// --- fitting the words into the window (issue #46 review) ----------------
+// Rack sizes a tooltip and a menu to their widest line, so the card's sentences
+// are wrapped in the model. These pin the wrap rules the widget relies on.
+
+TEST(wrap_short_text_is_unchanged) {
+    CHECK(wrapText("LOAD ERROR") == "LOAD ERROR");
+    CHECK(wrapLines("LOAD ERROR").size() == 1);
+    CHECK(wrapText("") == "");
+    // Exactly the width still fits on one line.
+    std::string exact(kWrapWidth, 'x');
+    CHECK(wrapText(exact) == exact);
+}
+
+TEST(wrap_breaks_at_spaces_never_mid_word) {
+    std::string msg = "Circuit 'trigseq' is experimental (vcvoid only, not "
+                      "available on DROID hardware). Enable \"Allow experimental "
+                      "circuits\" in the module's context menu to load this patch.";
+    std::vector<std::string> lines = wrapLines(msg);
+    CHECK(lines.size() > 2);
+    std::string rejoined;
+    for (size_t i = 0; i < lines.size(); i++) {
+        CHECK(lines[i].size() <= kWrapWidth);
+        CHECK(lines[i].front() != ' ' && lines[i].back() != ' ');
+        rejoined += (i ? " " : "") + lines[i];
+    }
+    CHECK(rejoined == msg);   // only spaces became breaks; no word was cut
+}
+
+TEST(wrap_keeps_a_long_token_whole_when_it_fits) {
+    // A 40-character cable name is longer than any word, but shorter than the
+    // column: it must not be split just because the line before it is full.
+    std::string token(40, 'A');
+    std::vector<std::string> lines = wrapLines("cable " + token + " is unused");
+    CHECK(lines.size() == 1);
+    lines = wrapLines("this message is padded out so the long name lands second "
+                      + token);
+    CHECK(lines.size() == 2);
+    CHECK(lines[1] == token);
+}
+
+TEST(wrap_splits_a_token_longer_than_the_column) {
+    std::string token(kWrapWidth + 10, 'A');
+    std::vector<std::string> lines = wrapLines(token);
+    CHECK(lines.size() == 2);
+    CHECK(lines[0].size() == kWrapWidth);
+    CHECK(lines[1].size() == 10);
+}
+
+TEST(wrap_respects_existing_newlines) {
+    std::vector<std::string> lines = wrapLines("one\ntwo\n\nthree");
+    CHECK(lines == std::vector<std::string>({"one", "two", "", "three"}));
+    CHECK(wrapText("one\ntwo") == "one\ntwo");
+}
+
+TEST(wrap_trims_trailing_and_repeated_spaces) {
+    CHECK(wrapText("  padded message   ") == "padded message");
+    CHECK(wrapText("collapsed    run") == "collapsed run");
+    CHECK(wrapText("trailing \nspace ") == "trailing\nspace");
+}
+
+TEST(elide_middle_keeps_both_ends_of_a_name) {
+    CHECK(elideMiddle("droid.ini", 32) == "droid.ini");
+    std::string name = "a-very-long-patch-file-name-that-will-not-fit.ini";
+    std::string cut = elideMiddle(name, 32);
+    CHECK(cut.size() == 32);
+    CHECK(cut.substr(0, 8) == name.substr(0, 8));
+    CHECK(cut.substr(cut.size() - 4) == ".ini");
+    CHECK(cut.find("...") != std::string::npos);
+}
+
+// The tooltip's one-liner is what publishStatus() wraps, so a long message has
+// to actually survive the round trip as several lines.
+TEST(wrap_a_long_status_line_becomes_several_tooltip_lines) {
+    Report r;
+    r.havePatch = true;
+    r.loadOk = false;
+    r.errorCount = 1;
+    r.errorLine = 15;
+    r.errorCode = ErrorCode::UnknownCircuit;
+    r.errorMessage = "Circuit 'trigseq' is experimental (vcvoid only, not "
+                     "available on DROID hardware). Enable \"Allow experimental "
+                     "circuits\" in the module's context menu to load this patch.";
+    std::string tip = wrapText(oneLine(evaluate(r)));
+    CHECK(tip.find('\n') != std::string::npos);
+    size_t start = 0;
+    while (start <= tip.size()) {
+        size_t nl = tip.find('\n', start);
+        size_t len = (nl == std::string::npos ? tip.size() : nl) - start;
+        CHECK(len <= kWrapWidth);
+        if (nl == std::string::npos) break;
+        start = nl + 1;
+    }
+}
