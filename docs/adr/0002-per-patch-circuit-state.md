@@ -21,6 +21,16 @@ serialised into the Rack patch. What it could not reproduce is the hardware's
 escape hatch: **one SD card per patch**. A Rack module has no card slot, so
 every patch a master ever loads shares one state blob.
 
+The hardware does have per-patch state, though — just not for `droid.ini`.
+`manual/basics.md` §5.15 ("More than one patch on the memory card") lets a
+card carry `droidXY.ini` patches selected by holding controller X's button Y
+while pressing load, and each of those gets its own state file, `DSTAXY.BIN`:
+"each patch has separate state", so an `algoquencer` in two such patches keeps
+two separate pattern sets. Only the plain `droid.ini` shares the single
+`DROIDSTA.BIN`. This ADR therefore extends the firmware's own multi-patch
+model to every file a master loads, rather than inventing a new one, and the
+file name is a key the firmware itself already uses.
+
 The consequences are not subtle:
 
 - Loading an unrelated patch into the same master injects the previous patch's
