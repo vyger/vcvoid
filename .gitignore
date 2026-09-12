@@ -29,3 +29,5 @@ patches/tmp-*
 # general per-session scratch space for this project (feedback dumps, repro
 # material, throwaway notes). Never committed.
 .claude/scratch/
+# agent worktrees (Claude Code isolation: "worktree")
+.claude/worktrees/
