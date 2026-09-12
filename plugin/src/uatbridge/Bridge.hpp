@@ -30,6 +30,11 @@ public:
     void runOnUi(std::function<void()> fn);
     void drainUi();                    // BridgeWidget::step() only
     void expireHolds();                // BridgeWidget::step() only; UI thread
+    // Release every param currently held (timed or un-timed) back to its rest
+    // value. Queued onto the UI thread, so it is safe to call from any thread —
+    // DroidMasterBase::loadPatchFile calls it so a patch (re)load never leaves
+    // a scripted finger down on a control the new patch reuses.
+    void releaseAllHolds();
     bool uiAttached() const { return uiAttached_.load(); }
     void setUiAttached() { uiAttached_.store(true); }
 
@@ -50,11 +55,22 @@ private:
     // and set *code). Implemented in Bridge.cpp.
     std::string handlePing(int* code);
     std::string handleMasterStatus(DroidMasterBase* m, int* code);
+    // Issue #46/#49: one structured record of the master's condition, derived
+    // by the pure model in ../MasterDiagnostics.hpp.
+    std::string handleMasterDiagnostics(DroidMasterBase* m, int* code);
     std::string handleMasterRegisters(DroidMasterBase* m, const Request& req, int* code);
     std::string handleMasterPatch(DroidMasterBase* m, const Request& req, int* code);
     std::string handleMasterReload(DroidMasterBase* m, int* code);
     std::string handleMasterResetState(DroidMasterBase* m, int* code);
     std::string handleParams(const Request& req, int* code);
+    // Un-timed press/release (issue #49): the two halves of POST /params'
+    // holdMs, so a test can order overlapping gestures itself (press A, press
+    // B, release A, release B) instead of racing two timers.
+    std::string handleParamsHold(const Request& req, int* code);
+    std::string handleParamsRelease(const Request& req, int* code);
+    // Shared HTTP-thread validation for all three: UI attached, module exists,
+    // paramId in range. Returns false and fills *code/*body on rejection.
+    bool checkParamTarget(int64_t moduleId, int paramId, int* code, std::string* body);
     std::string handleProbe(const Request& req, int* code);
     DroidMasterBase* findMaster(int64_t id);
 
@@ -118,10 +134,20 @@ private:
     // circuit's 1.5s threshold. A frame-based deadline holds the param for
     // exactly holdMs of sample time regardless of engine pace (and equals
     // wall time whenever a real audio device drives the engine).
+    // `untimed` holds (POST /params/hold) have no deadline at all: expireHolds
+    // skips them and only POST /params/release, a patch (re)load or /rack/quit
+    // lets go. `restValue` is what the param is put back to — 0 for a timed
+    // hold (unchanged behaviour: every momentary control's rest state), and the
+    // value the param actually had at press time for an un-timed one, captured
+    // on the UI thread before the press lands. Re-holding an already-held param
+    // keeps the FIRST restValue, so an idempotent double-press cannot make the
+    // held value the thing release restores.
     struct Hold {
         int64_t moduleId;
         int paramId;
         int64_t frameDeadline;
+        float restValue = 0.f;
+        bool untimed = false;
     };
     std::mutex holdsMutex_;
     std::vector<Hold> holds_;
