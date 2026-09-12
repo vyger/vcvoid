@@ -67,6 +67,43 @@ page renders (diagrams, tables, worked figures), download the **blue-7 DROID
 manual** from Der Mann mit der Maschine (shop.dermannmitdermaschine.de →
 Downloads) — it is intentionally not redistributed here.
 
+### Button chords: Alt-hold and Latch
+
+DROID patches are full of **button chords** — hold a "CTRL"/shift button, press
+a second one. The MFPS patch generator, for instance, puts mute, presets,
+clear, reset-all, lucky, paste and ARP autostop behind CTRL + another button. A
+mouse can only hold one momentary button at a time, so vcvoid's buttons take
+two extra gestures. Both are pure UI: the patch is identical to the one that
+runs on hardware, and the `B` register still just reads 0 or 1.
+
+- **Alt-hold** — **Alt+click** a button (**Option+click** on macOS) and it
+  stays pressed for as long as you hold the Alt key down. Then, *still holding
+  Alt*, click the second button normally: that is the chord. Only one button
+  can be alt-held at a time, so every click after the first one is an ordinary
+  press. Let go of Alt and the held button releases.
+- **Latch** — right-click a button and tick **Latch**. A latched button is held
+  until you untick it, which suits a CTRL button you want down across several
+  actions. Any number of buttons can be latched at once. The module's own
+  right-click menu has **Release all latches**, which clears every latch on that
+  module (and any alt-hold).
+
+A held button draws an **orange ring** around it, so you can always see what is
+down; it is deliberately a different colour from the LED the patch drives.
+Holds and latches are never saved into your Rack patch — a reload starts with
+nothing held.
+
+This works on every momentary DROID button: **p2b8**, **p4b2**, **b32**, the
+**db8e** face buttons and the **m4** touch plates. (The **s10**/**p8s8**
+toggles already latch by their nature, and the **e4**/**db8e** encoder pushes
+are a separate gesture.)
+
+**From a hardware controller:** Rack's stock **MIDI-Map** module (which maps
+MIDI CC messages onto params) works on these buttons too — plain-click a button
+to make it the touched param (an Alt+click is the hold gesture, not a map
+gesture), then learn a CC onto it. The DROID button follows that control for as
+long as you hold it, which gives you real chords with real fingers and no
+modifier key at all.
+
 ### Experimental circuits
 
 vcvoid can also run a small number of **experimental circuits** — circuits that

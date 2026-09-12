@@ -256,7 +256,7 @@ struct DroidM4Widget : VcvoidModuleWidget {
             // Touch plate: standard momentary light-button at the layout's L
             // position (the faceplate art is blank here — the baked DMMDM icon
             // is gone). Its RGB light shows the circuit-driven faderLed colour.
-            addParam(createLightParamCentered<VCVLightBezel<MediumSimpleLight<RedGreenBlueLight>>>(
+            addParam(createLightParamCentered<dw::DroidTouchBezel<MediumSimpleLight<RedGreenBlueLight>>>(
                 dw::hpVec(L->pos('L', i + 1)), module,
                 DroidM4::TOUCH_PARAMS + i, DroidM4::TOUCH_LIGHTS + i * 3));
         }
