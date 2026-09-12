@@ -7,7 +7,7 @@ UNIT_SRC   := $(wildcard tests/unit/*.cpp)
 RUNNER_SRC := $(wildcard tests/runner/*.cpp)
 GOLDENS    := $(shell find tests/golden -name '*.gold' 2>/dev/null | sort)
 
-.PHONY: all test unittests goldens gen clean crosscheck layoutcheck artcheck labelcheck
+.PHONY: all test unittests goldens gen clean crosscheck layoutcheck artcheck labelcheck sizecheck
 
 VENDOR := tools/droidcheck/vendor/droidforge/droidforge
 # The Forge's main/tuning.h gates a few constants behind Qt's platform macros
@@ -42,7 +42,7 @@ unittests: $(BUILD)/unittests
 goldens: $(BUILD)/droidtest
 	@if [ -n "$(GOLDENS)" ]; then $(BUILD)/droidtest $(GOLDENS); else echo "no goldens yet"; fi
 
-test: unittests goldens layoutcheck labelcheck artcheck
+test: unittests goldens layoutcheck labelcheck sizecheck artcheck
 
 gen:
 	python3 tools/jackgen/jackgen.py
@@ -63,6 +63,17 @@ $(BUILD)/labeldump: engine/src/labels.cpp engine/src/controllers.cpp tests/tools
 
 labelcheck: $(BUILD)/labeldump
 	@tools/labelcheck.sh
+
+# Patch-size measurement parity (issue #41): the engine's deployed (abbreviated)
+# size — the number the 64 000-byte limit is enforced on — vs tools/inicompress.py,
+# which abbreviates the same patch in Python straight from the firmware file.
+# Skips itself when the Forge checkout is missing, like labelcheck.
+$(BUILD)/patchsize: $(ENGINE_SRC) tests/tools/patchsize.cpp $(wildcard engine/src/*.hpp) $(wildcard engine/gen/*.hpp)
+	@mkdir -p $(BUILD)
+	$(CXX) $(CXXFLAGS) $(ENGINE_SRC) tests/tools/patchsize.cpp -o $@
+
+sizecheck: $(BUILD)/patchsize
+	@tools/sizecheck.sh
 
 layoutcheck:
 	@if [ -d "$(VENDOR)/modules" ]; then \

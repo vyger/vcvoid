@@ -33,6 +33,9 @@ struct ParseResult {
 int internText(const std::string& content, std::vector<std::string>& texts);
 
 ParseResult parsePatch(const std::string& text);
-std::string stripPatch(const std::string& text);   // for the 64 000-byte limit
+// Comments and layout removed, the way the master stores a patch. The size the
+// 64 000-byte limit is enforced on abbreviates parameter names on top of this —
+// see droid::deployedPatchSize (loader.hpp).
+std::string stripPatch(const std::string& text);
 
 } // namespace droid

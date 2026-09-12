@@ -75,7 +75,9 @@ struct DroidMasterBase : Module {
     // step() on the UI thread, which is the only thread allowed to reload.
     std::atomic<bool> timingDirty{false};
     // Experimental (#13): load patches over the hardware limits (RAM budget,
-    // 64 000-byte size cap) — the limit errors downgrade to warnings. Persisted;
+    // 64 000-byte size cap — the latter measured the way the master measures
+    // it, with abbreviated parameter names, see droid::deployedPatchSize and
+    // issue #41) — the limit errors downgrade to warnings. Persisted;
     // read on whatever thread calls loadPatchFile (bool torn read tolerable,
     // same as the timing fields).
     bool ignoreHwMemoryLimits = false;
