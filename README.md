@@ -70,51 +70,10 @@ Downloads) — it is intentionally not redistributed here.
 **Button chords:** **Shift+click** holds a button down while Shift is held, so
 you can Shift+click a second one; right-click → **Latch** holds until unticked.
 
-### Patch state
-
-Like the hardware, vcvoid remembers what you dialled in — button toggles, motor
-fader positions, motoquencer sequences and their presets — and brings it back
-next time. Unlike the hardware, which keeps one state file per SD card, a master
-keeps **one saved state per patch**, so switching between patches in the same
-master never clobbers either one, and coming back to a patch finds it as you
-left it. The saved states live in your Rack patch, so they travel with it.
-
-The master's context menu shows one line saying where the current patch's state
-came from:
-
-| Line | Meaning |
-|------|---------|
-| `state: restored (saved 12 Sep 11:02)` | This patch's own saved state, unchanged. |
-| `state: migrated from previous version of <patch>` | The patch has been edited since — circuits were added, removed or reordered — so the state was carried across into the new structure (see below). |
-| `state: fresh` | Nothing saved relates to this patch; every circuit starts from its `startvalue`. |
-
-**How migration works.** A patch is recognised by the list of circuits it
-contains, in order; editing parameters, comments, register labels or controller
-declarations does not disturb its saved state. Adding, removing or reordering a
-circuit does, and vcvoid then migrates the old state into the new patch: each
-circuit is matched to its old self by **what it is wired to** (the internal
-cables and registers its outputs drive), so inserting a new `[motoquencer]`
-ahead of an existing one no longer steals the existing one's sequence. Anything
-that cannot be matched that way falls back to the hardware's own rule — the Nth
-circuit of a type gets the Nth saved state — and anything still unmatched starts
-at its defaults.
-
-**`# STATE:` — keeping state across a rename.** A patch can claim a state
-identity explicitly with a comment in its header, before the first circuit:
-
-```droid
-# My live rig
-# STATE: my-live-rig
-```
-
-Two patch files carrying the same `# STATE:` tag share a state lineage, so you
-can rename, copy or fork the file and still pick up where you left off. Without
-a tag, vcvoid falls back to the file path, which covers the ordinary
-edit-and-reload case.
-
-`[droid] clearall` still resets circuits exactly as on hardware, and it — like
-the reset used during automated testing — only affects the patch currently
-loaded; other patches' saved states are untouched.
+**Patch state:** like the hardware, a master remembers buttons, fader positions,
+sequences and presets — but per patch, so switching patches never mixes them up.
+The master's menu shows where the current state came from; details in
+[`docs/adr/0002-per-patch-circuit-state.md`](docs/adr/0002-per-patch-circuit-state.md).
 
 ### Experimental circuits
 
