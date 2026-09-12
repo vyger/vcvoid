@@ -7,7 +7,7 @@ UNIT_SRC   := $(wildcard tests/unit/*.cpp)
 RUNNER_SRC := $(wildcard tests/runner/*.cpp)
 GOLDENS    := $(shell find tests/golden -name '*.gold' 2>/dev/null | sort)
 
-.PHONY: all test unittests goldens gen clean crosscheck layoutcheck artcheck labelcheck sizecheck
+.PHONY: all test unittests goldens gen clean crosscheck layoutcheck artcheck labelcheck sizecheck smoke
 
 VENDOR := tools/droidcheck/vendor/droidforge/droidforge
 # The Forge's main/tuning.h gates a few constants behind Qt's platform macros
@@ -53,6 +53,16 @@ clean:
 
 crosscheck:
 	tools/crosscheck.sh
+
+# Live UAT bridge smoke (issue #49): the canonical invocation of
+# tools/uatbridge-smoke.sh. NOT part of `make test` — it drives a real VCV Rack
+# (attaching to a running one, or launching from tests/smoketest_default.vcv),
+# so it needs an installed plugin build (`cd plugin && make install`) and jq.
+# Every env override the script documents still applies:
+#   make smoke SKIP_HASH=1          # installed build came from another worktree
+#   make smoke MASTER_ID=12 RACK=…  # skip discovery / pin the Rack binary
+smoke:
+	tools/uatbridge-smoke.sh
 
 # Register-label extraction parity (issue #26): our extractor vs the Forge's own
 # parser, over every patch in patches/. Skips itself when droidcheck is unbuilt,
