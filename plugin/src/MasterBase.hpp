@@ -1793,34 +1793,6 @@ struct DroidMasterBaseWidget : ModuleWidget {
                 system::openBrowser(patchPath);
             }));
         }
-        // Copy: the whole list, not just the first line the card shows, so a
-        // patch with a dozen problems can be pasted somewhere and worked
-        // through. Chain errors have nothing to copy from a file.
-        if (s.state == vcvoid::status::State::LoadFailed ||
-            s.state == vcvoid::status::State::Warnings) {
-            bool failed = s.state == vcvoid::status::State::LoadFailed;
-            std::string label = failed
-                ? (rep.errorCount > 1 ? "Copy errors" : "Copy error")
-                : (rep.warningCount > 1 ? "Copy warnings" : "Copy warning");
-            menu->addChild(createMenuItem(label, "", [m, failed, fileName]() {
-                std::string text;
-                {
-                    std::lock_guard<std::mutex> lock(m->engineMutex);
-                    if (!fileName.empty()) text = fileName + "\n";
-                    if (failed) {
-                        if (m->patchUnreadable) text += m->patchStatus + "\n";
-                        for (const auto& e : m->lastResult.errors)
-                            text += (e.line > 0 ? string::f("line %d: ", e.line)
-                                                : std::string())
-                                  + e.message + "\n";
-                    } else {
-                        for (const auto& w : m->lastResult.warnings)
-                            text += w + "\n";
-                    }
-                }
-                glfwSetClipboardString(APP->window->win, text.c_str());
-            }));
-        }
     }
 
     // The master-common menu body, separate from appendContextMenu so
