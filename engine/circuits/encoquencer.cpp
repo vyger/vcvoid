@@ -44,11 +44,13 @@ public:
             EncoderState* e = s.controllers.encoder(enc);
             if (!e) continue;
 
-            // push-button editing (buttonmode)
+            // push-button editing (buttonmode). Both edges are reported:
+            // buttonmode 1's two-finger gesture ends on the release of the held
+            // anchor encoder (seqcore.hpp plateEdge).
             if (buttons) {
                 bool pushed = e->pushed;
                 bool wasPushed = (i < (int)prevTouch_.size()) ? prevTouch_[i] : false;
-                if (pushed && !wasPushed) pressStep(bm, step);
+                if (pushed != wasPushed) plateEdge(bm, i, step, pushed);
                 if (i < (int)prevTouch_.size()) prevTouch_[i] = pushed;
             }
 

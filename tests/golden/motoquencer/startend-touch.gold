@@ -1,0 +1,56 @@
+# motoquencer `buttonmode = 1`: "Touching a button changes the *end* step."
+# (motoquencer.md §"Start and end"). A single plate press sets the END and leaves
+# the start alone — with `startstep` unwired the start stays at its default 1, so
+# a press on plate 2 shortens the sequence to steps 1..2.
+#
+# Step numbers travel on cables scaled by 1/10 into the O jacks, since `O`
+# registers clamp to +/-10 V (see startend-out.gold).
+tickrate 100
+patch <<<
+[m4]
+[motoquencer]
+    clock        = I1
+    numsteps     = 4
+    numfaders    = 4
+    buttonmode   = 1
+    quantize     = 0
+    cvbase       = 0
+    cvrange      = 1
+    defaultgate  = 1
+    cv           = O1
+    startstepout = _SS
+    endstepout   = _ES
+[copy]
+    input  = _SS * 0.1
+    output = O3
+[copy]
+    input  = _ES * 0.1
+    output = O4
+>>>
+# four distinct pitches, so the played CV names the step
+@1 move F1 0.0
+@2 move F2 0.25
+@3 move F3 0.5
+@4 move F4 0.75
+# the full range before the gesture
+@4 expect O3 0.1 tol 1e-4
+@4 expect O4 0.4 tol 1e-4
+# press plate 2 -> end = step 2, start untouched
+@5 touch F2 1
+@5 expect O3 0.1 tol 1e-4
+@5 expect O4 0.2 tol 1e-4
+@6 touch F2 0
+# the release must not move anything
+@6 expect O4 0.2 tol 1e-4
+# ...and the sequence now loops over steps 1 and 2 only
+@7 set I1 1
+@7 expect O1 0.0 tol 1e-4
+@8 set I1 0
+@9 set I1 1
+@9 expect O1 0.25 tol 1e-4
+@10 set I1 0
+@11 set I1 1
+@11 expect O1 0.0 tol 1e-4
+@12 set I1 0
+@13 set I1 1
+@13 expect O1 0.25 tol 1e-4

@@ -1,0 +1,50 @@
+# encoquencer `buttonmode = 1`: the start/end gesture lives in the shared
+# sequencer core, not in either skin, so the E4 encoder pushes drive it exactly
+# like the M4 touch plates. encoquencer.md: "an exact replica of the motoquencer
+# circuit, but it uses encoders of the E4 instead of the motorfaders of an M4".
+#
+# Push encoder 3 and hold it (end = 3), then push encoder 1 with a second finger
+# (start = 1), release both, and play: steps 1..3.
+tickrate 100
+patch <<<
+[e4]
+[encoquencer]
+    clock        = I1
+    numsteps     = 4
+    numfaders    = 4
+    buttonmode   = 1
+    defaultgate  = 1
+    currentstep  = _CS
+    startstepout = _SS
+    endstepout   = _ES
+[copy]
+    input  = _CS * 0.1
+    output = O3
+[copy]
+    input  = _SS * 0.1
+    output = O5
+[copy]
+    input  = _ES * 0.1
+    output = O6
+>>>
+@0 expect O5 0.1 tol 1e-4
+@0 expect O6 0.4 tol 1e-4
+# a single push sets the END
+@1 push E1.3 1
+@1 expect O5 0.1 tol 1e-4
+@1 expect O6 0.3 tol 1e-4
+# a second push while the first is held sets the START
+@2 push E1.2 1
+@2 expect O5 0.2 tol 1e-4
+@2 expect O6 0.3 tol 1e-4
+@3 push E1.2 0
+@4 push E1.3 0
+# steps 2..3 loop
+@5 set I1 1
+@5 expect O3 0.1 tol 1e-4
+@6 set I1 0
+@7 set I1 1
+@7 expect O3 0.2 tol 1e-4
+@8 set I1 0
+@9 set I1 1
+@9 expect O3 0.1 tol 1e-4

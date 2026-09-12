@@ -31,10 +31,12 @@ public:
             // touch plate editing (independent of fadermode). The plate BELOW the
             // fader is the step button — grabbing/moving the fader itself
             // (f->touched) is a different sensor and must never press the step.
+            // Both edges are reported: buttonmode 1's two-finger gesture ends on
+            // the release of the held anchor plate (seqcore.hpp plateEdge).
             if (buttons) {
                 bool pressed = f->plate;
                 bool wasPressed = (i < (int)prevTouch_.size()) ? prevTouch_[i] : false;
-                if (pressed && !wasPressed) pressStep(bm, step);
+                if (pressed != wasPressed) plateEdge(bm, i, step, pressed);
                 if (i < (int)prevTouch_.size()) prevTouch_[i] = pressed;
             }
 

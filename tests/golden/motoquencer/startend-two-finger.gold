@@ -1,0 +1,63 @@
+# motoquencer `buttonmode = 1`, the two-finger gesture: "You can set the start
+# step by first setting an end step and *holding* that button and then – with a
+# second finger – press another step. This will set the start step."
+#
+# Plate 3 is pressed and HELD (end = 3), then plate 1 is tapped (start = 1), then
+# plate 2 is tapped while plate 3 is still held (start = 2, last press wins).
+# Releasing the anchor ends the gesture, and the chain then plays steps 2..3.
+tickrate 100
+patch <<<
+[m4]
+[motoquencer]
+    clock        = I1
+    numsteps     = 4
+    numfaders    = 4
+    buttonmode   = 1
+    quantize     = 0
+    cvbase       = 0
+    cvrange      = 1
+    defaultgate  = 1
+    cv           = O1
+    startstepout = _SS
+    endstepout   = _ES
+[copy]
+    input  = _SS * 0.1
+    output = O3
+[copy]
+    input  = _ES * 0.1
+    output = O4
+>>>
+@1 move F1 0.0
+@2 move F2 0.25
+@3 move F3 0.5
+@4 move F4 0.75
+# first finger: plate 3 -> end = 3 (and becomes the anchor)
+@5 touch F3 1
+@5 expect O3 0.1 tol 1e-4
+@5 expect O4 0.3 tol 1e-4
+# second finger while plate 3 is held: plate 1 -> START = 1
+@6 touch F1 1
+@6 expect O3 0.1 tol 1e-4
+@6 expect O4 0.3 tol 1e-4
+@7 touch F1 0
+# a further press, still anchored on plate 3, moves the start again
+@8 touch F2 1
+@8 expect O3 0.2 tol 1e-4
+@8 expect O4 0.3 tol 1e-4
+@9 touch F2 0
+@10 touch F3 0
+# steps 2..3 loop
+@11 set I1 1
+@11 expect O1 0.25 tol 1e-4
+@12 set I1 0
+@13 set I1 1
+@13 expect O1 0.5 tol 1e-4
+@14 set I1 0
+@15 set I1 1
+@15 expect O1 0.25 tol 1e-4
+@16 set I1 0
+# the anchor was dropped on release, so a fresh single press sets the END again
+@17 touch F4 1
+@17 expect O3 0.2 tol 1e-4
+@17 expect O4 0.4 tol 1e-4
+@18 touch F4 0

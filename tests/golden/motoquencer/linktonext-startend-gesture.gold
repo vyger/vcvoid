@@ -1,0 +1,73 @@
+# motoquencer linktonext + `buttonmode = 1`: the start/end gesture edits the
+# CHAIN's range, which belongs to the main. Two cases:
+#
+#  * buttonmode 1 — the main owns the plates (this is what the Forge's MFPS
+#    generator emits: `buttonmode` is set on the chain main only);
+#  * buttonmode 11 — the MEMBER owns the plates with local mode 1
+#    ("for accessing the parameters of the steps of the linked sequencer, add 10
+#    to fadermode or buttonmode"). A member has no play order of its own, so the
+#    press has to land on the main's range.
+#
+# The member also wires startstep = 4 / endstep = 4 to prove those are ignored,
+# and its `endstepout` must report the main's end throughout.
+tickrate 100
+patch <<<
+[m4]
+[motoquencer]
+    clock       = I1
+    buttonmode  = I2
+    numsteps    = 4
+    numfaders   = 4
+    linktonext  = 1
+    defaultgate = 1
+    currentstep = _CS
+    endstepout  = _ES
+[motoquencer]
+    startstep   = 4
+    endstep     = 4
+    endstepout  = _MES
+[copy]
+    input  = _CS * 0.1
+    output = O3
+[copy]
+    input  = _ES * 0.1
+    output = O4
+[copy]
+    input  = _MES * 0.1
+    output = O5
+>>>
+@0 set I2 1
+@0 expect O4 0.4 tol 1e-4
+@0 expect O5 0.4 tol 1e-4
+# the main owns the plates: plate 2 -> the chain's end = 2
+@1 touch F2 1
+@1 expect O4 0.2 tol 1e-4
+@1 expect O5 0.2 tol 1e-4
+@2 touch F2 0
+@3 set I1 1
+@3 expect O3 0.0 tol 1e-4
+@4 set I1 0
+@5 set I1 1
+@5 expect O3 0.1 tol 1e-4
+@6 set I1 0
+@7 set I1 1
+@7 expect O3 0.0 tol 1e-4
+@8 set I1 0
+# buttonmode 11: the MEMBER owns the plates, still in start/end mode. Its press
+# routes to the main's range. The main ticks FIRST (chains resolve along patch
+# order), so a gesture performed on a member reaches the main's own
+# `endstepout` on the following tick; the member's is current immediately.
+@9 set I2 11
+@10 touch F3 1
+@10 expect O5 0.3 tol 1e-4
+@11 touch F3 0
+@11 expect O4 0.3 tol 1e-4
+@11 expect O5 0.3 tol 1e-4
+@12 set I1 1
+@12 expect O3 0.1 tol 1e-4
+@13 set I1 0
+@14 set I1 1
+@14 expect O3 0.2 tol 1e-4
+@15 set I1 0
+@16 set I1 1
+@16 expect O3 0.0 tol 1e-4

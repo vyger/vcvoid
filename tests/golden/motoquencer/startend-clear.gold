@@ -1,0 +1,54 @@
+# motoquencer `buttonmode = 1`: the manual range OVERRIDES the `startstep` /
+# `endstep` inputs, and the two slots are independent — "Touching a button
+# changes the *end* step", so a single press leaves the start following its
+# input. "As soon as you change the start/end with the step buttons in
+# buttonmode 1 [...] the manual settings override the inputs `startstep` and
+# `endstep` until you do a clear or `clearstartend`."
+tickrate 100
+patch <<<
+[m4]
+[motoquencer]
+    clock         = I1
+    numsteps      = 4
+    numfaders     = 4
+    buttonmode    = 1
+    startstep     = 2
+    endstep       = 3
+    clearstartend = I2
+    clear         = I3
+    startstepout  = _SS
+    endstepout    = _ES
+[copy]
+    input  = _SS * 0.1
+    output = O3
+[copy]
+    input  = _ES * 0.1
+    output = O4
+>>>
+# the inputs' range
+@0 expect O3 0.2 tol 1e-4
+@0 expect O4 0.3 tol 1e-4
+# a single press overrides only the END; the start still reads 2 from the input
+@5 touch F4 1
+@5 expect O3 0.2 tol 1e-4
+@5 expect O4 0.4 tol 1e-4
+@6 touch F4 0
+# clearstartend restores both inputs
+@7 set I2 1
+@7 expect O3 0.2 tol 1e-4
+@7 expect O4 0.3 tol 1e-4
+@8 set I2 0
+# a two-finger gesture overrides both slots
+@9 touch F4 1
+@10 touch F1 1
+@10 expect O3 0.1 tol 1e-4
+@10 expect O4 0.4 tol 1e-4
+@11 touch F1 0
+@12 touch F4 0
+@12 expect O3 0.1 tol 1e-4
+@12 expect O4 0.4 tol 1e-4
+# `clear` drops them too ("They are reactived if you clear everything")
+@13 set I3 1
+@13 expect O3 0.2 tol 1e-4
+@13 expect O4 0.3 tol 1e-4
+@14 set I3 0
