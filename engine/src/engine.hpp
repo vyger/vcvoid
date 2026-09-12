@@ -13,11 +13,20 @@ namespace droid {
 // loads into the Nth <type> circuit of the new patch), exactly as the hardware
 // numbers circuits. `values` is a flat list of doubles tagged with `version`
 // (JSON-friendly / diffable), opaque to everything but the circuit itself.
+//
+// `signature` is vcvoid's own addition (issue #42): the sorted, de-duplicated
+// set of targets this circuit's OUTPUTS are bound to (internal cable names and
+// register names), or — when the circuit binds no outputs — the targets its
+// inputs read. It is not used by restoreState (which stays byte-for-byte the
+// hardware rule) but by migrateState, which uses it to follow a circuit across
+// a structural edit of the patch. Empty means "no usable signature": such a
+// circuit is only ever matched positionally.
 struct CircuitState {
     std::string type;             // circuit def->name
     int ordinal = 0;              // 1-based, per-type patch-appearance order
     int version = 0;              // circuit stateVersion() of the blob
     std::vector<double> values;
+    std::string signature;        // migration key; "" when the circuit has none
 };
 struct StateSnapshot {
     std::vector<CircuitState> entries;   // patch-appearance order
@@ -49,6 +58,19 @@ public:
     // faithful to the hardware.
     StateSnapshot saveState() const;
     void restoreState(const StateSnapshot& snap);
+    // Structure-tolerant restore (issue #42). Used when a snapshot was taken
+    // from a DIFFERENT revision of the same patch (same file / same `# STATE:`
+    // tag, different circuit fingerprint), where the hardware's positional rule
+    // would smear state across unrelated circuits. Per circuit type: instances
+    // whose `signature` matches exactly are paired first (so inserting a
+    // same-type circuit ahead of an existing one no longer steals its state),
+    // then the leftovers are paired positionally among themselves (the hardware
+    // rule, applied to what is left), and anything still unpaired keeps its
+    // defaults. `dontsave` is honoured exactly as in restoreState.
+    void migrateState(const StateSnapshot& snap);
+    // Per-circuit migration signatures, patch order, parallel to the circuit
+    // list (non-stateful circuits included). Exposed for tests.
+    const std::vector<std::string>& circuitSignatures() const { return circuitSignatures_; }
 
     // name: register ("I1", "P1.2", ...) or cable ("_X")
     bool setValue(const std::string& name, float v);   // marks I<n> patched
@@ -213,6 +235,7 @@ private:
     bool usesMidi_ = false;   // patch contains a midiin/midiout/midithrough circuit
     unsigned ramUsed_ = 0;
     std::vector<std::string> declaredControllers_;
+    std::vector<std::string> circuitSignatures_;   // parallel to circuits_ (issue #42)
     std::vector<std::string> texts_;
     std::unordered_set<uint32_t> drivenRegs_;
     FileProvider fileProvider_;   // survives load()'s state reset

@@ -193,6 +193,7 @@ freshly loaded engine (`engine->setX7Present`) — ISSUE-1.
 | Circuit factory registration | `engine/src/registry.hpp` (`DROID_REGISTER_CIRCUIT`) |
 | Patch parse → validated compile | `engine/src/parser.cpp`, `loader.cpp` |
 | Chain protocol (POD contract) | `engine/src/chain.hpp`, `chain.cpp` |
+| Per-patch circuit state | `engine/src/patchstate.hpp`, `patchstate.cpp`, `Engine::saveState/restoreState/migrateState` |
 | Master Rack host (all masters) | `plugin/src/MasterBase.hpp` |
 | Expander relay base | `plugin/src/ChainModule.hpp` |
 | MIDI bridge | `plugin/src/X7.cpp`, `engine/src/midi.hpp` |

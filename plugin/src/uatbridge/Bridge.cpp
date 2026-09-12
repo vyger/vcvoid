@@ -129,7 +129,7 @@ DroidMasterBase* Bridge::findMaster(int64_t id) {
 // cross-thread read from the HTTP thread.
 std::string Bridge::handleMasterStatus(DroidMasterBase* m, int* code) {
     *code = 200;
-    std::string patchPath, patchStatus, chainError;
+    std::string patchPath, patchStatus, stateStatus, chainError;
     std::vector<std::string> chain;
     bool x7 = false;
     bool midiWarn = false;
@@ -137,6 +137,7 @@ std::string Bridge::handleMasterStatus(DroidMasterBase* m, int* code) {
         std::lock_guard<std::mutex> lk(m->engineMutex);
         patchPath = m->patchPath;
         patchStatus = m->patchStatus;
+        stateStatus = m->stateStatus;   // issue #42: restored / migrated / fresh
         chain = m->chainPhysical;
         x7 = m->x7Present;
         chainError = m->chainError;
@@ -158,6 +159,7 @@ std::string Bridge::handleMasterStatus(DroidMasterBase* m, int* code) {
     json_t* o = json_object();
     json_object_set_new(o, "patchPath", json_string(patchPath.c_str()));
     json_object_set_new(o, "statusLine", json_string(patchStatus.c_str()));
+    json_object_set_new(o, "stateLine", json_string(stateStatus.c_str()));
     json_t* arr = json_array();
     if (x7) json_array_append_new(arr, json_string("x7"));
     for (auto& c : chain) json_array_append_new(arr, json_string(c.c_str()));
@@ -269,10 +271,12 @@ std::string Bridge::handleMasterReload(DroidMasterBase* m, int* code) {
     return handleMasterStatus(m, code);
 }
 
-// resetCircuitState() (MasterBase.hpp) drops the live engine and clears
-// lastSnapshot under engineMutex, then reloads the current patch — fresh-boot
-// semantics (all stateful circuits re-seed from startvalues) without
-// recreating the module. Same "no patch loaded" 400 as reload.
+// resetCircuitState() (MasterBase.hpp) drops the live engine, drops the CURRENT
+// patch's stored snapshot and blocks migration for the next load, all under
+// engineMutex, then reloads the current patch — fresh-boot semantics (all
+// stateful circuits re-seed from startvalues) without recreating the module.
+// Snapshots of OTHER patches in this master's store are untouched (issue #42).
+// Same "no patch loaded" 400 as reload.
 std::string Bridge::handleMasterResetState(DroidMasterBase* m, int* code) {
     std::string path;
     {

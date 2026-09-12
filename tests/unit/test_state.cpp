@@ -135,8 +135,8 @@ TEST(state_unparseable_blob_defaults) {
     // and the circuit keeps its default state.
     Engine b; CHECK(b.load("[button]\n button = I1\n output = O1\n").ok);
     StateSnapshot bad;
-    CircuitState wrongVer{"button", 1, 999, {1, 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0, 0}};
-    CircuitState wrongLen{"button", 1, 1, {1.0, 0.0}};   // too short
+    CircuitState wrongVer{"button", 1, 999, {1, 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0, 0}, ""};
+    CircuitState wrongLen{"button", 1, 1, {1.0, 0.0}, ""};   // too short
     bad.entries = {wrongVer};
     b.restoreState(bad);
     b.tick();
