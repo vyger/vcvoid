@@ -200,6 +200,30 @@ class Bridge:
             settle_for(hold_ms)
         return result
 
+    def params_hold(self, module_id, param_id, value=1):
+        """POST /params/hold — press and KEEP pressing, with no deadline
+        (bridge >= 2). The press survives across engine ticks until
+        params_release (or a patch load / quit) lets go, which is what makes an
+        ORDERED multi-finger gesture expressible: press A, press B, release A,
+        release B. Returns immediately — nothing to settle, because nothing is
+        scheduled to end."""
+        return self.post("/params/hold", {"moduleId": module_id,
+                                           "paramId": param_id, "value": value})
+
+    def params_release(self, module_id, param_id):
+        """POST /params/release — let go, restoring the value the param had
+        when the hold started. Idempotent: releasing an unheld param is a
+        200 no-op."""
+        return self.post("/params/release", {"moduleId": module_id,
+                                              "paramId": param_id})
+
+    def diagnostics(self, mid):
+        """GET /master/{id}/diagnostics — the structured condition record
+        (state / severity / code / line / message / warnings). Used here for
+        failure context; the per-class contract assertions live in
+        tools/uatbridge-smoke.sh."""
+        return self.get(f"/master/{mid}/diagnostics")
+
     def cables(self):
         return self.get("/cables")
 
@@ -699,20 +723,23 @@ class Runner:
         elif gtype == "longpress":
             self.bridge.params(mid, entry["paramId"], 1, hold_ms=entry.get("holdMs", 1800))
         elif gtype == "chord":
-            # Two overlapping holds: start the modifier hold (async), tap the
-            # primary control INSIDE that window, then wait out the longer of
-            # the two holds before returning (settle=False keeps the calls
-            # overlapping; a default settle on the modifier would serialize
-            # them and the chord would never register).
+            # A chord is an ORDER, not two overlapping timers: hold the
+            # modifier down (un-timed, bridge >= 2), tap the primary control
+            # inside that window, then let go. The old shape raced the
+            # modifier's holdMs against the tap's — both measured in engine
+            # sample time, which the no-audio-module fallback engine can pace
+            # ~26% slower than wall clock, so a modifier that expired early
+            # turned the chord into a bare tap (and B2.1 * _CONTROL silently
+            # evaluated to 0 — the 2026-07-12 false FAIL). An un-timed hold
+            # cannot expire, so the only ordering left is the one written here.
             mod = self.driving_mfps["modifiers"][entry["modifier"]]
             mod_slug = row_slug_map.get(mod["module"], mod["module"])
             mod_id = self.resolve_module_id(mod_slug)
-            mod_hold = mod.get("holdMs", 1500)
             tap_hold = entry.get("holdMs", 300)
-            self.bridge.params(mod_id, mod["paramId"], 1, hold_ms=mod_hold, settle=False)
+            self.bridge.params_hold(mod_id, mod["paramId"])
             time.sleep(0.15)  # ensure the modifier registers first
-            self.bridge.params(mid, entry["paramId"], 1, hold_ms=tap_hold, settle=False)
-            settle_for(max(mod_hold, tap_hold))
+            self.bridge.params(mid, entry["paramId"], 1, hold_ms=tap_hold)
+            self.bridge.params_release(mod_id, mod["paramId"])
         else:
             raise ValueError(f"unknown gesture type {gtype} for {name}")
 
@@ -1610,6 +1637,82 @@ def phase8(r):
         return ("PASS" if ok else "FAIL"), expected, f"statusLine={st.get('statusLine') if st else None}; O2 edges={o2.get('edges')}"
 
     r.step("8.3", "MIDI file player patch shows activity", s8_3)
+
+    def fader_state(idx=0):
+        _, f, _ = r.bridge.faders(r.master_id)
+        return f[idx] if isinstance(f, list) and len(f) > idx else {}
+
+    def reg(name):
+        _, regs, _ = r.bridge.registers(r.master_id, [name])
+        v = (regs or {}).get(name)
+        return v if isinstance(v, (int, float)) else None
+
+    def s8_4():
+        # Issue #45: the recall used to survive exactly one tick and then be
+        # overwritten by the fader's own (unmoved) physical position, because a
+        # finger on the plate counts as holding the fader. END STATE ONLY — the
+        # trajectory between dents is not asserted (and must not be: the motor
+        # is deliberately frozen under a finger).
+        expected = ("uat-m4-toggle.ini (notches = 2, button = _T / clear = _T): a plate "
+                    "press toggles the fader and it STAYS toggled after release")
+        code, st, _ = r.bridge.load_patch(r.master_id, patch("uat-m4-toggle.ini"))
+        if code != 200:
+            return "FAIL", expected, f"load uat-m4-toggle.ini -> {code} {st}"
+        ok_boot, boot = wait_for(lambda: (reg("O1") is not None, reg("O1")),
+                                  timeout=4, interval=0.2)
+        if not ok_boot:
+            return "FAIL", expected, f"O1 never readable after load (diagnostics: {r.bridge.diagnostics(r.master_id)[1]})"
+        # Un-timed press: hold the plate, wait for the toggle to land WHILE
+        # held (the recall), then let go.
+        r.bridge.params_hold(m4, 4)
+        ok_toggled, held = wait_for(lambda: (reg("O1") != boot, reg("O1")),
+                                     timeout=4, interval=0.2)
+        r.bridge.params_release(m4, 4)
+        time.sleep(0.6)   # deliberate dwell: "it stays" is a claim about time
+        after = reg("O1")
+        target = fader_state(0).get("motorTarget")
+        stable = after == held and after != boot
+        status = "PASS" if ok_toggled and stable else "FAIL"
+        return status, expected, (f"O1 boot={boot} while_held={held} after_release={after}; "
+                                  f"fader motorTarget={target}")
+
+    r.step("8.4", "motorfader toggle trick: recall holds after plate release (#45)", s8_4)
+
+    def s8_5():
+        # manual/circuits/motoquencer.md §"Start and end": "Touching a button
+        # changes the END step. You can set the start step by first setting an
+        # end step and HOLDING that button and then — with a second finger —
+        # press another step." Hence end = the first plate touched (step 3),
+        # start = the second (step 1). The two presses are deliberately
+        # separated in time so the same-engine-tick tie-break never applies.
+        expected = ("uat-m4-startend.ini (buttonmode = 1): press plate 3, press plate 1, "
+                    "release 3, release 1 -> endstepout = 3, startstepout = 1")
+        code, st, _ = r.bridge.load_patch(r.master_id, patch("uat-m4-startend.ini"))
+        if code != 200:
+            return "FAIL", expected, f"load uat-m4-startend.ini -> {code} {st}"
+        code, resp, _ = r.bridge.watch_arm(r.master_id, ["_SS", "_ES", "B2.1", "B2.3"])
+        if code != 200:
+            return "FAIL", expected, f"watch arm -> {code} {resp}"
+        r.bridge.params_hold(m4, 6)    # plate 3 = step 3 -> sets the END step
+        time.sleep(0.2)
+        r.bridge.params_hold(m4, 4)    # plate 1, second finger -> sets the START step
+        time.sleep(0.2)
+        r.bridge.params_release(m4, 6)
+        r.bridge.params_release(m4, 4)
+        time.sleep(0.3)
+        _, watch, _ = r.bridge.watch_collect(r.master_id)
+        sigs = (watch or {}).get("signals") or {}
+        start, end = reg("_SS"), reg("_ES")
+        status = "PASS" if (end == 3 and start == 1) else "FAIL"
+        return status, expected, (f"startstepout={start} endstepout={end}; "
+                                  f"watch last: _SS={sigs.get('_SS', {}).get('last')} "
+                                  f"_ES={sigs.get('_ES', {}).get('last')}; "
+                                  f"plate B registers: {sigs.get('B2.1', {})} {sigs.get('B2.3', {})}")
+
+    r.step("8.5", "motoquencer buttonmode 1 start/end gesture (two fingers)", s8_5)
+    xfail_last(r, "engine support for the buttonmode 1 start/end gesture is issue #48 "
+                  "(branch feat/motoquencer-startend-doublerange) — expected to fail "
+                  "until that merges; remove this line then")
 
 
 def phase9(r):
