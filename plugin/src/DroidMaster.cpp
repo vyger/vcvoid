@@ -29,12 +29,24 @@ struct DroidMaster : DroidMasterBase {
     // per-LED (which jack it mirrors), not one format string.
     void applyOwnLabels() override {
         DroidMasterBase::applyOwnLabels();
-        for (int i = 0; i < 16; i++)
+        for (int i = 0; i < 16; i++) {
             vcvoid::labels::applyLight(
                 lightInfos[MATRIX_LIGHTS + i * 3],
                 vcvoid::labels::compose(registerLabels.find('R', unsigned(i) + 1)),
                 i < 8 ? string::f("Input %d", i + 1)
                       : string::f("Output %d", i - 7));
+            // #46: when the matrix is flashing an error blink code, these LEDs
+            // are no longer showing their jack — so their tooltips say what
+            // they ARE showing. Hovering the code is how you decode it without
+            // going to the manual. Appended here (rather than written once on a
+            // state change) because this function REWRITES the descriptions on
+            // every label refresh, and would otherwise clear it again.
+            if (!statusLine.empty() && lightInfos[MATRIX_LIGHTS + i * 3]) {
+                auto* info = lightInfos[MATRIX_LIGHTS + i * 3];
+                if (!info->description.empty()) info->description += "\n";
+                info->description += statusLine;
+            }
+        }
     }
 
     // The 4x4 LED matrix mirrors the eight input and eight output jacks, exactly
@@ -54,9 +66,17 @@ struct DroidMaster : DroidMasterBase {
     // of the jack mirror; 0 = dark. ledbrightness dims both cases.
     // Target RGB per matrix LED, refreshed on tick frames only (below).
     float ledTarget_[16][3] = {};
+    // #46: free-running blink phase for the hardware error code, and the matrix
+    // mode latched on the last tick frame (the per-sample gate below needs it
+    // every sample, the targets only once per tick).
+    float blinkPhase_ = 0.f;
+    int matrixMode_ = (int) vcvoid::status::Matrix::Mirror;
 
     void process(const ProcessArgs& args) override {
         DroidMasterBase::process(args);
+        blinkPhase_ += args.sampleTime;
+        if (blinkPhase_ >= vcvoid::status::kBlinkPeriod)
+            blinkPhase_ -= vcvoid::status::kBlinkPeriod;
         // [droid] ledbrightness dims the master's matrix LEDs (manual: "the 24
         // LEDs of the master and the G8"); jack voltages are unaffected.
         //
@@ -67,28 +87,52 @@ struct DroidMaster : DroidMasterBase {
         // below runs per sample, and tick rate (>= ~2 kHz) is far above any
         // visible LED rate.
         if (frameCounter == 0) {
-            float lb = engine ? engine->ledBrightness() : 1.f;
-            for (int i = 0; i < 16; i++) {
-                droid::RegId rr{'R', 0, uint8_t(i + 1)};
-                if (engine && engine->registerDriven(rr)) {
-                    droid::color::RGB c = droid::color::fromValue(engine->getRegister(rr));
-                    ledTarget_[i][0] = c.r * lb;
-                    ledTarget_[i][1] = c.g * lb;
-                    ledTarget_[i][2] = c.b * lb;
-                    continue;
+            matrixMode_ = matrixMode.load(std::memory_order_acquire);
+            using MM = vcvoid::status::Matrix;
+            if (matrixMode_ == (int) MM::Dark) {
+                // No patch: dark, deliberately unlike the hardware's forever
+                // "patch not found" flash (see MasterStatus.hpp). Also the
+                // fallback for a load error with no hardware blink code — with
+                // no engine the mirror would only show stale voltages.
+                for (auto& led : ledTarget_) led[0] = led[1] = led[2] = 0.f;
+            } else if (matrixMode_ == (int) MM::Blink) {
+                // The hardware blink code, published by the UI thread.
+                for (int i = 0; i < 16; i++) {
+                    uint32_t p = matrixBlink[i].load(std::memory_order_relaxed);
+                    ledTarget_[i][0] = float((p >> 16) & 0xff) / 255.f;
+                    ledTarget_[i][1] = float((p >> 8) & 0xff) / 255.f;
+                    ledTarget_[i][2] = float(p & 0xff) / 255.f;
                 }
-                float v = i < 8 ? inputs[IN_INPUTS + i].getVoltage()
-                                : outputs[OUT_OUTPUTS + (i - 8)].getVoltage();
-                float mag = std::fmin(std::fabs(v) / 10.f, 1.f) * lb;
-                ledTarget_[i][0] = v > 0.f ? mag : 0.f;   // red  = positive
-                ledTarget_[i][1] = 0.f;                   // green unused
-                ledTarget_[i][2] = v < 0.f ? mag : 0.f;   // blue = negative
+            } else {
+                float lb = engine ? engine->ledBrightness() : 1.f;
+                for (int i = 0; i < 16; i++) {
+                    droid::RegId rr{'R', 0, uint8_t(i + 1)};
+                    if (engine && engine->registerDriven(rr)) {
+                        droid::color::RGB c = droid::color::fromValue(engine->getRegister(rr));
+                        ledTarget_[i][0] = c.r * lb;
+                        ledTarget_[i][1] = c.g * lb;
+                        ledTarget_[i][2] = c.b * lb;
+                        continue;
+                    }
+                    float v = i < 8 ? inputs[IN_INPUTS + i].getVoltage()
+                                    : outputs[OUT_OUTPUTS + (i - 8)].getVoltage();
+                    float mag = std::fmin(std::fabs(v) / 10.f, 1.f) * lb;
+                    ledTarget_[i][0] = v > 0.f ? mag : 0.f;   // red  = positive
+                    ledTarget_[i][1] = 0.f;                   // green unused
+                    ledTarget_[i][2] = v < 0.f ? mag : 0.f;   // blue = negative
+                }
             }
         }
+        // The blink itself: the targets hold the code's colours, this gates
+        // them on and off. setBrightnessSmooth snaps up and decays, so the
+        // result reads as a flashing LED rather than a sine pulse.
+        float gate = (matrixMode_ == (int) vcvoid::status::Matrix::Blink &&
+                      blinkPhase_ >= vcvoid::status::kBlinkPeriod * 0.5f) ? 0.f : 1.f;
         for (int i = 0; i < 16; i++) {
             int base = MATRIX_LIGHTS + 3 * i;
             for (int c = 0; c < 3; c++)
-                lights[base + c].setBrightnessSmooth(ledTarget_[i][c], args.sampleTime);
+                lights[base + c].setBrightnessSmooth(ledTarget_[i][c] * gate,
+                                                     args.sampleTime);
         }
     }
 
