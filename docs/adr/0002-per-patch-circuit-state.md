@@ -145,6 +145,10 @@ class of mistake this ADR is fixing.
 - Saved snapshots have no per-circuit signature. An absent signature simply
   means "no migration identity", which falls back to the positional rule — the
   pre-#42 behaviour.
+- Each entry carries the circuit's own `stateVersion()`, so a circuit can widen
+  what it saves without invalidating older snapshots: the motoquencer's
+  interactive start/end range was added this way (v2, #62) and a v1 blob still
+  loads, just without a range.
 - `dontsave`, `[droid] clearall` and the UAT bridge's `reset-state` endpoint are
   unchanged in meaning. `reset-state` now also drops the current patch's stored
   snapshot and blocks migration for that one reload, so it still means
