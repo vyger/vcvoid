@@ -1,0 +1,80 @@
+# motoquencer `constantlength = 1`, the search rule. motoquencer.md:922 — "the
+# repeats in step 4 are reduced by 1. If they are already 1, step 5 is tried an so
+# on, until it wrap around to step 1."
+#
+# So the hunt for slack runs FORWARD from the edited step, wraps round the end of
+# the range, and steps over any step already at the floor of 1 repeat.
+#
+# Step 3 holds 5 repeats; steps 1, 2 and 4 hold 1. Step 4 is dialled up by 2: the
+# search wraps to step 1 (at the floor, nothing to give), tries step 2 (likewise)
+# and lands on step 3, which gives up its 2 (5 -> 3). The cycle stays 8 clocks.
+#
+# The second half shows the other direction: dialling step 4 back DOWN by 2 hands
+# the 2 to the first step the forward search meets — step 1, now 3 repeats. The
+# compensation is a fresh greedy search each time, not an undo stack, so the
+# sequence does not fold back to where it started; only its length does.
+tickrate 100
+patch <<<
+[m4]
+[motoquencer]
+    clock          = I1
+    fadermode      = I2
+    constantlength = I3
+    numsteps       = 4
+    numfaders      = 4
+    quantize       = 0
+    cvbase         = 0
+    cvrange        = 1
+    defaultgate    = 1
+    cv             = O1
+>>>
+@2 move F1 0.0
+@3 move F2 0.25
+@4 move F3 0.5
+@5 move F4 0.75
+@6 set I2 3
+# with the feature off, give step 3 five repeats (notch 4)
+@7 move F3 0.2666667
+@7 expect F3 0.2666667 tol 1e-4
+@8 set I3 1
+# step 4: 1 -> 3 repeats. Steps 1 and 2 are at the floor; step 3 pays (5 -> 3).
+@9 move F4 0.1333333
+@9 expect F4 0.1333333 tol 1e-4
+@9 expect F1 0 tol 1e-4
+@9 expect F2 0 tol 1e-4
+@9 expect F3 0.1333333 tol 1e-4
+# step 4: 3 -> 1 repeats. The 2 clocks have to go somewhere: step 1 takes them.
+@10 move F4 0.0
+@10 expect F4 0 tol 1e-4
+@10 expect F1 0.1333333 tol 1e-4
+@10 expect F2 0 tol 1e-4
+@10 expect F3 0.1333333 tol 1e-4
+@11 set I2 0
+# still 8 clocks: step 1 three times, step 2 once, step 3 three times, step 4 once.
+@13 set I1 1
+@13 expect O1 0 tol 1e-4
+@14 set I1 0
+@15 set I1 1
+@15 expect O1 0 tol 1e-4
+@16 set I1 0
+@17 set I1 1
+@17 expect O1 0 tol 1e-4
+@18 set I1 0
+@19 set I1 1
+@19 expect O1 0.25 tol 1e-4
+@20 set I1 0
+@21 set I1 1
+@21 expect O1 0.5 tol 1e-4
+@22 set I1 0
+@23 set I1 1
+@23 expect O1 0.5 tol 1e-4
+@24 set I1 0
+@25 set I1 1
+@25 expect O1 0.5 tol 1e-4
+@26 set I1 0
+@27 set I1 1
+@27 expect O1 0.75 tol 1e-4
+@28 set I1 0
+@29 set I1 1
+@29 expect O1 0 tol 1e-4
+@30 set I1 0

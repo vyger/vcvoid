@@ -20,6 +20,7 @@ public:
     void editSurface(EngineState& s, int page, int fm, int bm, bool recall,
                      bool faders, bool buttons) override {
         int Nfeel = notchesFor(s, fm);
+        ownsFaders_ = faders;                          // gate for refreshLane()
         if ((int)hold_.size() < numFaders_) hold_.resize(numFaders_);
         for (int i = 0; i < numFaders_; i++) {
             int step = page * numFaders_ + i;
@@ -36,7 +37,7 @@ public:
             if (buttons) {
                 bool pressed = f->plate;
                 bool wasPressed = (i < (int)prevTouch_.size()) ? prevTouch_[i] : false;
-                if (pressed != wasPressed) plateEdge(bm, i, step, pressed);
+                if (pressed != wasPressed) plateEdge(s, bm, i, step, pressed);
                 if (i < (int)prevTouch_.size()) prevTouch_[i] = pressed;
             }
 
@@ -66,9 +67,29 @@ public:
         wasSelected_ = true;
     }
 
+    // `constantlength` rewrote another step's repeats / skip behind the user's
+    // back (seqcore.hpp compensateLength). The motor has to be re-commanded right
+    // away: the lane loop above reads each fader's PHYSICAL position back as an
+    // edit, so a compensated step whose fader still sits at the old dent would
+    // undo the compensation on the very next pass. Only the instance that owns
+    // the faders this tick may drive them (a chain addresses one lane at a time),
+    // and only the visible page has a lane at all.
+    void refreshLane(EngineState& s, int step) override {
+        if (!ownsFaders_ || shownPage_ < 0) return;
+        int lane = step - shownPage_ * numFaders_;
+        if (lane < 0 || lane >= numFaders_ || lane >= (int)hold_.size()) return;
+        int fdr = firstFader_ + lane;
+        FaderState* f = s.controllers.fader(fdr);
+        if (!f) return;
+        float stored = storedPos(s, shownMode_, step);
+        fc::source(hold_[lane], true, stored, f->position, f->touched);   // re-arm
+        s.controllers.commandFader(fdr, stored);
+    }
+
     // One recall hold per LANE (fader), not per step: it guards the physical
     // fader, so a page change re-arms it through the recall branch above.
     std::vector<fc::RecallHold> hold_;
+    bool ownsFaders_ = false;
 
     void setLaneLed(EngineState& s, int lane, float bright, float color) override {
         if (FaderState* f = s.controllers.fader(firstFader_ + lane)) {

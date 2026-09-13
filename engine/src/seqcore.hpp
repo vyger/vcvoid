@@ -525,6 +525,107 @@ protected:
         }
     }
 
+    // ---- constantlength ----------------------------------------------------
+    // motoquencer.md:922. Level 1: "every change in the *repeats* of a step is
+    // compensated by changing the repeats in the following steps. E.g. if you
+    // increase the number of repeats from 4 to 5 in step 3 [...] the repeats in
+    // step 4 are reduced by 1. If they are already 1, step 5 is tried an so on,
+    // until it wrap around to step 1." Level 2: "also the *skip* setting of steps
+    // is honored and modified in order to keep the length constant. A skipped step
+    // essentially has the length 0 (or 0 repeats). The componsation is now done not
+    // only when the repeats are changed but also when skip is switched on or off on
+    // a step. All the compensation is only active with the range that is set with
+    // the start and end step."
+    //
+    // It hooks the EDIT sites, never the transport: the length is rebalanced the
+    // moment a repeats or skip edit lands, and the sequencer then plays whatever it
+    // finds, so the step that is currently running reads its (possibly rewritten)
+    // repeat count at the next clock edge exactly as it does after a direct edit.
+    //
+    // Bulk operations are deliberately outside the feature: clearrepeats /
+    // clearskips / luckyrepeats / luckyskips / presets / doublerange all rewrite
+    // the whole sequence at once, and the manual frames the compensation as the
+    // answer to "a change in the repeats of a step".
+    //
+    // SPEC-GAPs (the manual is silent; deterministic readings):
+    //   * A step's LENGTH is `skip ? 0 : repeats` at BOTH levels, so the skip a
+    //     repeats edit automatically clears (motoquencer.md:183) is part of the
+    //     measured change even at level 1. The levels differ in what may be
+    //     MODIFIED: level 1 never touches a skip, so a skipped step has no
+    //     capacity and the forward search steps over it.
+    //   * A change the range cannot absorb is still applied: compensate as far as
+    //     the slack goes and drop the remainder. The manual only promises the
+    //     feature "*tries* to keep the actual length constant", and refusing or
+    //     snapping back the edit would make a motor fader fight the hand on it.
+    //   * Level 2 may UN-skip a step to buy length, the mirror of skipping one to
+    //     spend it. A skipped candidate is un-skipped only when its whole repeat
+    //     count fits in what is still owed, so the gesture is the exact inverse.
+    //   * The level is read off the chain MAIN, like the range: the Forge's MFPS
+    //     generator wires `constantlength` on a track's main lane only.
+    //
+    // The length in clock pulses one step contributes to the played range.
+    int stepLength(int step) const {
+        step = clampi(step, 0, kSteps - 1);
+        return cur_.skip[step] ? 0 : cur_.repeats[step];
+    }
+
+    // 0 = off, 1 = repeats only, 2 = repeats + skips.
+    int constantLength(EngineState& s) {
+        SeqCore* o = rangeOwner();
+        return clampi((int)std::lround(o->in("constantlength").value(s)), 0, 2);
+    }
+
+    // Absorb the length change an edit to `step` just made into the OTHER steps of
+    // the range. `before` is that step's length before the edit; `skipEdit` says the
+    // edit itself was a skip toggle (only level 2 compensates those). Returns true
+    // if any other step changed.
+    bool compensateLength(EngineState& s, int step, int before, bool skipEdit) {
+        int level = constantLength(s);
+        if (level == 0) return false;
+        if (skipEdit && level < 2) return false;
+        int owed = stepLength(step) - before;   // > 0: too long now, take it back
+        if (owed == 0) return false;
+        int a = rangeStart0(s), b = rangeEnd0(s);
+        int lo = a < b ? a : b, hi = a < b ? b : a;
+        if (step < lo || step > hi) return false;   // only inside start..end
+        int n = hi - lo + 1;
+        bool changed = false;
+        for (int k = 1; k < n && owed != 0; k++) {
+            int i = lo + (step - lo + k) % n;        // forward, wrapping in-range
+            if (owed > 0) {                          // spend: shorten the others
+                if (cur_.skip[i]) continue;          // already length 0
+                int cap = level >= 2 ? cur_.repeats[i] : cur_.repeats[i] - 1;
+                int take = owed < cap ? owed : cap;
+                if (take <= 0) continue;
+                if (take == (int)cur_.repeats[i]) cur_.skip[i] = true;   // level 2
+                else cur_.repeats[i] = (uint8_t)(cur_.repeats[i] - take);
+                owed -= take;
+            } else {                                 // buy: lengthen the others
+                int want = -owed;
+                if (cur_.skip[i]) {
+                    if (level < 2 || (int)cur_.repeats[i] > want) continue;
+                    cur_.skip[i] = false;            // un-skip: exactly repeats back
+                    owed += cur_.repeats[i];
+                } else {
+                    int cap = 16 - (int)cur_.repeats[i];
+                    int take = want < cap ? want : cap;
+                    if (take <= 0) continue;
+                    cur_.repeats[i] = (uint8_t)(cur_.repeats[i] + take);
+                    owed += take;
+                }
+            }
+            changed = true;
+            refreshLane(s, i);
+        }
+        return changed;
+    }
+
+    // A compensated step's value moved without the user touching its handle, so the
+    // surface has to be re-commanded — on an M4 the untouched physical fader would
+    // otherwise be read back next pass and silently undo the compensation. Default
+    // no-op: an E4's encoders are relative and have no position to fight.
+    virtual void refreshLane(EngineState& s, int step) { (void)s; (void)step; }
+
     // Write a step's value in a fadermode from a raw 0..1 fader position, snapping
     // it to that lane's notch grid. `snapped` receives the rest position of the
     // value actually stored (what the motor is commanded to); the return value
@@ -555,8 +656,10 @@ protected:
             case 2: { int v = snapIdx(8); bool ch = v != cur_.gateprob[step];
                       cur_.gateprob[step] = (uint8_t)v; snapped = v / 7.0f; return ch; }
             case 3: { int v = snapIdx(16); bool ch = (v + 1) != cur_.repeats[step];
+                      int was = stepLength(step);
                       cur_.repeats[step] = (uint8_t)(v + 1);
-                      if (ch) cur_.skip[step] = false;   // only on a real CHANGE
+                      if (ch) { cur_.skip[step] = false;   // only on a real CHANGE
+                                compensateLength(s, step, was, false); }
                       snapped = v / 15.0f; return ch; }
             case 4: { int v = snapIdx(4); bool ch = v != cur_.gatepat[step];
                       cur_.gatepat[step] = (uint8_t)v; snapped = v / 3.0f; return ch; }
@@ -565,7 +668,10 @@ protected:
             case 6: { bool v = pos >= 0.5f; bool ch = v != cur_.gate[step];
                       cur_.gate[step] = v; snapped = v ? 1.0f : 0.0f; return ch; }
             default: { bool v = pos >= 0.5f; bool ch = v != cur_.skip[step];
-                      cur_.skip[step] = v; snapped = v ? 1.0f : 0.0f; return ch; }
+                      int was = stepLength(step);
+                      cur_.skip[step] = v; snapped = v ? 1.0f : 0.0f;
+                      if (ch) compensateLength(s, step, was, true);
+                      return ch; }
         }
     }
 
@@ -646,7 +752,7 @@ protected:
     // two-finger gesture whose first finger stays down as the anchor, so the
     // release is what ends it. `lane` is the physical plate index within this
     // instance's lanes; `step` is the step it currently addresses (page-mapped).
-    void plateEdge(int bm, int lane, int step, bool pressed) {
+    void plateEdge(EngineState& s, int bm, int lane, int step, bool pressed) {
         if (!pressed) {
             if (seAnchorLane_ == lane) seAnchorLane_ = -1;
             return;
@@ -655,7 +761,11 @@ protected:
             case 0: cur_.gate[step] = !cur_.gate[step]; break;
             case 1: startEndPress(lane, step); break;
             case 2: cur_.gatepat[step] = (cur_.gatepat[step] + 1) & 3; break;
-            case 3: cur_.skip[step] = !cur_.skip[step]; break;
+            // A skip toggled here is a length change like any other, so it is
+            // compensated at constantlength level 2 (see compensateLength).
+            case 3: { int was = stepLength(step);
+                      cur_.skip[step] = !cur_.skip[step];
+                      compensateLength(s, step, was, true); break; }
             default: break;
         }
         bulkStampButton(bm, step);          // `bulkedit`, see bulkStampButton
@@ -1059,8 +1169,10 @@ protected:
             case 2: { int v = nudgeIdx(cur_.gateprob[step], 7); bool ch = v != cur_.gateprob[step];
                       cur_.gateprob[step] = (uint8_t)v; return ch; }
             case 3: { int v = nudgeIdx(cur_.repeats[step] - 1, 15); bool ch = (v + 1) != cur_.repeats[step];
+                      int was = stepLength(step);
                       cur_.repeats[step] = (uint8_t)(v + 1);
-                      if (ch) cur_.skip[step] = false;   // only on a real CHANGE
+                      if (ch) { cur_.skip[step] = false;   // only on a real CHANGE
+                                compensateLength(s, step, was, false); }
                       return ch; }
             case 4: { int v = nudgeIdx(cur_.gatepat[step], 3); bool ch = v != cur_.gatepat[step];
                       cur_.gatepat[step] = (uint8_t)v; return ch; }
@@ -1069,7 +1181,10 @@ protected:
             case 6: { int v = nudgeIdx(cur_.gate[step] ? 1 : 0, 1); bool ch = (bool)v != cur_.gate[step];
                       cur_.gate[step] = v; return ch; }
             default: { int v = nudgeIdx(cur_.skip[step] ? 1 : 0, 1); bool ch = (bool)v != cur_.skip[step];
-                      cur_.skip[step] = v; return ch; }
+                      int was = stepLength(step);
+                      cur_.skip[step] = v;
+                      if (ch) compensateLength(s, step, was, true);
+                      return ch; }
         }
     }
 
