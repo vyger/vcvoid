@@ -224,12 +224,19 @@ struct SimRack {
     }
     void remove(int at) { mods.erase(mods.begin() + at); }
 
+    // A gap in the row, as if a module had been dragged clear of its
+    // neighbours: mods[at-1] and mods[at] stop being neighbours, both keeping
+    // their identity and their state. `gap = 1` is the master pulled off the
+    // head of the chain. 0 = the row is contiguous.
+    size_t gap = 0;
+    bool joined(size_t leftIdx) const { return gap == 0 || leftIdx + 1 != gap; }
+
     static int64_t idOf(SimModule* m) { return m ? m->id : kNoNeighbour; }
 
     void step() {
         for (size_t i = 0; i < mods.size(); i++) {
             SimModule* me = mods[i].get();
-            SimModule* right = (i + 1 < mods.size()) ? mods[i + 1].get() : nullptr;
+            SimModule* right = (i + 1 < mods.size() && joined(i)) ? mods[i + 1].get() : nullptr;
             if (i == 0) {   // the master publishes nothing; it only reads
                 if (me->source.changed(idOf(right))) {
                     me->consumer->count = 0;
@@ -237,9 +244,9 @@ struct SimRack {
                 }
                 continue;
             }
-            SimModule* left = mods[i - 1].get();
+            SimModule* left = joined(i - 1) ? mods[i - 1].get() : nullptr;
             if (me->relay.step(me->block, idOf(right), *me->consumer,
-                               idOf(left), left->producer)) {
+                               idOf(left), left ? left->producer : nullptr)) {
                 left->flipRequested = true;
                 me->publishes++;
             }
@@ -305,6 +312,34 @@ TEST(chain_hotplug_attach_to_settled_rack) {
     CHECK(r.chain() == std::vector<std::string>({"p2b8"}));
 
     r.insert(2, MB32);                       // and one more on the end
+    r.settle();
+    CHECK(r.chain() == std::vector<std::string>({"p2b8", "b32"}));
+}
+
+// Dragging the master off the row and putting it back where it was. Nothing
+// about the controller changes while it sits detached — same block, same chain
+// to its right, same module to reconnect to — so a gate that remembers only
+// what it last sent, and to whom, has nothing to react to and stays shut
+// forever: the chain breaks (correctly) and then never comes back (UAT 2.3).
+TEST(chain_hotplug_detach_and_reattach_master) {
+    SimRack r{None /*master*/, MP2B8, MB32};
+    r.settle();
+    CHECK(r.chain() == std::vector<std::string>({"p2b8", "b32"}));
+
+    r.gap = 1;                               // master pulled clear of the row
+    r.settle();
+    CHECK(r.chain().empty());
+
+    r.gap = 0;                               // ... and pushed back against it
+    r.settle();
+    CHECK(r.chain() == std::vector<std::string>({"p2b8", "b32"}));
+
+    // Same again with the break further down the row: the b32 is cut off and
+    // rejoined, and the master must end up seeing it both times.
+    r.gap = 2;
+    r.settle();
+    CHECK(r.chain() == std::vector<std::string>({"p2b8"}));
+    r.gap = 0;
     r.settle();
     CHECK(r.chain() == std::vector<std::string>({"p2b8", "b32"}));
 }

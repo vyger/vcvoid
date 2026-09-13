@@ -338,6 +338,14 @@ struct UpstreamRelay {
     bool step(const UpstreamBlock& mine, int64_t right, UpstreamMessage& in,
               int64_t left, UpstreamMessage* out) {
         if (source.changed(right)) { in.count = 0; in.dirty = 0; }
+        // Detached to my left: forget who I last published to, so re-attaching
+        // publishes even when it is the VERY SAME module (the master dragged
+        // off the row and back). Nothing about me changes while I sit
+        // unattached — same block, same chain to my right — so the gate would
+        // otherwise still be holding the baseline from before I was unplugged
+        // and stay shut on reconnection, and the master would never hear from
+        // the chain again.
+        if (left == kNoNeighbour) gate.lastDest = kNoNeighbour;
         const uint8_t inCount = std::min<uint8_t>(in.count, kMaxChainModules);
         const auto d = gate.decide(mine, in.dirty, inCount, left);
         if (!out || !d.publish) return false;
