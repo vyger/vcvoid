@@ -1,0 +1,67 @@
+# motoquencer: one randomization draw per STEP ENTRY (issue #57).
+# motoquencer.md: "adding a different random offset each time the step is played".
+# SPEC-GAP: "each time the step is played" is read as each time the sequencer
+# ENTERS the step — the same rule the gate probability already follows ("decided
+# once at step entry") — so the repeats and the ratchets inside one step all sing
+# the same randomized note, and only the next entry re-rolls it.
+#
+# The step has repeats = 3 and ratchets = 2, the clock runs every 10 ticks, and
+# the CV is sampled mid-pulse (tick 15, 25, ... is past the ratchet boundary) as
+# well as on the pulses. Continuous pitch dialed to 0.5 with cvrange 1 makes the
+# CV the raw seed-1 uniform draw (see randomize-spread.gold).
+seed 1
+tickrate 100
+patch <<<
+[m4]
+[motoquencer]
+    numfaders = 1
+    numsteps  = 1
+    clock     = I1
+    fadermode = I2
+    quantize  = 0
+    cvbase    = 0
+    cvrange   = 1
+    holdcv    = 0
+    cv        = O1
+    gate      = O5
+>>>
+# randomize lane: top detent
+@1 set I2 1
+@2 move F1 1.0
+# repeats lane (fadermode 3, 16 detents): 3 repeats
+@3 set I2 3
+@4 move F1 0.1333333
+# ratchets lane (fadermode 5, 8 detents): 2 ratchets
+@5 set I2 5
+@6 move F1 0.1428571
+# CV lane: dial the step to the centre
+@7 set I2 0
+@8 move F1 0.5
+# --- step entry 1 (draw 1) : three pulses, two ratchets each -----------------
+@10 set I1 1
+@10 expect O1 0.0000629 tol 1e-5
+@11 set I1 0
+@15 expect O1 0.0000629 tol 1e-5      # second ratchet of pulse 1
+@20 set I1 1
+@20 expect O1 0.0000629 tol 1e-5      # pulse 2 (repeat), same offset
+@21 set I1 0
+@25 expect O1 0.0000629 tol 1e-5
+@30 set I1 1
+@30 expect O1 0.0000629 tol 1e-5      # pulse 3 (repeat), same offset
+@31 set I1 0
+@35 expect O1 0.0000629 tol 1e-5
+# --- step entry 2 (draw 2) --------------------------------------------------
+@40 set I1 1
+@40 expect O1 0.0157474 tol 1e-5
+@41 set I1 0
+@45 expect O1 0.0157474 tol 1e-5
+@50 set I1 1
+@50 expect O1 0.0157474 tol 1e-5
+@51 set I1 0
+@60 set I1 1
+@60 expect O1 0.0157474 tol 1e-5
+@61 set I1 0
+# --- step entry 3 (draw 3) --------------------------------------------------
+@70 set I1 1
+@70 expect O1 0.6164041 tol 1e-5
+@71 set I1 0

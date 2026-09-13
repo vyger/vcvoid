@@ -1,0 +1,69 @@
+# motoquencer: a randomized step stays in the scale (issue #57).
+# SPEC-GAP: the manual does not say where in the pitch chain the random offset is
+# added, so it goes in BEFORE quantization — "Per default, the CV is quantized to
+# a musical scale" must keep holding for a randomized step, or randomization would
+# be unusable on a melodic track. In the quantized path the dialed CV *is* a note
+# index into the scale notes that fit cvbase..cvrange, so the offset is converted
+# to that index space: round(offset / cvrange * (notes - 1)) notes.
+#
+# cvbase 0 + cvrange 0.2 (24 semitones) + the default C lydian gives the 15-note
+# list C D E F# G A B C' D' E' F#' G' A' B' C'' (0,2,4,6,7,9,11,12,14,16,18,19,
+# 21,23,24 semitones). Detent 7 offsets by up to +/- 7 of those notes.
+#
+# Section 2: when the offset pushes past the end of the list the note keeps
+# climbing the SAME scale above the dialed range (SPEC-GAP: the note list is
+# finite, but the manual explicitly allows leaving the range — "this could double
+# up your CV range" — so the surplus is applied as a further shift along the
+# selected notes rather than clamped at the top note).
+seed 1
+tickrate 100
+patch <<<
+[m4]
+[motoquencer]
+    numfaders = 1
+    numsteps  = 1
+    clock     = I1
+    fadermode = I2
+    quantize  = 2
+    cvbase    = 0
+    cvrange   = 0.2
+    holdcv    = 0
+    cv        = O1
+>>>
+@1 set I2 1
+@2 move F1 1.0
+@4 set I2 0
+# dial the middle note of the list: notch 7 -> C' (12 semitones)
+@5 move F1 0.5
+@10 set I1 1
+@10 expect O1 0.0 tol 1e-5            # -7 notes -> C   (0)
+@11 set I1 0
+@12 set I1 1
+@12 expect O1 0.0 tol 1e-5            # -7 notes -> C   (0)
+@13 set I1 0
+@14 set I1 1
+@14 expect O1 0.1333333 tol 1e-5      # +2 notes -> E'  (16)
+@15 set I1 0
+@16 set I1 1
+@16 expect O1 0.0166667 tol 1e-5      # -6 notes -> D   (2)
+@17 set I1 0
+@18 set I1 1
+@18 expect O1 0.1166667 tol 1e-5      # +1 note  -> D'  (14)
+@19 set I1 0
+@20 set I1 1
+@20 expect O1 0.0333333 tol 1e-5      # -5 notes -> E   (4)
+@21 set I1 0
+# --- section 2: the top note of the list, C'' (24 semitones) ----------------
+@22 move F1 1.0
+@26 set I1 1
+@26 expect O1 0.1333333 tol 1e-5      # -5 notes -> E'  (16)
+@27 set I1 0
+@28 set I1 1
+@28 expect O1 0.1166667 tol 1e-5      # -6 notes -> D'  (14)
+@29 set I1 0
+@30 set I1 1
+@30 expect O1 0.2 tol 1e-5            # +-0     -> C''  (24)
+@31 set I1 0
+@32 set I1 1
+@32 expect O1 0.25 tol 1e-5           # +3 notes past the top -> F#'' (30)
+@33 set I1 0

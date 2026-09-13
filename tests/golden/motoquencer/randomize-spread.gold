@@ -1,0 +1,57 @@
+# motoquencer: per-step CV randomization at the top detent (issue #57).
+# motoquencer.md: "The other 7 steps will increasingly modify the step's CV by
+# adding a different random offset each time the step is played. At position 7
+# (the maximum), the offset is up to `cvrange`."
+#
+# SPEC-GAP (the manual names no distribution): the offset is BIPOLAR uniform,
+# +/- (detent/7) * cvrange/2 around the stored pitch — so at detent 7 the offset
+# spans a full cvrange peak-to-peak, "up to cvrange", half of it up and half down.
+# It is drawn from the engine's seeded xorshift RNG (the same stream as the lucky
+# operations and the gate probability), so `seed` pins it here.
+#
+# The arithmetic is arranged to show the raw draws: with continuous pitch
+# (quantize 0, cvbase 0, cvrange 1) and the step dialed dead centre (0.5), the
+# output is 0.5 + u * 0.5 where u is uniform in [-1, +1) — i.e. exactly the
+# uniform [0, 1) draw itself. These are the seed-1 xorshift values, and they
+# spread over the whole 0..1 cvrange around the dialed 0.5.
+seed 1
+tickrate 100
+patch <<<
+[m4]
+[motoquencer]
+    numfaders = 1
+    numsteps  = 1
+    clock     = I1
+    fadermode = I2
+    quantize  = 0
+    cvbase    = 0
+    cvrange   = 1
+    holdcv    = 0
+    cv        = O1
+>>>
+# randomize lane (fadermode 1): top detent = 7 of 8
+@1 set I2 1
+@2 move F1 1.0
+@3 expect F1 1.0 tol 1e-4
+# back to the CV lane: dial the step to the centre of the range
+@4 set I2 0
+@5 move F1 0.5
+@6 expect F1 0.5 tol 1e-4
+# every step entry draws a fresh offset
+@10 set I1 1
+@10 expect O1 0.0000629 tol 1e-5
+@11 set I1 0
+@12 set I1 1
+@12 expect O1 0.0157474 tol 1e-5
+@13 set I1 0
+@14 set I1 1
+@14 expect O1 0.6164041 tol 1e-5
+@15 set I1 0
+@16 set I1 1
+@16 expect O1 0.0716186 tol 1e-5
+@17 set I1 0
+@18 set I1 1
+@18 expect O1 0.5584883 tol 1e-5
+@19 set I1 0
+@20 set I1 1
+@20 expect O1 0.1735742 tol 1e-5

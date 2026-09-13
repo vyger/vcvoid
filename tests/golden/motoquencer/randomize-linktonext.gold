@@ -1,0 +1,57 @@
+# motoquencer linktonext: every lane randomizes on its own (issue #57).
+# A chain member is remote-controlled by the main (it plays the main's step
+# number) but "each member's own lane supplies cv/gate/probability" — so the
+# randomize-CV value it uses is its own, and it draws its own offset at every
+# step entry. Two lanes with detent 7 on the same step therefore wander apart
+# instead of moving in lockstep.
+#
+# Both lanes are dialed to the centre with continuous pitch over cvrange 1, so
+# each output is the raw uniform draw (see randomize-spread.gold). The chain is
+# resolved in patch order — the main ticks first — so the main takes the odd
+# draws of the seed-1 stream and the member the even ones.
+seed 1
+tickrate 100
+patch <<<
+[m4]
+[motoquencer]
+    numfaders  = 1
+    numsteps   = 1
+    clock      = I1
+    fadermode  = I2
+    linktonext = 1
+    quantize   = 0
+    cvbase     = 0
+    cvrange    = 1
+    holdcv     = 0
+    cv         = O1
+[motoquencer]
+    numfaders  = 1
+    numsteps   = 1
+    quantize   = 0
+    cvbase     = 0
+    cvrange    = 1
+    holdcv     = 0
+    cv         = O2
+>>>
+# main: randomize detent 7, step dialed to 0.5
+@1 set I2 1
+@2 move F1 1.0
+@3 set I2 0
+@4 move F1 0.5
+# member (fadermode 10 = its CV lane, 11 = its randomize lane): the same
+@5 set I2 11
+@6 move F1 1.0
+@7 set I2 10
+@8 move F1 0.5
+@10 set I1 1
+@10 expect O1 0.0000629 tol 1e-5
+@10 expect O2 0.0157474 tol 1e-5
+@11 set I1 0
+@12 set I1 1
+@12 expect O1 0.6164041 tol 1e-5
+@12 expect O2 0.0716186 tol 1e-5
+@13 set I1 0
+@14 set I1 1
+@14 expect O1 0.5584883 tol 1e-5
+@14 expect O2 0.1735742 tol 1e-5
+@15 set I1 0
