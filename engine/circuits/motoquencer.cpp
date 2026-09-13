@@ -41,7 +41,10 @@ public:
             }
 
             if (!faders) continue;                         // another chain member's faders
-            if (recall || !wasSelected_) {                // motorized recall
+            // A lane `bulkedit` just stamped is re-commanded rather than read
+            // back: its fader has not moved, so reading it would undo the stamp
+            // in this very tick (seqcore.hpp markStamped).
+            if (recall || !wasSelected_ || bulkStamped(step)) {   // motorized recall
                 float stored = storedPos(s, fm, step);
                 fc::source(hold_[i], true, stored, f->position, f->touched);   // arm (#45)
                 s.controllers.commandFader(fdr, stored);

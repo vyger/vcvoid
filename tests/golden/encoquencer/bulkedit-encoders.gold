@@ -1,0 +1,40 @@
+# encoquencer `bulkedit`: the same feature on the E4. encoquencer.md's bulkedit row
+# is worded for both skins — "if you move one fader (or encoder) [...] all other
+# faders (or encoders) at the right of the modified step will move along to the
+# same value" — and encoquencer is "an exact replica of the motoquencer circuit",
+# so the shared sequencer core stamps an encoder edit exactly like a fader edit.
+#
+# Continuous pitch (quantize 0): one detent = 1/96. Step 1's encoder is turned +24
+# detents to 0.25 with bulkedit held, and steps 2 and 3 take that value; step 0
+# keeps its own. A further turn with bulkedit LOW then edits step 3 alone.
+tickrate 100
+patch <<<
+[e4]
+[encoquencer]
+    clock    = I1
+    bulkedit = I2
+    numsteps = 4
+    quantize = 0
+    cvbase   = 0
+    cvrange  = 1
+    holdcv   = 0
+    cv       = O1
+>>>
+@0 set I2 1
+@1 turn E1.2 24
+# bulkedit low again: step 3 is edited on its own (+24 -> 0.5).
+@2 set I2 0
+@3 turn E1.4 24
+# play: 0 / 0.25 / 0.25 / 0.5.
+@4 set I1 1
+@4 expect O1 0 tol 1e-4
+@5 set I1 0
+@6 set I1 1
+@6 expect O1 0.25 tol 1e-4
+@7 set I1 0
+@8 set I1 1
+@8 expect O1 0.25 tol 1e-4
+@9 set I1 0
+@10 set I1 1
+@10 expect O1 0.5 tol 1e-4
+@11 set I1 0

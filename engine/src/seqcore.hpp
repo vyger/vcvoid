@@ -264,6 +264,13 @@ public:
         // press into a start press. Drop it.
         if (!showButtons) seAnchorLane_ = -1;
 
+        // `bulkedit` is a plain level with no gesture: sample it once here, just
+        // before the edit surface runs, and every edit made this tick stamps (or
+        // does not stamp) the steps to its right accordingly. bulkStampFrom_ is
+        // the per-tick record of what was stamped (see markStamped).
+        bulkEdit_ = in("bulkedit").value(s) >= kHigh;
+        bulkStampFrom_ = -1;
+
         // recall the motors when the visible page/mode changed
         if (page != shownPage_ || fadermode != shownMode_) recall = true;
         shownPage_ = page;
@@ -554,7 +561,72 @@ protected:
     // entry point the skins call for a fader that moved).
     // Returns true if the stored value actually changed (drives gate auto-on).
     bool applyEdit(EngineState& s, int fm, int step, float pos, float& snapped) {
-        return setLaneValue(s, fm, step, pos, snapped);
+        bool changed = setLaneValue(s, fm, step, pos, snapped);
+        if (changed) bulkStamp(s, fm, step);
+        return changed;
+    }
+
+    // ---- bulkedit ----------------------------------------------------------
+    // motoquencer.md `bulkedit`: "if you move one fader (or encoder) or
+    // touch/press one button, all other faders (or encoders) *at the right of the
+    // modified step* will move along to the same value – even in the steps that
+    // are currently on another page".
+    //
+    // A plain level (no gesture), sampled once per tick in tick() and read by the
+    // edit entry points below. "At the right" = every higher step number up to
+    // `numsteps` — the whole track, not just the played range, and never
+    // leftwards. Only a USER edit stamps: luckyfaders and the other machine
+    // writers go through setLaneValue and draw their own value per step.
+    //
+    // Only the addressed lane is copied. The pitch edit's gate auto-on stays with
+    // the fader that really moved (SPEC-GAP: the manual describes the OTHER faders
+    // "moving along to the same value" and nothing else — a single CTRL move must
+    // not switch the whole track's gates on).
+    //
+    // In a `linktonext` chain the stamp is local by construction: only the
+    // instance that owns the edited surface runs editSurface, so it stamps its own
+    // steps over its own (inherited) geometry and the other lanes of the track
+    // keep their values.
+    void bulkStamp(EngineState& s, int fm, int from) {
+        if (!bulkEdit_ || from + 1 >= numsteps_) return;
+        float pos = storedPos(s, fm, from), snapped;
+        for (int i = from + 1; i < numsteps_; i++) setLaneValue(s, fm, i, pos, snapped);
+        markStamped(from + 1);
+    }
+
+    // The button-lane half. "The same value" is the RESULTING value of the pressed
+    // step (gate on/off, gate pattern, skip), not the toggle: re-toggling every
+    // step to the right would flip the ones that already agree with the edit,
+    // which is the opposite of what the manual asks for.
+    //
+    // buttonmode 1 (start/end) is EXEMPT — it is a two-finger range gesture, not a
+    // per-step value, so there is nothing to copy (SPEC-GAP: the manual's bulkedit
+    // row does not mention it; it talks about a value the buttons to the right can
+    // take).
+    void bulkStampButton(int bm, int from) {
+        if (!bulkEdit_ || from + 1 >= numsteps_) return;
+        for (int i = from + 1; i < numsteps_; i++) {
+            switch (bm) {
+                case 0: cur_.gate[i]    = cur_.gate[from];    break;
+                case 2: cur_.gatepat[i] = cur_.gatepat[from]; break;
+                case 3: cur_.skip[i]    = cur_.skip[from];    break;
+                default: return;                              // 1 = start/end: exempt
+            }
+        }
+        markStamped(from + 1);
+    }
+
+    // Remember the leftmost step the stamp rewrote this tick. The skins walk their
+    // lanes ascending, so a stamped lane to the RIGHT of the edited one is still
+    // ahead of them in this very tick: without this it would be read back from its
+    // own (unmoved) physical fader and the fresh value lost again. bulkStamped()
+    // makes those lanes take the motorized-recall branch instead.
+    void markStamped(int step) {
+        if (bulkStampFrom_ < 0 || step < bulkStampFrom_) bulkStampFrom_ = step;
+    }
+    // True while a lane the bulk stamp rewrote is still to be visited this tick.
+    bool bulkStamped(int step) const {
+        return bulkStampFrom_ >= 0 && step >= bulkStampFrom_;
     }
 
     // Push-button edit shared by both skins (M4 touch plate / E4 encoder push).
@@ -574,6 +646,7 @@ protected:
             case 3: cur_.skip[step] = !cur_.skip[step]; break;
             default: break;
         }
+        bulkStampButton(bm, step);          // `bulkedit`, see bulkStampButton
     }
 
     // buttonmode 1, motoquencer.md §"Start and end": "Touching a button changes
@@ -939,7 +1012,17 @@ protected:
 
     // Encoder edit: nudge a step's value in fadermode fm by `detents` notches/units
     // (encoders have no absolute position). Returns true if the value changed.
+    // The USER-edit entry point of the E4 skin, so a change bulk-stamps the steps
+    // to the right (see bulkStamp) exactly like a fader move does.
     bool adjustByDetents(EngineState& s, int fm, int step, long detents) {
+        bool changed = nudgeLaneValue(s, fm, step, detents);
+        if (changed) bulkStamp(s, fm, step);
+        return changed;
+    }
+
+    // The plain relative column write behind adjustByDetents (the counterpart of
+    // setLaneValue for encoders).
+    bool nudgeLaneValue(EngineState& s, int fm, int step, long detents) {
         if (detents == 0) return false;
         int N = notchesFor(s, fm);
         auto nudgeIdx = [&](int cur, int hi) {
@@ -1414,6 +1497,13 @@ protected:
     // editing view
     int  shownPage_ = -1, shownMode_ = -1;
     bool wasSelected_ = false;
+
+    // `bulkedit`, sampled once per tick before the edit surface runs, and the
+    // leftmost step this tick's stamp rewrote (-1 = none). Both are per-tick
+    // scratch, not state: nothing about a bulk edit survives the tick except the
+    // step values it wrote.
+    bool bulkEdit_ = false;
+    int  bulkStampFrom_ = -1;
 
     // Interactive start/end (motoquencer.md §"Start and end"). Two INDEPENDENT
     // override slots, 0-based, -1 = not overridden (follow the startstep /

@@ -1,0 +1,74 @@
+# motoquencer `bulkedit` across pages. motoquencer.md: the faders to the right of
+# the modified step move along "even in the steps that are currently on another
+# page". Eight steps on four faders = two pages.
+#
+# With bulkedit held, step 0 (page 0, lane 1) is moved to 0.5: every step 1..7
+# follows, including the four that are off-screen on page 1 — switching to page 1
+# shows all four faders recalled to 0.5. Editing step 5 (page 1, lane 2) then
+# stamps only steps 6 and 7: step 4 and the whole of page 0 keep 0.5.
+tickrate 100
+patch <<<
+[m4]
+[motoquencer]
+    clock       = I1
+    bulkedit    = I2
+    page        = I3
+    numsteps    = 8
+    numfaders   = 4
+    quantize    = 0
+    cvbase      = 0
+    cvrange     = 1
+    holdcv      = 0
+    defaultgate = 1
+    cv          = O1
+>>>
+@0 set I2 1
+# page 0, lane 1 = step 0 -> stamps steps 1..7.
+@1 move F1 0.5
+@1 expect F1 0.5 tol 1e-4
+@1 expect F2 0.5 tol 1e-4
+@1 expect F3 0.5 tol 1e-4
+@1 expect F4 0.5 tol 1e-4
+# page 1 (steps 4..7) was stamped too, even though it was not shown.
+@2 set I3 1
+@2 expect F1 0.5 tol 1e-4
+@2 expect F2 0.5 tol 1e-4
+@2 expect F3 0.5 tol 1e-4
+@2 expect F4 0.5 tol 1e-4
+# lane 2 of page 1 = step 5 -> stamps steps 6 and 7 only.
+@3 move F2 0.25
+@3 expect F1 0.5 tol 1e-4
+@3 expect F2 0.25 tol 1e-4
+@3 expect F3 0.25 tol 1e-4
+@3 expect F4 0.25 tol 1e-4
+# back to page 0: untouched, the stamp never walks left.
+@4 set I3 0
+@4 expect F1 0.5 tol 1e-4
+@4 expect F2 0.5 tol 1e-4
+@4 expect F3 0.5 tol 1e-4
+@4 expect F4 0.5 tol 1e-4
+# play all eight steps: 0.5 x5, then 0.25 x3.
+@5 set I1 1
+@5 expect O1 0.5 tol 1e-4
+@6 set I1 0
+@7 set I1 1
+@7 expect O1 0.5 tol 1e-4
+@8 set I1 0
+@9 set I1 1
+@9 expect O1 0.5 tol 1e-4
+@10 set I1 0
+@11 set I1 1
+@11 expect O1 0.5 tol 1e-4
+@12 set I1 0
+@13 set I1 1
+@13 expect O1 0.5 tol 1e-4
+@14 set I1 0
+@15 set I1 1
+@15 expect O1 0.25 tol 1e-4
+@16 set I1 0
+@17 set I1 1
+@17 expect O1 0.25 tol 1e-4
+@18 set I1 0
+@19 set I1 1
+@19 expect O1 0.25 tol 1e-4
+@20 set I1 0
