@@ -568,7 +568,8 @@ circuits:
       continuous CV; no absolute position / motor / haptics / readback, so no
       expect F -- edits observed through cv/gate), encoder PUSH toggles the
       buttonmode parameter (gate/skip/gate-pattern), pitch-edit gate auto-on;
-      the composemode audition hook is wired into the encoder edit path too.
+      the composemode audition hook is wired into the encoder edit path too,
+      and so is bulkedit (a turn stamps the steps to the right, like a fader).
       Both push EDGES are reported to the core, so buttonmode 1's two-finger
       start/end gesture works on the encoders exactly as on the M4 plates.
       All motoquencer IMPLEMENTED and DEFERRED scope applies identically
@@ -577,8 +578,8 @@ circuits:
       mapping -- zorder=0 (natural order) modelled, zorder 1..3 and nume4s
       inert (documented SPEC-GAP: need E4 grid geometry; no effect on played
       cv/gate). requires-human: LED ring semantics need real E4 hardware.
-      5 goldens (transport, turn-edit + push-gate, fadermode/repeats,
-      lucky-gates, start/end push gesture)."
+      6 goldens (transport, turn-edit + push-gate, fadermode/repeats,
+      lucky-gates, start/end push gesture, bulkedit)."
   euklid:
     status: done
     difficulty: easy
@@ -1080,7 +1081,12 @@ circuits:
       engine RNG, decided once at step entry); pitch accumulator (advances on
       autoreset); select/selectat overlay, 4 presets,
       clear/clearall/clearskips/clearrepeats, defaultcv (a notch index when
-      cvnotches>=2)/defaultgate; outputs cv/gate/startofsequence (10 ms
+      cvnotches>=2)/defaultgate; bulkedit (a user edit stamps every step to the
+      RIGHT of the edited one with the same value, across pages, up to numsteps
+      -- fader, encoder AND button lanes; the button lanes copy the pressed
+      step's RESULTING value rather than re-applying the toggle, and the M4
+      re-commands the stamped lanes so the motors follow); outputs
+      cv/gate/startofsequence (10 ms
       trigger)/currentstep/currentpage/accumulator/startstepout/endstepout;
       all 16 lucky* randomizers with luckychance/scope/amount/cvbase;
       linktonext chains -- one chain-wide fadermode AND buttonmode off the main
@@ -1099,7 +1105,7 @@ circuits:
       with no headless analog, or panel-only; documented in seqcore.hpp): form
       + startofpart, movement patterns 1..7 (pattern 0/linear only),
       metricsaver, constantlength, keyboard recording, copy/paste/
-      pastefaders/pastebuttons/stepcopy/bulkedit (the shared-button rule for
+      pastefaders/pastebuttons/stepcopy (the shared-button rule for
       stepcopy + doublerange on one button lands with stepcopy), pitch
       randomization (stored but inert; manual gives no distribution),
       taptempo, DB8E display, dontsave/SD persistence, LED feel/color.
@@ -1110,10 +1116,19 @@ circuits:
       the lower lane is the end/anchor, the higher the start; setendstep
       latches its first observed value silently at boot; doublerange copies
       partially and clamps the end to numsteps when the doubled range does not
-      fit. 50 goldens (incl. composemode, holdcv-drift, defaultcv-notches,
+      fit; bulkedit -- 'at the right' read as every higher step number up to
+      numsteps (the whole track, not the played range), the pitch edit's gate
+      auto-on stays with the fader that really MOVED (a stamp copies the
+      addressed lane and nothing else, so one CTRL move cannot switch the
+      track's gates on), buttonmode 1 (start/end) is exempt because a range
+      gesture has no per-step value to copy, and machine writers (luckyfaders
+      and friends, which draw their own value per step) never stamp.
+      58 goldens (incl. composemode, holdcv-drift, defaultcv-notches,
       gatelength-min, startend touch/two-finger/clear/setendstep/pages,
       doublerange basic/limits, linktonext transport/mirroring/holdcv/
-      buttonmode/lucky-order/startend/doublerange). requires-human: motor
+      buttonmode/lucky-order/startend/doublerange, bulkedit faders/pages/
+      buttons/startend-exempt/linktonext/off/lucky-unaffected).
+      requires-human: motor
       haptics + auto-moving faders + LED rings need real M4 hardware."
   motorfader:
     status: done

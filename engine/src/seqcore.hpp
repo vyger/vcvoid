@@ -79,6 +79,11 @@
 //     numfaders / numsteps (#34). Stating any of them on a member still wins.
 //   * select/selectat overlay, 4 presets, clear / clearall / clearskips /
 //     clearrepeats, defaultcv (a notch index when cvnotches >= 2) / defaultgate.
+//   * `bulkedit`: while it is high, a user edit — fader, encoder or button —
+//     stamps every step to the RIGHT of the edited one with the same value,
+//     across pages, up to numsteps. The button lanes copy the pressed step's
+//     RESULTING value instead of re-applying the toggle; buttonmode 1 (start/end)
+//     is exempt; machine writers (luckyfaders and friends) never stamp.
 //   * composemode: while high the transport ignores clock edges; a CV edit
 //     (fadermode 0) jumps to that step, outputs its CV and opens a short gate.
 //   * "I Feel Lucky": all 16 one-time-randomization triggers (luckyfaders,
@@ -98,7 +103,7 @@
 //     repeat/skip length compensation (both read but inert).
 //   * keyboard recording: keyboardcv/keyboardgate/keyboardmode/recordmode/
 //     recordsilence.
-//   * copy / paste / pastefaders / pastebuttons / stepcopy / bulkedit. (Note the
+//   * copy / paste / pastefaders / pastebuttons / stepcopy. (Note the
 //     shared-button rule for stepcopy + doublerange on one button — doublerange
 //     then fires on the RELEASE, if no step was touched meanwhile — lands with
 //     stepcopy; see the TODO at the doublerange edge detector.)
@@ -143,6 +148,12 @@
 //     the manual only rules out a range already at maximum. Copy as many steps as
 //     fit and clamp the end to numsteps; the alternative (no-op unless 2L fits)
 //     would make doublerange silently dead on most odd ranges.
+//   * `bulkedit` (see bulkStamp): "at the right of the modified step" is read as
+//     every higher step number up to numsteps — the whole track, not just the
+//     played range. The pitch edit's gate auto-on stays with the fader that
+//     really MOVED (a stamp copies the addressed lane and nothing else, so one
+//     held button cannot switch the whole track's gates on), and buttonmode 1
+//     (start/end) is exempt because a range gesture has no per-step value.
 //   * "I Feel Lucky" distributions: the manual describes each op's INTENT and its
 //     luckyamount meaning but never pins an exact distribution or bit-for-bit
 //     rounding. Literal, property-faithful readings (all draws from the engine RNG,
