@@ -507,9 +507,15 @@ protected:
         }
     }
 
-    // Apply a user fader position to a step's value in a fadermode.
-    // Returns true if the stored value actually changed (drives gate auto-on).
-    bool applyEdit(EngineState& s, int fm, int step, float pos, float& snapped) {
+    // Write a step's value in a fadermode from a raw 0..1 fader position, snapping
+    // it to that lane's notch grid. `snapped` receives the rest position of the
+    // value actually stored (what the motor is commanded to); the return value
+    // says whether the stored value really changed.
+    //
+    // This is the plain column write, shared by every writer of a lane: the user
+    // edit (applyEdit, which adds the interaction semantics on top) and the
+    // machine-driven rerolls of luckyfaders.
+    bool setLaneValue(EngineState& s, int fm, int step, float pos, float& snapped) {
         pos = clampf(pos, 0.0f, 1.0f);
         int N = notchesFor(s, fm);
         auto snapIdx = [&](int n) { return fc::notchIndex(pos, n); };
@@ -542,6 +548,13 @@ protected:
             default: { bool v = pos >= 0.5f; bool ch = v != cur_.skip[step];
                       cur_.skip[step] = v; snapped = v ? 1.0f : 0.0f; return ch; }
         }
+    }
+
+    // Apply a USER fader position to a step's value in a fadermode (the edit
+    // entry point the skins call for a fader that moved).
+    // Returns true if the stored value actually changed (drives gate auto-on).
+    bool applyEdit(EngineState& s, int fm, int step, float pos, float& snapped) {
+        return setLaneValue(s, fm, step, pos, snapped);
     }
 
     // Push-button edit shared by both skins (M4 touch plate / E4 encoder push).
@@ -805,9 +818,11 @@ protected:
                 // rerolls the one lane visible on the edit surface). luckyTargets
                 // above still drew its chance coins, keeping the RNG stream aligned.
                 if (!faderOwner) break;
+                // Each target gets its OWN draw, so this is the plain column write
+                // (setLaneValue), not the user-edit entry point.
                 for (int i : T) {                 // amount caps the max; fm 0 offsets by lvbase
                     float pos = (fm == 0 ? lvbase : 0.0f) + U() * amount, snapped;
-                    applyEdit(s, fm, i, clampf(pos, 0.0f, 1.0f), snapped);
+                    setLaneValue(s, fm, i, clampf(pos, 0.0f, 1.0f), snapped);
                 }
                 break;
             case 1:   // luckybuttons: reroll the current button lane (per buttonmode).
