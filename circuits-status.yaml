@@ -1100,11 +1100,22 @@ circuits:
       member's own gate instead of the main's; a member inherits the main's
       geometry -- firstfader/numfaders/numsteps -- for each of those it
       leaves unpatched, so a linked lane pages with the main instead of
-      falling back to the whole M4 bank).
+      falling back to the whole M4 bank); constantlength 1/2 -- length
+      compensation at the EDIT sites (fader, encoder detent, touch plate),
+      never the transport: the clocks a repeats edit (level 1) or a skip
+      toggle (level 2) adds or removes are taken out of / handed to the
+      following steps, searching forward from the edited step, wrapping
+      round the range and stepping over steps already at the floor of 1
+      repeat, with skip spendable as currency at level 2 (skip a step to
+      reach length 0, un-skip one to hand its repeats back); every step it
+      rewrites gets its motor re-commanded, or the untouched physical fader
+      would be read back as an edit and undo the compensation. The
+      automatic skip clear on a repeats edit now fires only on a real
+      CHANGE (motoquencer.md:183), not on every pass through fadermode 3.
       DEFERRED (advanced live-performance conveniences, interactive gestures
       with no headless analog, or panel-only; documented in seqcore.hpp): form
       + startofpart, movement patterns 1..7 (pattern 0/linear only),
-      metricsaver, constantlength, keyboard recording, copy/paste/
+      metricsaver, keyboard recording, copy/paste/
       pastefaders/pastebuttons/stepcopy (the shared-button rule for
       stepcopy + doublerange on one button lands with stepcopy), pitch
       randomization (stored but inert; manual gives no distribution),
@@ -1122,13 +1133,26 @@ circuits:
       addressed lane and nothing else, so one CTRL move cannot switch the
       track's gates on), buttonmode 1 (start/end) is exempt because a range
       gesture has no per-step value to copy, and machine writers (luckyfaders
-      and friends, which draw their own value per step) never stamp.
-      58 goldens (incl. composemode, holdcv-drift, defaultcv-notches,
+      and friends, which draw their own value per step) never stamp;
+      constantlength measures a step as `skip ? 0 : repeats` at BOTH
+      levels (so the skip a repeats edit clears is accounted for at level 1
+      too -- the levels differ only in what may be MODIFIED), an edit the
+      range cannot absorb still stands with the unabsorbed remainder dropped
+      (the manual only promises the feature *tries* to hold the length, and
+      snapping a motor fader back would fight the hand on it), un-skipping is
+      the mirror of skipping and fires only when the whole step fits what is
+      still owed, the level is read off the chain MAIN like the range (the
+      Forge's MFPS generator wires the input on a track's main lane only), and
+      bulk rewrites -- clearrepeats/clearskips/luckyrepeats/luckyskips/presets/
+      doublerange -- are outside the feature, which the manual frames as the
+      answer to a change in one step. 68 goldens (incl. composemode,
+      holdcv-drift, defaultcv-notches,
       gatelength-min, startend touch/two-finger/clear/setendstep/pages,
       doublerange basic/limits, linktonext transport/mirroring/holdcv/
       buttonmode/lucky-order/startend/doublerange, bulkedit faders/pages/
-      buttons/startend-exempt/linktonext/off/lucky-unaffected).
-      requires-human: motor
+      buttons/startend-exempt/linktonext/off/lucky-unaffected, constantlength
+      off-repeats/off-skip/repeats/wrap-floor/skip/skip-currency/range/
+      partial/linktonext). requires-human: motor
       haptics + auto-moving faders + LED rings need real M4 hardware."
   motorfader:
     status: done

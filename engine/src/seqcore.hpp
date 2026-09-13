@@ -92,6 +92,9 @@
 //     luckygateprob, luckyrepeats, luckyratchets, luckyshuffle, luckyreverse) with
 //     luckychance / luckyscope / luckyamount / luckycvbase. Each trigger permanently
 //     mutates the dialed sequence and re-commands the motors so the reroll shows.
+//   * `constantlength` 1 / 2 — length compensation at the edit sites: a repeats
+//     (level 1) or skip (level 2) edit is paid for by the following steps of the
+//     start..end range. See the block comment at compensateLength().
 //
 // DEFERRED (documented, NOT implemented — every one is either a live-performance
 // convenience the manual frames as advanced, an interactive gesture with no
@@ -99,8 +102,10 @@
 //   * `form` (AAAB/ABAC/…) and the `startofpart` output — song-form step slicing.
 //   * movement `pattern` 1..7 (two-forward-one-back etc.) — pattern 0 (linear)
 //     only. The others interact with direction/pingpong/forms; deferred whole.
-//   * `metricsaver` and `constantlength` — polymetric clock-snap-back and
-//     repeat/skip length compensation (both read but inert).
+//   * `metricsaver` — the polymetric clock snap-back (read but inert). Unlike
+//     `constantlength` (implemented, see below) it needs a running count of the
+//     clock cycles since the last external reset plus a rule for re-entering the
+//     grid, which the manual only sketches.
 //   * keyboard recording: keyboardcv/keyboardgate/keyboardmode/recordmode/
 //     recordsilence.
 //   * copy / paste / pastefaders / pastebuttons / stepcopy. (Note the
