@@ -1,0 +1,75 @@
+# motoquencer: with a `form`, the pitch accumulator advances once per COMPLETE
+# form, not once per part (issue #53). The manual is explicit:
+#
+#   "If you enable a form like AAAB, the accumulator is increased at the end of
+#    the complete form. So even if the A part repeated three times, the
+#    accumulator-sensitive steps change their note for each repetition of A but
+#    just at the end of the whole sequence."
+#
+# Two steps under AAAB give A = step 0 and B = step 1, hence the four-clock form
+# 0,0,0,1. With accumulatorrange = 3 the `accumulator` output therefore holds one
+# value for four clocks at a time: 0,0,0,0 | 1,1,1,1 | 2,2,2,2 | ...
+#
+# `startofpart` fires on all four clocks (each is a part entry), while
+# `startofsequence` fires only on the first of each group of four -- the pair of
+# outputs is exactly what tells a form apart from a plain four-step sequence.
+#
+# The accumulator is an integer 0..16, so it rides an internal cable scaled by
+# 1/10 (an O jack would clamp it).
+tickrate 100
+patch <<<
+[m4]
+[motoquencer]
+    clock            = I1
+    numsteps         = 2
+    numfaders        = 2
+    form             = 1
+    accumulatorrange = 3
+    accumulator      = _ACC
+    startofpart      = O3
+    startofsequence  = O2
+[copy]
+    input  = _ACC * 0.1
+    output = O1
+>>>
+# --- form 1: four part entries, accumulator still 0 --------------------------
+@2 set I1 1
+@2 expect O1 0 tol 1e-4
+@2 expect O3 1 tol 1e-4
+@2 expect O2 1 tol 1e-4
+@3 set I1 0
+@4 set I1 1
+@4 expect O1 0 tol 1e-4
+@4 expect O3 1 tol 1e-4
+@4 expect O2 0 tol 1e-4
+@5 set I1 0
+@6 set I1 1
+@6 expect O1 0 tol 1e-4
+@6 expect O3 1 tol 1e-4
+@6 expect O2 0 tol 1e-4
+@7 set I1 0
+@8 set I1 1
+@8 expect O1 0 tol 1e-4
+@8 expect O3 1 tol 1e-4
+@8 expect O2 0 tol 1e-4
+@9 set I1 0
+# --- end of the complete form: the accumulator advances ONCE -----------------
+@10 set I1 1
+@10 expect O1 0.1 tol 1e-4
+@10 expect O3 1 tol 1e-4
+@10 expect O2 1 tol 1e-4
+@11 set I1 0
+@12 set I1 1
+@12 expect O1 0.1 tol 1e-4
+@12 expect O2 0 tol 1e-4
+@13 set I1 0
+@14 set I1 1
+@14 expect O1 0.1 tol 1e-4
+@15 set I1 0
+@16 set I1 1
+@16 expect O1 0.1 tol 1e-4
+@17 set I1 0
+@18 set I1 1
+@18 expect O1 0.2 tol 1e-4
+@18 expect O2 1 tol 1e-4
+@19 set I1 0

@@ -1,0 +1,102 @@
+# motoquencer `form` combined with skipped steps (issue #53).
+#
+# The manual never says how a form and a skipped step interact, so this is a
+# SPEC-GAP decision: the parts are INDEPENDENT WINDOWS. A skipped step is skipped
+# inside the part entry it belongs to and nowhere else, and a part whose steps are
+# all skipped is simply passed over.
+#
+# Four steps under form 2 (AABB) give the part entries A=0,1 | A=0,1 | B=2,3 | B=2,3.
+#
+# Phase 1 skips step 1 (fadermode 7, fader up). The A entries shrink to a single
+# step each but are still two SEPARATE part entries, so `startofpart` fires twice
+# over them: 0 | 0 | 2,3 | 2,3 -- six clocks, one `startofsequence`.
+#
+# Phase 2 also skips steps 2 and 3, emptying both B entries. They are passed over
+# entirely and the form collapses to the two A entries: 0 | 0 -- two clocks, still
+# two `startofpart` triggers, one `startofsequence`.
+#
+# Step numbers do not fit on an output jack (they clamp at +/-10 V), so
+# `currentstep` rides an internal cable scaled by 1/10: step N reads N/10.
+tickrate 100
+patch <<<
+[m4]
+[motoquencer]
+    clock           = I1
+    fadermode       = I2
+    numsteps        = 4
+    numfaders       = 4
+    form            = 2
+    currentstep     = _CS
+    startofpart     = O3
+    startofsequence = O2
+[copy]
+    input  = _CS * 0.1
+    output = O1
+>>>
+# fadermode 7 = skip; raise lane 2 to skip step 1.
+@1 set I2 7
+@2 move F2 1.0
+@2 expect F2 1.0 tol 1e-4
+@3 set I2 0
+# --- phase 1: A shrinks to one step, but stays two part entries --------------
+@4 set I1 1
+@4 expect O1 0 tol 1e-4
+@4 expect O3 1 tol 1e-4
+@4 expect O2 1 tol 1e-4
+@5 set I1 0
+@6 set I1 1
+@6 expect O1 0 tol 1e-4
+@6 expect O3 1 tol 1e-4
+@6 expect O2 0 tol 1e-4
+@7 set I1 0
+@8 set I1 1
+@8 expect O1 0.2 tol 1e-4
+@8 expect O3 1 tol 1e-4
+@8 expect O2 0 tol 1e-4
+@9 set I1 0
+@10 set I1 1
+@10 expect O1 0.3 tol 1e-4
+@10 expect O3 0 tol 1e-4
+@11 set I1 0
+@12 set I1 1
+@12 expect O1 0.2 tol 1e-4
+@12 expect O3 1 tol 1e-4
+@13 set I1 0
+@14 set I1 1
+@14 expect O1 0.3 tol 1e-4
+@14 expect O3 0 tol 1e-4
+@15 set I1 0
+# six clocks per form, then the whole form restarts
+@16 set I1 1
+@16 expect O1 0 tol 1e-4
+@16 expect O3 1 tol 1e-4
+@16 expect O2 1 tol 1e-4
+@17 set I1 0
+# --- phase 2: skip steps 2 and 3 too, emptying both B entries ----------------
+@18 set I2 7
+@19 move F3 1.0
+@20 move F4 1.0
+@20 expect F4 1.0 tol 1e-4
+@21 set I2 0
+# the second A entry still plays ...
+@22 set I1 1
+@22 expect O1 0 tol 1e-4
+@22 expect O3 1 tol 1e-4
+@22 expect O2 0 tol 1e-4
+@23 set I1 0
+# ... and both B entries are passed over: the form is now two clocks long.
+@24 set I1 1
+@24 expect O1 0 tol 1e-4
+@24 expect O3 1 tol 1e-4
+@24 expect O2 1 tol 1e-4
+@25 set I1 0
+@26 set I1 1
+@26 expect O1 0 tol 1e-4
+@26 expect O3 1 tol 1e-4
+@26 expect O2 0 tol 1e-4
+@27 set I1 0
+@28 set I1 1
+@28 expect O1 0 tol 1e-4
+@28 expect O3 1 tol 1e-4
+@28 expect O2 1 tol 1e-4
+@29 set I1 0

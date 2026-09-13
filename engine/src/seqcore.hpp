@@ -1247,9 +1247,9 @@ protected:
     // step-order feature owns exactly one of them:
     //
     //   1. rangeWindow()  — the steps between start and end, in range order.
-    //   2. (song forms)   — that window cut into parts, played in the form's
-    //                       order. Not yet: `form` is still deferred here.
-    //   3. stepThrough()  — ONE window walked per direction + pingpong.
+    //   2. formSequence() — that window cut into parts (A/B/C), played in the
+    //                       order the `form` input names.
+    //   3. stepThrough()  — ONE part walked per direction + pingpong.
     //
     // playOrder() stitches the layers together and hands the transport a flat
     // list of logical step indices plus, per position, which part of the form
@@ -1289,11 +1289,58 @@ protected:
         outSteps.insert(outSteps.end(), part.begin(), part.end());
     }
 
+    // Layer 2: the song form. `form` "allows you to slice your steps into two or
+    // three parts and create musical song forms like AAAB or ABAC". The letters
+    // of each form, as part indices:
+    //   0 = A (off), 1 = AAAB, 2 = AABB, 3 = ABAC, 4 = AAABAAAC, 5 = AB, 6 = AAB.
+    // Note form 5 (AB) is NOT the same as form 0: the parts are walked
+    // separately, which shows the moment direction / pingpong are in play.
+    static const std::vector<int>& formSequence(int form) {
+        static const std::vector<int> kForms[7] = {
+            {0},                          // 0  A
+            {0, 0, 0, 1},                 // 1  AAAB
+            {0, 0, 1, 1},                 // 2  AABB
+            {0, 1, 0, 2},                 // 3  ABAC
+            {0, 0, 0, 1, 0, 0, 0, 2},     // 4  AAABAAAC
+            {0, 1},                       // 5  AB
+            {0, 0, 1},                    // 6  AAB
+        };
+        return kForms[clampi(form, 0, 6)];
+    }
+
     PlayOrder playOrder(EngineState& s) {
         PlayOrder o;
-        stepThrough(s, rangeWindow(s), o.steps);
-        if (o.steps.empty()) o.steps.push_back(0);
-        o.part.assign(o.steps.size(), 0);
+        std::vector<int> win = rangeWindow(s);
+        int form = clampi((int)std::lround(in("form").value(s)), 0, 6);
+        if (form == 0) {                          // no parts at all
+            stepThrough(s, win, o.steps);
+            if (o.steps.empty()) o.steps.push_back(0);
+            o.part.assign(o.steps.size(), 0);
+            return o;
+        }
+        o.formed = true;
+        const std::vector<int>& seq = formSequence(form);
+        int parts = 0;
+        for (int letter : seq) if (letter + 1 > parts) parts = letter + 1;
+        int n = (int)win.size();
+        // SPEC-GAP: the manual only shrugs at a window that does not divide
+        // evenly ("or else your parts won't have equal size (which on the other
+        // hand could be funny anyway)"). We give the EXTRA steps to the EARLIER
+        // parts, so A is the longer one — ceiling boundaries. A part can come out
+        // empty when the window is shorter than the part count; it is then simply
+        // not played, and contributes no part entry.
+        auto bound = [&](int i) { return (i * n + parts - 1) / parts; };
+        int entry = 0;
+        for (int letter : seq) {
+            int a = bound(letter), b = bound(letter + 1);
+            size_t before = o.steps.size();
+            stepThrough(s, std::vector<int>(win.begin() + a, win.begin() + b), o.steps);
+            if (o.steps.size() == before) continue;      // empty part: passed over
+            // Every ENTRY into a part is its own index, so re-entering A (AABB,
+            // ABAC) still reads as a new part and retriggers `startofpart`.
+            o.part.resize(o.steps.size(), entry++);
+        }
+        if (o.steps.empty()) { o.steps.push_back(0); o.part.assign(1, 0); }
         return o;
     }
 
@@ -1326,6 +1373,7 @@ protected:
             playPos_ = 0; pulse_ = 0; turn_ = 1; clocksSinceReset_ = 0;
             started_ = true; resetPending_ = false; triggerSos(s);
             enterStep(s, order.steps, 0);
+            enterPart(s, order, 0, true);
             return;
         }
 
@@ -1334,6 +1382,7 @@ protected:
             playPos_ = 0; pulse_ = 0; turn_ = 1; clocksSinceReset_ = 0;
             advanceAccumulator(s); triggerSos(s);
             enterStep(s, order.steps, 0);
+            enterPart(s, order, 0, true);
             return;
         }
 
@@ -1343,8 +1392,12 @@ protected:
         bool wrapped = false;
         int next = nextPlayedPos(s, order.steps, playPos_, wrapped);
         playPos_ = next;
+        // A wrap is the end of the COMPLETE form, not of a part: "if you enable a
+        // form like AAAB, the accumulator is increased at the end of the complete
+        // form", and startofsequence marks the same instant.
         if (wrapped) { turn_++; advanceAccumulator(s); triggerSos(s); }
         enterStep(s, order.steps, playPos_);
+        enterPart(s, order, playPos_, wrapped);
     }
 
     // A linktonext chain member is REMOTE CONTROLLED: it ignores its own clock /
@@ -1367,6 +1420,7 @@ protected:
             if (m->accEvtReset_) acc_ = 0; else advanceAccumulator(s);
         }
         if (m->sosEpoch_ != seenSosEpoch_) { seenSosEpoch_ = m->sosEpoch_; triggerSos(s); }
+        if (m->sopEpoch_ != seenSopEpoch_) { seenSopEpoch_ = m->sopEpoch_; triggerSop(s); }
         if (m->stepEpoch_ != seenStepEpoch_) {
             seenStepEpoch_ = m->stepEpoch_;
             started_ = true;
@@ -1394,6 +1448,20 @@ protected:
             if (!cur_.skip[physOf(s, order[pos])]) return pos;
         }
         return pos;   // all skipped -> hold (manual: repeats the most recent step)
+    }
+
+    // `startofpart` "outputs a trigger whenever a form part starts again". It
+    // fires on every ENTRY into a part — including the first part of the form,
+    // where it coincides with startofsequence (SPEC-GAP: the manual does not say
+    // whether the first one counts, and a part boundary is a part boundary) — and
+    // never at all when form = 0, where there are no parts to start.
+    // `restart` forces it on a reset / autoreset / wrap, where the part index may
+    // be unchanged (a one-part form) but the part genuinely started again.
+    void enterPart(EngineState& s, const PlayOrder& o, int pos, bool restart) {
+        int p = (pos >= 0 && pos < (int)o.part.size()) ? o.part[pos] : 0;
+        bool changed = restart || p != curPart_;
+        curPart_ = p;
+        if (o.formed && changed) triggerSop(s);
     }
 
     void advanceAccumulator(EngineState& s) {
@@ -1609,7 +1677,7 @@ protected:
     void emitHousekeeping(EngineState& s) {
         // 10 ms trigger window (DROID-standard), not a 1-tick pulse.
         out("startofsequence").set(s, (long)s.tick < sosUntil_ ? 1.0f : 0.0f);
-        out("startofpart").set(s, 0.0f);                    // forms deferred
+        out("startofpart").set(s, (long)s.tick < sopUntil_ ? 1.0f : 0.0f);
         out("currentstep").set(s, (float)(playStep_ < 0 ? 0 : playStep_));
         out("currentpage").set(s, (float)((playStep_ < 0 ? 0 : playStep_) / numFaders_));
         out("accumulator").set(s, (float)acc_);
@@ -1696,6 +1764,10 @@ protected:
         sosUntil_ = (long)s.tick + trigTicks(s);
         sosEpoch_++;                                // published to the chain members
     }
+    void triggerSop(EngineState& s) {
+        sopUntil_ = (long)s.tick + trigTicks(s);
+        sopEpoch_++;                                // published to the chain members
+    }
     static int clampi(int v, int lo, int hi) { return v < lo ? lo : (v > hi ? hi : v); }
     static float clampf(float v, float lo, float hi) { return v < lo ? lo : (v > hi ? hi : v); }
     static bool risingEdge(bool& prev, float v) {
@@ -1759,13 +1831,14 @@ protected:
     // (see transportLinked). Monotonic counters rather than one-tick flags, so a
     // member cannot miss one; accEvtReset_ says whether the latest accumulator
     // event was a reset (zero it) or a wrap (advance it by our own range).
-    uint64_t stepEpoch_ = 0, accEpoch_ = 0, sosEpoch_ = 0;
+    uint64_t stepEpoch_ = 0, accEpoch_ = 0, sosEpoch_ = 0, sopEpoch_ = 0;
     // Last luckyshuffle / luckyreverse permutation published by the main
     // (targets + the source step each target took), mirrored by the members.
     uint64_t orderEpoch_ = 0;
     std::vector<int> orderT_, orderSrc_;
     bool     accEvtReset_ = false;
     uint64_t seenStepEpoch_ = 0, seenAccEpoch_ = 0, seenSosEpoch_ = 0, seenOrderEpoch_ = 0;
+    uint64_t seenSopEpoch_ = 0;
     std::vector<bool> prevTouch_ = std::vector<bool>(kSteps, false);
 
     // transport
@@ -1780,6 +1853,8 @@ protected:
     float cvHeld_ = 0.0f;
     bool plays_ = false, tie_ = false, lastRandomPos_ = false;
     long sosUntil_ = 0;                         // startofsequence trigger-window end
+    long sopUntil_ = 0;                         // startofpart trigger-window end
+    int  curPart_ = -1;                         // form part entry being played
     uint64_t stepStart_ = 0;
     std::vector<std::pair<uint64_t, uint64_t>> gateWin_;
 

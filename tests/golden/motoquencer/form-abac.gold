@@ -1,0 +1,69 @@
+# motoquencer `form` = 3 (ABAC): "the patterns with the three parts A, B, and C
+# divide the steps into three equal sized parts" -- with six steps that is
+# A = 0,1  B = 2,3  C = 4,5, played A B A C (issue #53).
+#
+# Note the A part is re-entered as the third part entry, so `startofpart` fires
+# there too: it marks every entry into a part, not every distinct letter.
+# Step numbers do not fit on an output jack (they clamp at +/-10 V), so
+# `currentstep` rides an internal cable scaled by 1/10: step N reads N/10.
+tickrate 100
+patch <<<
+[m4]
+[m4]
+[motoquencer]
+    clock           = I1
+    numsteps        = 6
+    numfaders       = 6
+    form            = 3
+    currentstep     = _CS
+    startofpart     = O3
+    startofsequence = O2
+[copy]
+    input  = _CS * 0.1
+    output = O1
+>>>
+@2 set I1 1
+@2 expect O1 0 tol 1e-4
+@2 expect O3 1 tol 1e-4
+@2 expect O2 1 tol 1e-4
+@3 set I1 0
+@4 set I1 1
+@4 expect O1 0.1 tol 1e-4
+@4 expect O3 0 tol 1e-4
+@4 expect O2 0 tol 1e-4
+@5 set I1 0
+@6 set I1 1
+@6 expect O1 0.2 tol 1e-4
+@6 expect O3 1 tol 1e-4
+@6 expect O2 0 tol 1e-4
+@7 set I1 0
+@8 set I1 1
+@8 expect O1 0.3 tol 1e-4
+@8 expect O3 0 tol 1e-4
+@8 expect O2 0 tol 1e-4
+@9 set I1 0
+@10 set I1 1
+@10 expect O1 0 tol 1e-4
+@10 expect O3 1 tol 1e-4
+@10 expect O2 0 tol 1e-4
+@11 set I1 0
+@12 set I1 1
+@12 expect O1 0.1 tol 1e-4
+@12 expect O3 0 tol 1e-4
+@12 expect O2 0 tol 1e-4
+@13 set I1 0
+@14 set I1 1
+@14 expect O1 0.4 tol 1e-4
+@14 expect O3 1 tol 1e-4
+@14 expect O2 0 tol 1e-4
+@15 set I1 0
+@16 set I1 1
+@16 expect O1 0.5 tol 1e-4
+@16 expect O3 0 tol 1e-4
+@16 expect O2 0 tol 1e-4
+@17 set I1 0
+@18 set I1 1
+@18 expect O1 0 tol 1e-4
+@18 expect O3 1 tol 1e-4
+@18 expect O2 1 tol 1e-4
+@19 set I1 0

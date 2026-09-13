@@ -1,0 +1,43 @@
+# motoquencer: with `form` = 0 there are no parts, so `startofpart` never fires
+# (issue #53). The manual says the output triggers "whenever a form part starts
+# again. This is only interesting when you use `form`" -- and form 0 is described
+# as "forms are basically deactivated". A patch that leaves `form` alone must see
+# a dead `startofpart` jack, even though `startofsequence` is busy.
+#
+# This is the SPEC-GAP boundary of the "fires on every part entry, including the
+# first" rule: without a form there is no first part entry to fire on.
+tickrate 100
+patch <<<
+[m4]
+[motoquencer]
+    clock           = I1
+    numsteps        = 4
+    numfaders       = 4
+    form            = 0
+    startofpart     = O3
+    startofsequence = O2
+>>>
+@2 set I1 1
+@2 expect O2 1 tol 1e-4
+@2 expect O3 0 tol 1e-4
+@3 set I1 0
+@3 expect O3 0 tol 1e-4
+@4 set I1 1
+@4 expect O2 0 tol 1e-4
+@4 expect O3 0 tol 1e-4
+@5 set I1 0
+@6 set I1 1
+@6 expect O3 0 tol 1e-4
+@7 set I1 0
+@8 set I1 1
+@8 expect O3 0 tol 1e-4
+@9 set I1 0
+# the wrap: startofsequence fires, startofpart stays silent
+@10 set I1 1
+@10 expect O2 1 tol 1e-4
+@10 expect O3 0 tol 1e-4
+@11 set I1 0
+@12 set I1 1
+@12 expect O2 0 tol 1e-4
+@12 expect O3 0 tol 1e-4
+@13 set I1 0
