@@ -1,0 +1,46 @@
+# motoquencer `constantlength = 0` (the default): a skip is NOT length
+# compensated. motoquencer.md:213 — "Steps with Skip enabled will be skipped.
+# This shortens the duration of the sequence." The compensation of
+# motoquencer.md:922 is opt-in and only reaches skips at level 2, so with the
+# input off a skip simply drops that step's clock cycle.
+#
+# Characterisation: step 2 is skipped with its touch plate (buttonmode 3) and the
+# 4-step cycle shortens from 4 clocks to 3 — steps 1, 3, 4.
+tickrate 100
+patch <<<
+[m4]
+[motoquencer]
+    clock          = I1
+    constantlength = I3
+    buttonmode     = 3
+    numsteps       = 4
+    numfaders      = 4
+    quantize       = 0
+    cvbase         = 0
+    cvrange        = 1
+    defaultgate    = 1
+    cv             = O1
+>>>
+@2 move F1 0.0
+@3 move F2 0.25
+@4 move F3 0.5
+@5 move F4 0.75
+# plate 2 toggles skip on step 2
+@6 touch F2 1
+@7 touch F2 0
+# 3 clocks per cycle: steps 1, 3, 4 — step 2 is gone and nothing grows to fill it
+@10 set I1 1
+@10 expect O1 0 tol 1e-4
+@11 set I1 0
+@12 set I1 1
+@12 expect O1 0.5 tol 1e-4
+@13 set I1 0
+@14 set I1 1
+@14 expect O1 0.75 tol 1e-4
+@15 set I1 0
+@16 set I1 1
+@16 expect O1 0 tol 1e-4
+@17 set I1 0
+@18 set I1 1
+@18 expect O1 0.5 tol 1e-4
+@19 set I1 0

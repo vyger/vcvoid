@@ -1,0 +1,85 @@
+# motoquencer `constantlength = 2`: skip is also the CURRENCY the compensation
+# pays in, not just something it reacts to. motoquencer.md:922 — "also the *skip*
+# setting of steps is honored and modified in order to keep the length constant.
+# A skipped step essentially has the length 0 (or 0 repeats)."
+#
+# Every step starts at 1 repeat, so there is no room to shorten anything by
+# lowering repeats (the floor is 1). Raising step 1 to 2 repeats therefore has to
+# be paid for by SKIPPING the next step in the search — step 2 — which is exactly
+# the "length 0" the manual describes. The cycle stays 4 clocks.
+#
+# SPEC-GAP (documented in seqcore.hpp): the manual never says which way round to
+# spend. A step's capacity to give is its full repeat count at level 2 (reach 0 by
+# skipping it) and one less at level 1 (the floor is 1), and the skip is only used
+# when the whole step is owed — a partial debt is taken out of repeats instead.
+#
+# Dialling step 1 back down to 1 repeat then owes a clock the other way, and the
+# first candidate the forward search meets is the skipped step 2: un-skipping it
+# hands back exactly its 1 repeat. Un-skip is the mirror of skip.
+tickrate 100
+patch <<<
+[m4]
+[motoquencer]
+    clock          = I1
+    fadermode      = I2
+    constantlength = I3
+    reset          = I4
+    numsteps       = 4
+    numfaders      = 4
+    quantize       = 0
+    cvbase         = 0
+    cvrange        = 1
+    defaultgate    = 1
+    cv             = O1
+>>>
+@2 move F1 0.0
+@3 move F2 0.25
+@4 move F3 0.5
+@5 move F4 0.75
+@6 set I2 3
+@7 set I3 2
+# step 1: 1 -> 2 repeats (notch 1). Nothing has repeats to spare, so step 2 is
+# skipped to pay for it.
+@8 move F1 0.0666667
+@8 expect F1 0.0666667 tol 1e-4
+@8 expect F2 0 tol 1e-4
+@9 set I2 0
+# 4 clocks per cycle: step 1 twice, (step 2 skipped), steps 3 and 4 once.
+@11 set I1 1
+@11 expect O1 0 tol 1e-4
+@12 set I1 0
+@13 set I1 1
+@13 expect O1 0 tol 1e-4
+@14 set I1 0
+@15 set I1 1
+@15 expect O1 0.5 tol 1e-4
+@16 set I1 0
+@17 set I1 1
+@17 expect O1 0.75 tol 1e-4
+@18 set I1 0
+@19 set I1 1
+@19 expect O1 0 tol 1e-4
+@20 set I1 0
+# now step 1: 2 -> 1 repeats. The clock owed goes to the skipped step 2, which is
+# un-skipped to absorb it.
+@22 set I2 3
+@23 move F1 0.0
+@23 expect F1 0 tol 1e-4
+@23 expect F2 0 tol 1e-4
+@24 set I2 0
+# reset, so the second reading starts cleanly on step 1 again
+@25 set I4 1
+@26 set I4 0
+# 4 clocks again, and step 2 is back in the sequence.
+@28 set I1 1
+@28 expect O1 0 tol 1e-4
+@29 set I1 0
+@30 set I1 1
+@30 expect O1 0.25 tol 1e-4
+@31 set I1 0
+@32 set I1 1
+@32 expect O1 0.5 tol 1e-4
+@33 set I1 0
+@34 set I1 1
+@34 expect O1 0.75 tol 1e-4
+@35 set I1 0

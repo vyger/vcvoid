@@ -50,7 +50,7 @@ public:
             if (buttons) {
                 bool pushed = e->pushed;
                 bool wasPushed = (i < (int)prevTouch_.size()) ? prevTouch_[i] : false;
-                if (pushed != wasPushed) plateEdge(bm, i, step, pushed);
+                if (pushed != wasPushed) plateEdge(s, bm, i, step, pushed);
                 if (i < (int)prevTouch_.size()) prevTouch_[i] = pushed;
             }
 

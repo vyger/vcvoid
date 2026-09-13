@@ -1,0 +1,64 @@
+# motoquencer `constantlength = 0` (the default): repeats editing is NOT length
+# compensated. motoquencer.md:922 makes the feature opt-in ("This input enables a
+# feature that (tries to) keep the actual length of the sequence constant"), so
+# with it off the manual's plain repeats rule stands (motoquencer.md:172): "If you
+# set repeats to 2 for one of 16 steps, your sequence will last 17 clock cycles."
+#
+# Characterisation: step 1's repeats go 1 -> 4 in fadermode 3. Steps 2..4 keep
+# their single repeat (their faders do not move), and the 4-step cycle grows from
+# 4 clocks to 7.
+tickrate 100
+patch <<<
+[m4]
+[motoquencer]
+    clock          = I1
+    fadermode      = I2
+    constantlength = I3
+    numsteps       = 4
+    numfaders      = 4
+    quantize       = 0
+    cvbase         = 0
+    cvrange        = 1
+    defaultgate    = 1
+    cv             = O1
+>>>
+# one distinct pitch per step, so the played order is readable on O1
+@2 move F1 0.0
+@3 move F2 0.25
+@4 move F3 0.5
+@5 move F4 0.75
+# fadermode 3 = repeats. 16 dents, notch k rests at k/15; k=3 -> 4 repeats.
+@6 set I2 3
+@7 move F1 0.2
+@7 expect F1 0.2 tol 1e-4
+# uncompensated: every other step stays at 1 repeat (notch 0)
+@7 expect F2 0 tol 1e-4
+@7 expect F3 0 tol 1e-4
+@7 expect F4 0 tol 1e-4
+@8 set I2 0
+# 7 clocks per cycle: step 1 four times, then steps 2, 3, 4.
+@10 set I1 1
+@10 expect O1 0 tol 1e-4
+@11 set I1 0
+@12 set I1 1
+@12 expect O1 0 tol 1e-4
+@13 set I1 0
+@14 set I1 1
+@14 expect O1 0 tol 1e-4
+@15 set I1 0
+@16 set I1 1
+@16 expect O1 0 tol 1e-4
+@17 set I1 0
+@18 set I1 1
+@18 expect O1 0.25 tol 1e-4
+@19 set I1 0
+@20 set I1 1
+@20 expect O1 0.5 tol 1e-4
+@21 set I1 0
+@22 set I1 1
+@22 expect O1 0.75 tol 1e-4
+@23 set I1 0
+# ...and back to step 1 on the 8th edge
+@24 set I1 1
+@24 expect O1 0 tol 1e-4
+@25 set I1 0

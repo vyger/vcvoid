@@ -1,0 +1,63 @@
+# motoquencer `constantlength`, the range limit. motoquencer.md:922 — "All the
+# compensation is only active with the range that is set with the start and end
+# step."
+#
+# `endstep = 3` leaves step 4 outside the played range with 8 repeats on it —
+# by far the biggest pile of slack in the sequence, and completely untouchable.
+# Step 1 goes from 1 to 3 repeats: step 2 is at the floor, so step 3 pays the
+# whole +2 (4 -> 2) and step 4 keeps its 8. The played cycle stays 6 clocks.
+tickrate 100
+patch <<<
+[m4]
+[motoquencer]
+    clock          = I1
+    fadermode      = I2
+    constantlength = I3
+    endstep        = 3
+    numsteps       = 4
+    numfaders      = 4
+    quantize       = 0
+    cvbase         = 0
+    cvrange        = 1
+    defaultgate    = 1
+    cv             = O1
+>>>
+@2 move F1 0.0
+@3 move F2 0.25
+@4 move F3 0.5
+@5 move F4 0.75
+@6 set I2 3
+# with the feature off: step 3 -> 4 repeats (notch 3), step 4 -> 8 (notch 7)
+@7 move F3 0.2
+@8 move F4 0.4666667
+@8 expect F4 0.4666667 tol 1e-4
+@9 set I3 1
+# step 1: 1 -> 3 repeats. Step 3 pays; step 4, outside start..end, is not asked.
+@10 move F1 0.1333333
+@10 expect F1 0.1333333 tol 1e-4
+@10 expect F2 0 tol 1e-4
+@10 expect F3 0.0666667 tol 1e-4
+@10 expect F4 0.4666667 tol 1e-4
+@11 set I2 0
+# 6 clocks per cycle: step 1 three times, step 2 once, step 3 twice.
+@13 set I1 1
+@13 expect O1 0 tol 1e-4
+@14 set I1 0
+@15 set I1 1
+@15 expect O1 0 tol 1e-4
+@16 set I1 0
+@17 set I1 1
+@17 expect O1 0 tol 1e-4
+@18 set I1 0
+@19 set I1 1
+@19 expect O1 0.25 tol 1e-4
+@20 set I1 0
+@21 set I1 1
+@21 expect O1 0.5 tol 1e-4
+@22 set I1 0
+@23 set I1 1
+@23 expect O1 0.5 tol 1e-4
+@24 set I1 0
+@25 set I1 1
+@25 expect O1 0 tol 1e-4
+@26 set I1 0

@@ -1,0 +1,45 @@
+# motoquencer `constantlength` on a `linktonext` chain.
+#
+# A linked member has no range and no play order of its own — "the current step
+# number of the linked sequencer will always be the same as the step number of the
+# main sequencer" (motoquencer.md:946) — so when `fadermode = 13` puts the MEMBER's
+# repeats lane on the faders, the compensation there is scoped by the MAIN's
+# start/end range, exactly like every other consumer of the range.
+#
+# SPEC-GAP (documented in seqcore.hpp): the level itself is read off the chain
+# main too. The Forge's own MFPS generator wires `constantlength` on a track's
+# main lane only and leaves the linked lanes without it, so reading each
+# instance's own input would leave the member lanes silently uncompensated.
+#
+# The main's `endstep = 3` keeps step 4 out of the range. Editing the member's
+# step 1 from 1 to 3 repeats is paid for by the member's step 3 (4 -> 2); the
+# member's step 4 keeps its 8 repeats.
+tickrate 100
+patch <<<
+[m4]
+[motoquencer]
+    clock          = I1
+    fadermode      = I2
+    constantlength = I3
+    endstep        = 3
+    numsteps       = 4
+    numfaders      = 4
+    linktonext     = 1
+    cv             = O1
+[motoquencer]
+    cv             = O2
+>>>
+# fadermode 13 = the linked member's repeats lane (10 per chain instance + 3)
+@2 set I2 13
+# with the feature off: member step 3 -> 4 repeats, member step 4 -> 8
+@3 move F3 0.2
+@4 move F4 0.4666667
+@4 expect F4 0.4666667 tol 1e-4
+@5 set I3 1
+# member step 1: 1 -> 3 repeats. Step 2 is at the floor, step 3 pays the +2, and
+# step 4 — outside the MAIN's range — is left alone.
+@6 move F1 0.1333333
+@6 expect F1 0.1333333 tol 1e-4
+@6 expect F2 0 tol 1e-4
+@6 expect F3 0.0666667 tol 1e-4
+@6 expect F4 0.4666667 tol 1e-4

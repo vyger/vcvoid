@@ -1,0 +1,57 @@
+# motoquencer, the repeats/skip interlock: "When you change the number of repeats
+# of a step, the skip setting of that step is automatically cleared"
+# (motoquencer.md:183-184, repeated at :215). This holds whatever
+# `constantlength` is doing, so it is pinned on its own.
+#
+# Step 2 is skipped with its touch plate (buttonmode 3), so the cycle is 3 clocks
+# long. Its repeats are then raised to 3 in fadermode 3, which un-skips it: step 2
+# is back in the cycle and lasts three clocks.
+tickrate 100
+patch <<<
+[m4]
+[motoquencer]
+    clock       = I1
+    fadermode   = I2
+    buttonmode  = 3
+    numsteps    = 4
+    numfaders   = 4
+    quantize    = 0
+    cvbase      = 0
+    cvrange     = 1
+    defaultgate = 1
+    cv          = O1
+>>>
+@2 move F1 0.0
+@3 move F2 0.25
+@4 move F3 0.5
+@5 move F4 0.75
+# plate 2 skips step 2
+@6 touch F2 1
+@7 touch F2 0
+# fadermode 3 = repeats; notch 2 of 16 rests at 2/15 -> 3 repeats
+@8 set I2 3
+@9 move F2 0.1333333
+@9 expect F2 0.1333333 tol 1e-4
+@10 set I2 0
+# the skip is gone: step 2 plays again, for three clocks
+@12 set I1 1
+@12 expect O1 0 tol 1e-4
+@13 set I1 0
+@14 set I1 1
+@14 expect O1 0.25 tol 1e-4
+@15 set I1 0
+@16 set I1 1
+@16 expect O1 0.25 tol 1e-4
+@17 set I1 0
+@18 set I1 1
+@18 expect O1 0.25 tol 1e-4
+@19 set I1 0
+@20 set I1 1
+@20 expect O1 0.5 tol 1e-4
+@21 set I1 0
+@22 set I1 1
+@22 expect O1 0.75 tol 1e-4
+@23 set I1 0
+@24 set I1 1
+@24 expect O1 0 tol 1e-4
+@25 set I1 0

@@ -1,0 +1,67 @@
+# motoquencer `constantlength = 1`, the headline case. motoquencer.md:922 — "If
+# `constantlength = 1`, every change in the *repeats* of a step is compensated by
+# changing the repeats in the following steps. E.g. if you increase the number of
+# repeats from 4 to 5 in step 3 [...] the repeats in step 4 are reduced by 1."
+#
+# Step 2 is dialled to 4 repeats while the feature is OFF, so the cycle is
+# 1 + 4 + 1 + 1 = 7 clocks. The feature is then switched on and step 1 goes from 1
+# to 3 repeats: the +2 is taken straight back out of step 2 (4 -> 2), the motor
+# pulls step 2's fader down to show it, and the cycle is still 7 clocks.
+tickrate 100
+patch <<<
+[m4]
+[motoquencer]
+    clock          = I1
+    fadermode      = I2
+    constantlength = I3
+    numsteps       = 4
+    numfaders      = 4
+    quantize       = 0
+    cvbase         = 0
+    cvrange        = 1
+    defaultgate    = 1
+    cv             = O1
+>>>
+@2 move F1 0.0
+@3 move F2 0.25
+@4 move F3 0.5
+@5 move F4 0.75
+# fadermode 3 = repeats: 16 dents, notch k rests at k/15 and means k+1 repeats.
+@6 set I2 3
+# with the feature still off, dial step 2 up to 4 repeats (notch 3)
+@7 move F2 0.2
+@7 expect F2 0.2 tol 1e-4
+@7 expect F1 0 tol 1e-4
+@8 set I3 1
+# step 1: 1 -> 3 repeats (notch 2). The +2 comes out of step 2: 4 -> 2 (notch 1).
+@9 move F1 0.1333333
+@9 expect F1 0.1333333 tol 1e-4
+@9 expect F2 0.0666667 tol 1e-4
+@9 expect F3 0 tol 1e-4
+@9 expect F4 0 tol 1e-4
+@10 set I2 0
+# still 7 clocks per cycle: step 1 three times, step 2 twice, steps 3 and 4 once.
+@12 set I1 1
+@12 expect O1 0 tol 1e-4
+@13 set I1 0
+@14 set I1 1
+@14 expect O1 0 tol 1e-4
+@15 set I1 0
+@16 set I1 1
+@16 expect O1 0 tol 1e-4
+@17 set I1 0
+@18 set I1 1
+@18 expect O1 0.25 tol 1e-4
+@19 set I1 0
+@20 set I1 1
+@20 expect O1 0.25 tol 1e-4
+@21 set I1 0
+@22 set I1 1
+@22 expect O1 0.5 tol 1e-4
+@23 set I1 0
+@24 set I1 1
+@24 expect O1 0.75 tol 1e-4
+@25 set I1 0
+@26 set I1 1
+@26 expect O1 0 tol 1e-4
+@27 set I1 0
