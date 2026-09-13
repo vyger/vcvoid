@@ -287,6 +287,12 @@ struct DroidMasterBase : Module {
     // name-keyed linear scan, pure per-tick waste when the chain hasn't moved.
     const droid::ControllerModel* chainModels_[droid::chain::kMaxChainModules] = {};
     int lastChainCount = -1;
+    // The controller that last wrote my upstream consumer buffer (issue #59).
+    // Rack leaves that buffer holding the departed module's final message, so
+    // without this a module deleted from the head of the chain — or replaced by
+    // another — is still reported in `chain:` until whoever took its place
+    // happens to publish. See droid::chain::NeighbourId.
+    droid::chain::NeighbourId chainSource_;
 
     // --- UAT bridge port probe (M6) ---
     // Armed/disarmed by the HTTP thread (uat::Bridge::handleProbe) via
@@ -830,6 +836,16 @@ public:
         // kEmptyChain has static storage, so binding `up` to a const ref is safe.
         static const UpstreamMessage kEmptyChain;
         bool haveChain = rightExpander.module && ChainModule::isChainRightNeighbor(rightExpander.module);
+        // A replaced or removed neighbour leaves its last message sitting in my
+        // consumer buffer; drop it rather than keep reporting a chain that no
+        // longer exists (issue #59). The newcomer republishes within a frame or
+        // two because its own destination changed, and chainDebounce absorbs
+        // the momentarily shorter chain in between.
+        if (chainSource_.changed(haveChain ? rightExpander.module->id : kNoNeighbour)) {
+            auto* stale = (UpstreamMessage*) rightExpander.consumerMessage;
+            stale->count = 0;
+            stale->dirty = 0;
+        }
         const UpstreamMessage& up = haveChain
             ? *(const UpstreamMessage*) rightExpander.consumerMessage
             : kEmptyChain;

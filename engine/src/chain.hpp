@@ -8,6 +8,7 @@
 // expander buffers.
 #include "controllers.hpp"
 #include "midi.hpp"
+#include <algorithm>
 #include <cstdint>
 #include <cstring>
 #include <string>
@@ -245,10 +246,43 @@ inline void shiftDownstream(const DownstreamMessage& fromLeft, DownstreamBlock& 
 // one final publish carrying dirty = 0 (`sentDirty`), or the last message I wrote
 // sits in my neighbour's buffer with dirty stuck at 1 and everything to my left
 // relays forever.
+// A third: the gate is content-based, and content alone cannot see a neighbour
+// being SWAPPED (issue #59). The chain messages carry no identity, so when the
+// module on one side is replaced by a different one the content can be
+// bit-identical to what was last published and the gate would stay shut — the
+// newcomer never gets written to and keeps serving whatever its own buffer last
+// held. Both sides therefore track the neighbour's identity as well, with
+// `NeighbourId`: on the destination side (`UpstreamGate::lastDest`) a change
+// forces a publish, and on the source side (`UpstreamRelay::source`) it
+// invalidates the incoming buffer, so a module that has been removed cannot
+// live on as a phantom in the chain the master reads.
+//
+// Identity here is the host's module id (rack::Module::id), NOT the module's
+// address. Addresses are recycled: replace a controller with another of the
+// same model and the newcomer very often lands exactly where the old one was
+// freed, so a pointer compare reports "same neighbour" for what is a different
+// module with empty buffers — the very swap this is here to catch. Rack hands
+// out ids monotonically and never reuses them within a session.
+constexpr int64_t kNoNeighbour = -1;   // no module on this side (matches Rack's unassigned id)
+
+struct NeighbourId {
+    int64_t last = kNoNeighbour;
+
+    // True when the module on this side is not the one seen last call —
+    // including gaining one from nothing, and losing one. Records the new
+    // identity, so a change reports exactly once.
+    bool changed(int64_t now) {
+        if (now == last) return false;
+        last = now;
+        return true;
+    }
+};
+
 struct UpstreamGate {
     UpstreamBlock lastSent;      // last block published
     uint8_t lastInCount = 0;     // chain length to my right at that publish
     bool sentDirty = false;      // that publish carried dirty
+    int64_t lastDest = kNoNeighbour;   // the left neighbour that publish went to
 
     // memcmp'd against a freshly memset `mine`, so the padding must be zeroed
     // too — NSDMI value-init does not promise that.
@@ -259,19 +293,58 @@ struct UpstreamGate {
         bool dirty;     // the dirty bit to stamp on that write
     };
     // `mine` must have been memset before filling, for the same reason.
-    Decision decide(const UpstreamBlock& mine, uint8_t srcDirty, uint8_t inCount) const {
+    // `dest` identifies the left neighbour this frame's write would go to; a
+    // different one than was last published to is a change in its own right,
+    // and is stamped dirty so the new message ripples on to the master.
+    Decision decide(const UpstreamBlock& mine, uint8_t srcDirty, uint8_t inCount,
+                    int64_t dest) const {
         const bool dirty = srcDirty
                         || inCount != lastInCount
+                        || dest != lastDest
                         || std::memcmp(&mine, &lastSent, sizeof mine) != 0;
         return {dirty || sentDirty, dirty};
     }
     // Call ONLY when the write actually happened: while a module has no left
     // neighbour it publishes nothing, and the stale baseline is what makes it
     // republish unconditionally the moment one appears.
-    void notePublished(const UpstreamBlock& mine, uint8_t inCount, bool dirty) {
+    void notePublished(const UpstreamBlock& mine, uint8_t inCount, bool dirty,
+                       int64_t dest) {
         lastSent = mine;
         lastInCount = inCount;
         sentDirty = dirty;
+        lastDest = dest;
+    }
+};
+
+// One upstream hop of the relay, Rack-free: the whole of ChainModule::relay()'s
+// upstream path bar the two Rack calls it cannot make (allocating the buffers
+// and requesting the buffer flip). Lives here, not in the Rack module, for the
+// same reason UpstreamGate does — this is where the subtle failure modes are,
+// and the headless suite can build a whole chain out of these and hot-plug it.
+struct UpstreamRelay {
+    UpstreamGate gate;
+    NeighbourId source;          // the right neighbour that wrote my `in` buffer
+
+    // `mine`  my own block, memset then filled (see UpstreamGate::decide).
+    // `right` the right neighbour's id, kNoNeighbour when the chain ends to my
+    //         right (or the module there is not a chain participant).
+    // `in`    MY incoming buffer, which that right neighbour writes. Cleared in
+    //         place when it changes: its last message describes a chain that no
+    //         longer exists, and relaying it would report a module that is gone.
+    // `left`  the left neighbour's id, kNoNeighbour when I have none.
+    // `out`   the left neighbour's buffer to publish into, null when there is
+    //         none to write (no left neighbour, or one that allocated nothing).
+    // Returns true when `out` was written and the caller must flip it.
+    bool step(const UpstreamBlock& mine, int64_t right, UpstreamMessage& in,
+              int64_t left, UpstreamMessage* out) {
+        if (source.changed(right)) { in.count = 0; in.dirty = 0; }
+        const uint8_t inCount = std::min<uint8_t>(in.count, kMaxChainModules);
+        const auto d = gate.decide(mine, in.dirty, inCount, left);
+        if (!out || !d.publish) return false;
+        prependUpstream(mine, in, *out);      // carries in.dirty into out->dirty
+        if (d.dirty) out->dirty = 1;
+        gate.notePublished(mine, inCount, d.dirty, left);
+        return true;
     }
 };
 

@@ -104,40 +104,69 @@ TEST(chain_upstream_gate) {
     UpstreamGate g;
     UpstreamBlock mine; std::memset(&mine, 0, sizeof mine);
     mine.modelId = MP2B8;
+    const int64_t dest = 7;                  // one unchanging left neighbour
 
     // First frame: the baseline is zeroed and my block is not, so publish.
-    auto d = g.decide(mine, 0, 0);
+    auto d = g.decide(mine, 0, 0, dest);
     CHECK(d.publish && d.dirty);
-    g.notePublished(mine, 0, d.dirty);
+    g.notePublished(mine, 0, d.dirty, dest);
 
     // Trailing edge: one more publish carrying dirty = 0, so the neighbour's
     // buffer does not sit with dirty stuck at 1 forever.
-    d = g.decide(mine, 0, 0);
+    d = g.decide(mine, 0, 0, dest);
     CHECK(d.publish && !d.dirty);
-    g.notePublished(mine, 0, d.dirty);
+    g.notePublished(mine, 0, d.dirty, dest);
 
     // Now genuinely idle — this is the whole point of the gate.
-    d = g.decide(mine, 0, 0);
+    d = g.decide(mine, 0, 0, dest);
     CHECK(!d.publish && !d.dirty);
 
     // A control moves.
     mine.pots[0] = 0.5f;
-    d = g.decide(mine, 0, 0);
+    d = g.decide(mine, 0, 0, dest);
     CHECK(d.publish && d.dirty);
-    g.notePublished(mine, 0, d.dirty);
+    g.notePublished(mine, 0, d.dirty, dest);
 
     // Someone to my right flags a change even though my own block is unchanged.
-    d = g.decide(mine, 1, 0);
+    d = g.decide(mine, 1, 0, dest);
     CHECK(d.publish && d.dirty);
-    g.notePublished(mine, 0, d.dirty);
-    g.notePublished(mine, 0, false);         // settle the trailing edge
-    CHECK(!g.decide(mine, 0, 0).publish);
+    g.notePublished(mine, 0, d.dirty, dest);
+    g.notePublished(mine, 0, false, dest);   // settle the trailing edge
+    CHECK(!g.decide(mine, 0, 0, dest).publish);
 
     // A module UNPLUGGED to my right: nobody is left to set dirty, so only the
     // chain length betrays it. Without this the master keeps the old chain.
-    g.notePublished(mine, 3, false);
-    d = g.decide(mine, 0, 2);
+    g.notePublished(mine, 3, false, dest);
+    d = g.decide(mine, 0, 2, dest);
     CHECK(d.publish && d.dirty);
+}
+
+// Issue #59: a left neighbour REPLACED by a different module is invisible to a
+// purely content-based gate — same block, same chain length, nothing dirty —
+// yet the newcomer has never been written to and goes on serving whatever its
+// own buffer last held. The destination's identity has to be part of the
+// decision.
+TEST(chain_upstream_gate_neighbour_swap) {
+    UpstreamGate g;
+    UpstreamBlock mine; std::memset(&mine, 0, sizeof mine);
+    mine.modelId = MB32;
+    const int64_t first = 4, second = 9;     // two distinct left neighbours
+    auto d = g.decide(mine, 0, 0, first);
+    g.notePublished(mine, 0, d.dirty, first);
+    g.notePublished(mine, 0, false, first);        // settle the trailing edge
+    CHECK(!g.decide(mine, 0, 0, first).publish);   // idle, same neighbour: silent
+
+    // Same content, same chain length, different neighbour: publish, and stamp
+    // dirty so the fresh message keeps rippling on toward the master.
+    d = g.decide(mine, 0, 0, second);
+    CHECK(d.publish && d.dirty);
+    g.notePublished(mine, 0, d.dirty, second);
+    g.notePublished(mine, 0, false, second);
+    CHECK(!g.decide(mine, 0, 0, second).publish);  // and settles again
+
+    // Losing the neighbour counts as a change too, so the gate never believes
+    // the module it comes back to has already had this message.
+    CHECK(g.decide(mine, 0, 0, kNoNeighbour).publish);
 }
 
 // A block differing ONLY in a field sitting next to padding must still be seen.
@@ -147,11 +176,158 @@ TEST(chain_upstream_gate_padding) {
     UpstreamGate g;
     UpstreamBlock a; std::memset(&a, 0, sizeof a);
     a.modelId = MB32;                        // uint8_t followed by padding, then buttons
-    g.notePublished(a, 0, false);
-    CHECK(!g.decide(a, 0, 0).publish);       // identical block: no publish
+    const int64_t dest = 3;
+    g.notePublished(a, 0, false, dest);
+    CHECK(!g.decide(a, 0, 0, dest).publish); // identical block: no publish
     UpstreamBlock b = a;
     b.buttons = 1u << 31;                    // the field right after that padding
-    CHECK(g.decide(b, 0, 0).publish);
+    CHECK(g.decide(b, 0, 0, dest).publish);
+}
+
+// ---- hot-plugging a whole chain (issue #59) ---------------------------
+// A headless stand-in for Rack's expander plumbing, just enough of it to
+// rearrange a rack and read what the master ends up seeing. Each module owns
+// the producer/consumer pair Rack allocates on its RIGHT face: the right
+// neighbour writes the producer and asks for a flip, the owner reads the
+// consumer, and every requested flip happens once per frame after all modules
+// have stepped — so data moves exactly one hop per frame, as in Rack.
+namespace {
+struct SimModule {
+    int64_t id;                             // rack::Module::id: unique, never reused
+    UpstreamBlock block;
+    UpstreamMessage bufA, bufB;
+    UpstreamMessage* producer = &bufA;      // written by my right neighbour
+    UpstreamMessage* consumer = &bufB;      // what I read this frame
+    bool flipRequested = false;
+    UpstreamRelay relay;                    // controllers only
+    NeighbourId source;                     // master only (MasterBase's chainSource_)
+    int publishes = 0;                      // gate activity, for the idle check
+
+    SimModule(int64_t moduleId, ModelId m) : id(moduleId) {
+        std::memset(&block, 0, sizeof block);
+        block.modelId = m;
+    }
+};
+
+struct SimRack {
+    // mods[0] is the master; the rest run rightward, the way a DROID system is
+    // physically laid out.
+    std::vector<std::unique_ptr<SimModule>> mods;
+    int64_t nextId = 1;
+
+    SimRack(std::initializer_list<ModelId> models) {
+        for (ModelId m : models) insert(int(mods.size()), m);
+    }
+    SimModule* insert(int at, ModelId m) {
+        mods.insert(mods.begin() + at, std::unique_ptr<SimModule>(new SimModule(nextId++, m)));
+        return mods[at].get();
+    }
+    void remove(int at) { mods.erase(mods.begin() + at); }
+
+    static int64_t idOf(SimModule* m) { return m ? m->id : kNoNeighbour; }
+
+    void step() {
+        for (size_t i = 0; i < mods.size(); i++) {
+            SimModule* me = mods[i].get();
+            SimModule* right = (i + 1 < mods.size()) ? mods[i + 1].get() : nullptr;
+            if (i == 0) {   // the master publishes nothing; it only reads
+                if (me->source.changed(idOf(right))) {
+                    me->consumer->count = 0;
+                    me->consumer->dirty = 0;
+                }
+                continue;
+            }
+            SimModule* left = mods[i - 1].get();
+            if (me->relay.step(me->block, idOf(right), *me->consumer,
+                               idOf(left), left->producer)) {
+                left->flipRequested = true;
+                me->publishes++;
+            }
+        }
+        for (auto& m : mods)
+            if (m->flipRequested) { std::swap(m->producer, m->consumer); m->flipRequested = false; }
+    }
+    void settle(int frames = 12) { for (int i = 0; i < frames; i++) step(); }
+    std::vector<std::string> chain() const { return controllerModels(*mods[0]->consumer); }
+    int publishes() const {
+        int n = 0;
+        for (auto& m : mods) n += m->publishes;
+        return n;
+    }
+    void resetPublishes() { for (auto& m : mods) m->publishes = 0; }
+};
+}  // namespace
+
+TEST(chain_hotplug_insert_and_remove) {
+    SimRack r{None /*master*/, MP2B8, MB32};
+    r.settle();
+    CHECK(r.chain() == std::vector<std::string>({"p2b8", "b32"}));
+
+    // Once settled, the gate is the whole point: nothing moves, nobody writes.
+    r.resetPublishes();
+    r.settle(20);
+    CHECK(r.publishes() == 0);
+    CHECK(r.chain() == std::vector<std::string>({"p2b8", "b32"}));
+
+    // Insert an M4 between them. The B32's content does not change one bit —
+    // only the module it now publishes into — so before #59 the B32 fell out of
+    // the chain and the M4 took its place.
+    r.insert(2, MM4);
+    r.settle();
+    CHECK(r.chain() == std::vector<std::string>({"p2b8", "m4", "b32"}));
+
+    // Pull the M4 back out and close the gap. The P2B8's consumer buffer still
+    // holds the M4's last message: without ageing it out, that deleted module
+    // haunts the chain — the phantom in the bug report.
+    r.remove(2);
+    r.settle();
+    CHECK(r.chain() == std::vector<std::string>({"p2b8", "b32"}));
+
+    // ... and the restored chain is quiet again.
+    r.resetPublishes();
+    r.settle(20);
+    CHECK(r.publishes() == 0);
+    CHECK(r.chain() == std::vector<std::string>({"p2b8", "b32"}));
+}
+
+// Deleting the module at the END of the chain, and then the one in the middle:
+// each time the master must be left with exactly what is physically there.
+TEST(chain_hotplug_remove_drops_module) {
+    SimRack r{None /*master*/, MP2B8, MM4, MB32};
+    r.settle();
+    CHECK(r.chain() == std::vector<std::string>({"p2b8", "m4", "b32"}));
+
+    r.remove(3);                             // the B32 at the far end
+    r.settle();
+    CHECK(r.chain() == std::vector<std::string>({"p2b8", "m4"}));
+
+    r.remove(1);                             // the P2B8, nearest the master
+    r.settle();
+    CHECK(r.chain() == std::vector<std::string>({"m4"}));
+
+    r.remove(1);                             // ... and the last one standing
+    r.settle();
+    CHECK(r.chain().empty());
+}
+
+// A swap that changes NOTHING the wire can see: same model, same controls, same
+// chain length — only a different object at that spot. The neighbour on each
+// side must still be told, or one of them keeps talking to a module that is no
+// longer there.
+TEST(chain_hotplug_swap_identical_module) {
+    SimRack r{None /*master*/, MP2B8, MB32};
+    r.settle();
+    CHECK(r.chain() == std::vector<std::string>({"p2b8", "b32"}));
+
+    r.remove(1);
+    r.insert(1, MP2B8);                      // a different P2B8, byte-identical
+    r.settle();
+    CHECK(r.chain() == std::vector<std::string>({"p2b8", "b32"}));
+    // The replacement really is carrying the chain: move a control on the B32
+    // and it has to reach the master through it.
+    r.mods[2]->block.buttons = 1u << 3;
+    r.settle();
+    CHECK(r.mods[0]->consumer->block[1].buttons == (1u << 3));
 }
 
 TEST(chain_controller_models_skip_g8) {
