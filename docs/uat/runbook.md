@@ -30,8 +30,8 @@ locators.
 
 **Two executors, two jobs.** `make smoke` (`tools/uatbridge-smoke.sh`) is the
 **contract gate**: one pass over every endpoint's status codes and response
-shapes, the `GET /master/{id}/diagnostics` classes (`no_patch`, `running`,
-`load_failed` with the right line, `warnings`, `chain_error`), the state-store
+shapes, the `GET /master/{id}/diagnostics` classes (`no-patch`, `running`,
+`load-failed` with the right line, `warnings`, `chain-error`), the state-store
 lines from #42, the 64 000-byte size gate from #41 and the `POST /params/hold`
 / `/params/release` contract. It is fail-fast and takes seconds; run it first,
 and treat a failure there as "stop, this build is broken" rather than as one
@@ -416,6 +416,10 @@ g8-first row pins `chainError` and freezes the G8 gates).
    no patch → `"no-patch"` + grey ring + dark matrix; a deprecated-circuit patch
    → `"warnings"` + amber ring, still running; a broken chain → `"chain-error"`
    + red ring, clearing to `"running"` (no ring) the moment the chain is fixed.
+   `GET /master/{id}/diagnostics` is the SAME verdict as structured fields
+   (`severity`, `code`/`codeColor`, `line`, the card's `title`/`message`) —
+   one model, `plugin/src/MasterStatus.hpp`, so what it reports is what the
+   panel paints. Use it for the assertions and keep your eyes for the pixels.
 3. ☐ Recovery: fix the error in a scratch copy of the errored
    `.ini` on disk (e.g. `O9`→`O1`) while it's the loaded path; poll
    `GET /master/{id}/status` for `.statusLine` to flip to `^ok` within

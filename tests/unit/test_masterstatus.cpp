@@ -1,10 +1,13 @@
 #include "harness.hpp"
 #include "MasterStatus.hpp"
+#include "src/loader.hpp"   // the wire-level tests at the bottom compile real patch text
 
-// The master's visible error state (issue #46), model half. Two things are
+// The master's visible error state (issue #46), model half. Three things are
 // pinned here: the hardware LED blink codes, against the worked examples in
-// manual/basics.md §5.3, and the five-state verdict that drives the ring, the
-// matrix, the tooltip and the context-menu card.
+// manual/basics.md §5.3; the five-state verdict that drives the ring, the
+// matrix, the tooltip and the context-menu card; and the words that same
+// verdict is reported in over the UAT bridge (issue #49), end to end from the
+// real loader's error tags.
 
 using namespace vcvoid::status;
 using droid::ErrorCode;
@@ -225,6 +228,8 @@ TEST(status_unreadable_file_is_the_hardware_patch_not_found_code) {
     CHECK(s.matrix == Matrix::Blink);
     CHECK(s.blink.global);
     for (int i = 0; i < 16; i++) CHECK(sameColor(s.blink.led[i], kYellow));
+    CHECK(std::string(codeNames(s.code).code) == "patch_not_found");
+    CHECK(std::string(codeNames(s.code).color) == "yellow");
 }
 
 TEST(status_unmapped_error_still_rings_red_but_leaves_the_matrix_dark) {
@@ -397,4 +402,162 @@ TEST(wrap_a_long_status_line_becomes_several_tooltip_lines) {
         if (nl == std::string::npos) break;
         start = nl + 1;
     }
+}
+
+// --- the words the model reports (GET /master/{id}/diagnostics, issue #49) ---
+// The UAT bridge serialises this model rather than deriving a second verdict of
+// its own, so the vocabulary it promises is pinned here.
+
+TEST(status_severity_follows_the_state) {
+    CHECK(severityFor(State::NoPatch) == Severity::Info);      // not an error
+    CHECK(severityFor(State::LoadFailed) == Severity::Error);
+    CHECK(severityFor(State::ChainError) == Severity::Error);
+    CHECK(severityFor(State::Warnings) == Severity::Warning);
+    CHECK(severityFor(State::Running) == Severity::Ok);
+    CHECK(std::string(severityName(Severity::Ok)) == "ok");
+    CHECK(std::string(severityName(Severity::Info)) == "info");
+    CHECK(std::string(severityName(Severity::Warning)) == "warning");
+    CHECK(std::string(severityName(Severity::Error)) == "error");
+}
+
+// codeNames() and errorColor() are the same manual table written twice — once
+// in words, once in RGB. Walk every code and hold them equal, so a colour
+// changed in one place cannot silently disagree with the other.
+TEST(status_code_names_match_the_colour_table) {
+    const ErrorCode all[] = {
+        ErrorCode::Unmapped, ErrorCode::PatchNotFound, ErrorCode::TooManyControllers,
+        ErrorCode::PatchTooBig, ErrorCode::OutOfMemory, ErrorCode::InvalidFirmware,
+        ErrorCode::NoSdCard, ErrorCode::UnknownRegister, ErrorCode::UnknownParameter,
+        ErrorCode::UnknownCircuit, ErrorCode::LineTooLong, ErrorCode::CableMisuse,
+        ErrorCode::InvalidSyntax,
+    };
+    for (ErrorCode c : all) {
+        CodeNames n = codeNames(c);
+        RGB rgb;
+        bool global = false;
+        bool hasColor = errorColor(c, rgb, global);
+        // A code has a name exactly when it has a hardware colour.
+        CHECK(hasColor == (std::string(n.code) != ""));
+        CHECK(hasColor == (std::string(n.color) != ""));
+        if (!hasColor) continue;
+        RGB named;
+        CHECK(colorByName(n.color, named));
+        CHECK(sameColor(named, rgb));
+    }
+    CHECK(std::string(codeNames(ErrorCode::Unmapped).code).empty());
+}
+
+// A state other than LoadFailed carries no code at all — nothing is wrong with
+// the patch, so there is nothing for the matrix to spell.
+TEST(status_only_a_failed_load_carries_an_error_code) {
+    Report r;
+    r.havePatch = true;
+    r.loadOk = true;
+    CHECK(evaluate(r).code == ErrorCode::Unmapped);
+    r.warningCount = 1;
+    r.warningMessage = "circuit 'copy' is deprecated";
+    CHECK(evaluate(r).code == ErrorCode::Unmapped);
+    r.chainError = "expected p2b8 at position 1, found m4";
+    CHECK(evaluate(r).code == ErrorCode::Unmapped);
+}
+
+// --- end to end, through the REAL loader ----------------------------------
+// Everything above feeds evaluate() a hand-written Report. These compile actual
+// patch text instead, so the chain the panel and the bridge really walk — the
+// loader's ErrorCode tag -> evaluate() -> the reported name and colour — is
+// pinned end to end. A load error that stops being tagged, or is tagged with
+// the wrong code, fails here rather than blinking the wrong colour on a panel.
+
+// The same mapping DroidMasterBase::statusReport() does, minus the Rack fields.
+static Report reportFor(const std::string& text) {
+    droid::CompiledPatch cp;
+    droid::LoadResult res = droid::compilePatch(text, droid::MasterType::Master16, cp);
+    Report r;
+    r.havePatch = true;
+    r.loadOk = res.ok;
+    r.errorCount = (int) res.errors.size();
+    if (!res.errors.empty()) {
+        r.errorLine = res.errors[0].line;
+        r.errorCode = res.errors[0].code;
+        r.errorMessage = res.errors[0].message;
+    }
+    r.warningCount = (int) res.warnings.size();
+    if (!res.warnings.empty()) r.warningMessage = res.warnings[0];
+    return r;
+}
+
+// patches/uat-err-register.ini's `square = O9` names a register no master has.
+TEST(status_wire_unknown_register_is_yellow_and_carries_the_line) {
+    Status s = evaluate(reportFor("[lfo]\n    hz = 2\n    square = O9\n"));
+    CHECK(s.state == State::LoadFailed);
+    CHECK(severityFor(s.state) == Severity::Error);
+    CHECK(s.line == 3);                     // the offending line, not 0
+    CHECK(std::string(codeNames(s.code).code) == "unknown_register");
+    CHECK(std::string(codeNames(s.code).color) == "yellow");
+    CHECK(!s.message.empty());
+}
+
+TEST(status_wire_unknown_circuit_is_red) {
+    Status s = evaluate(reportFor("[nosuchcircuit]\n    input = I1\n"));
+    CHECK(s.state == State::LoadFailed);
+    CHECK(std::string(codeNames(s.code).code) == "unknown_circuit");
+    CHECK(std::string(codeNames(s.code).color) == "red");
+    CHECK(s.line == 1);
+}
+
+TEST(status_wire_cable_misuse_is_green) {
+    Status s = evaluate(reportFor("[lfo]\n hz = 1\n square = _X\n"
+                                  "[lfo]\n hz = 2\n square = _X\n"
+                                  "[copy]\n input = _X\n output = O1\n"));
+    CHECK(s.state == State::LoadFailed);
+    CHECK(std::string(codeNames(s.code).code) == "cable_misuse");
+    CHECK(std::string(codeNames(s.code).color) == "green");
+}
+
+TEST(status_wire_unknown_parameter_is_orange) {
+    Status s = evaluate(reportFor("[copy]\n    nosuchparam = 1\n    output = O1\n"));
+    CHECK(s.state == State::LoadFailed);
+    CHECK(std::string(codeNames(s.code).code) == "unknown_parameter");
+    CHECK(std::string(codeNames(s.code).color) == "orange");
+}
+
+TEST(status_wire_syntax_error_is_magenta) {
+    Status s = evaluate(reportFor("this is not a patch\n"));
+    CHECK(s.state == State::LoadFailed);
+    CHECK(std::string(codeNames(s.code).code) == "invalid_syntax");
+    CHECK(std::string(codeNames(s.code).color) == "magenta");
+}
+
+// Issue #41: the size gate is a GLOBAL error — hardware blue, all 16 LEDs, no
+// line to encode — and the message names the measured DEPLOYED size.
+TEST(status_wire_oversize_patch_is_a_global_blue_code_with_no_line) {
+    // Grow until the ABBREVIATED (deployed) size passes the gate, which is the
+    // size the master actually measures, not the verbose text length.
+    std::string text = "[copy]\n    input = I1\n    output = O1\n";
+    while (droid::deployedPatchSize(text) <= 64000)
+        text += "[copy]\n    input = I2\n    output = _C" +
+                std::to_string(text.size()) + "\n";
+    Status s = evaluate(reportFor(text));
+    CHECK(s.state == State::LoadFailed);
+    CHECK(std::string(codeNames(s.code).code) == "patch_too_big");
+    CHECK(std::string(codeNames(s.code).color) == "blue");
+    CHECK(s.line == 0);
+    CHECK(s.blink.global);
+    CHECK(s.message.find("64000") != std::string::npos);
+}
+
+// A deprecated circuit is the one warning class a default master can reach (the
+// memory-limit downgrades need the "ignore hardware memory limits" opt-in), and
+// it is what the UAT smoke's `warnings` class provokes.
+TEST(status_wire_deprecated_circuit_runs_with_a_warning) {
+    Report r = reportFor("[p2b8]\n[togglebutton]\n    button = B1.1\n    led = L1.1\n");
+    CHECK(r.loadOk);
+    CHECK(r.warningCount == 1);
+    Status s = evaluate(r);
+    CHECK(s.state == State::Warnings);
+    CHECK(severityFor(s.state) == Severity::Warning);
+    CHECK(s.code == ErrorCode::Unmapped);
+    CHECK(s.line == 0);
+    CHECK(s.message.find("deprecated") != std::string::npos);
+    CHECK(s.title == "Running with 1 warning");
 }

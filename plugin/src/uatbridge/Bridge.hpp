@@ -55,8 +55,9 @@ private:
     // and set *code). Implemented in Bridge.cpp.
     std::string handlePing(int* code);
     std::string handleMasterStatus(DroidMasterBase* m, int* code);
-    // Issue #46/#49: one structured record of the master's condition, derived
-    // by the pure model in ../MasterDiagnostics.hpp.
+    // Issue #46/#49: one structured record of the master's condition — the
+    // panel's own verdict (vcvoid::status::evaluate, ../MasterStatus.hpp)
+    // serialised, so a test asserts on what a human would see.
     std::string handleMasterDiagnostics(DroidMasterBase* m, int* code);
     std::string handleMasterRegisters(DroidMasterBase* m, const Request& req, int* code);
     std::string handleMasterPatch(DroidMasterBase* m, const Request& req, int* code);

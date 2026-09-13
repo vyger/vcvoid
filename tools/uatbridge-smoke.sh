@@ -205,17 +205,17 @@ done
 [ "$HTTP_CODE" = "200" ] || fail "master $MASTER_ID never registered (last HTTP $HTTP_CODE)"
 echo "ok: master registered"
 
-# --- diagnostics: no_patch, before this run loads anything --------------------
+# --- diagnostics: no-patch, before this run loads anything --------------------
 # (issue #46: the structured record the panel's error display derives from.)
 do_http GET "/master/$MASTER_ID/diagnostics"
 assert_code 200 "GET diagnostics (before any load)"
 if [ -z "$(echo "$HTTP_BODY" | jq -r '.patchPath // ""')" ]; then
-    assert_jq '.state == "no_patch"' "diagnostics state no_patch"
-    assert_jq '.severity == "info"' "diagnostics no_patch severity"
-    assert_jq '.line == 0 and (.warnings | length) == 0' "diagnostics no_patch has no line/warnings"
-    assert_jq '.code == ""' "diagnostics no_patch reports no hardware error code"
+    assert_jq '.state == "no-patch"' "diagnostics state no-patch"
+    assert_jq '.severity == "info"' "diagnostics no-patch severity"
+    assert_jq '.line == 0 and (.warnings | length) == 0' "diagnostics no-patch has no line/warnings"
+    assert_jq '.code == ""' "diagnostics no-patch reports no hardware error code"
 else
-    echo "note: attach mode with a patch already loaded ($(echo "$HTTP_BODY" | jq -r .patchPath)) -- no_patch class not assertable, skipped"
+    echo "note: attach mode with a patch already loaded ($(echo "$HTTP_BODY" | jq -r .patchPath)) -- no-patch class not assertable, skipped"
 fi
 
 # --- find or self-assemble the p2b8 -----------------------------------------
@@ -429,17 +429,17 @@ assert_code 200 "POST patch uat-err-register.ini"
 assert_jq '.statusLine | test("^LOAD ERROR")' "error patch statusLine LOAD ERROR"
 do_http GET "/master/$MASTER_ID/registers?ids=O1"
 assert_code 400 "registers after error patch (engine stopped)"
-# --- diagnostics: load_failed, with the offending LINE --------------------------
+# --- diagnostics: load-failed, with the offending LINE --------------------------
 # uat-err-register.ini's `square = O9` is line 7; the line is what the MASTER's
 # matrix encodes in its LEDs, so it is the field the panel (#46) needs right.
 do_http GET "/master/$MASTER_ID/diagnostics"
 assert_code 200 "GET diagnostics (load failed)"
-assert_jq '.state == "load_failed"' "diagnostics state load_failed"
-assert_jq '.severity == "error"' "diagnostics load_failed severity"
-assert_jq '.line == 7' "diagnostics load_failed line (uat-err-register.ini square = O9)"
+assert_jq '.state == "load-failed"' "diagnostics state load-failed"
+assert_jq '.severity == "error"' "diagnostics load-failed severity"
+assert_jq '.line == 7' "diagnostics load-failed line (uat-err-register.ini square = O9)"
 assert_jq '.code == "unknown_register" and .codeColor == "yellow"' \
-    "diagnostics load_failed hardware error code"
-assert_jq '.message != ""' "diagnostics load_failed message"
+    "diagnostics load-failed hardware error code"
+assert_jq '.message != ""' "diagnostics load-failed message"
 do_http POST "/master/$MASTER_ID/patch" "{\"path\":\"$CORE_PATCH\"}"
 assert_code 200 "cleanup reload uat-core.ini"
 
@@ -459,7 +459,7 @@ assert_jq '(.warnings | length) >= 1' "diagnostics warnings list populated"
 assert_jq '.warnings[0] | test("deprecated")' "diagnostics warning names the deprecation"
 assert_jq '.line == 0' "diagnostics warnings carries no error line"
 
-# --- diagnostics: chain_error ---------------------------------------------------
+# --- diagnostics: chain-error ---------------------------------------------------
 # Provoked WITHOUT touching the rack: a patch that declares a controller the
 # chain does not have. (The physical row is master|p2b8.)
 CHAIN_PATCH="$SCRATCH/uat-chain-mismatch.ini"
@@ -475,9 +475,9 @@ EOF
 do_http POST "/master/$MASTER_ID/patch" "{\"path\":\"$CHAIN_PATCH\"}"
 assert_code 200 "POST patch (declares an absent m4)"
 assert_jq '.statusLine | test("ok, [0-9]+ bytes RAM")' "chain-mismatch patch loads"
-poll_jq "/master/$MASTER_ID/diagnostics" '.state == "chain_error"' 6 "diagnostics state chain_error"
-assert_jq '.severity == "error"' "diagnostics chain_error severity"
-assert_jq '.message | test("m4")' "diagnostics chain_error message names the mismatch"
+poll_jq "/master/$MASTER_ID/diagnostics" '.state == "chain-error"' 6 "diagnostics state chain-error"
+assert_jq '.severity == "error"' "diagnostics chain-error severity"
+assert_jq '.message | test("m4")' "diagnostics chain-error message names the mismatch"
 
 # --- diagnostics + #41: a patch over the 64 000-byte deployed size --------------
 # The limit is measured on the ABBREVIATED (deployed) form, so generate well
@@ -495,7 +495,7 @@ do_http POST "/master/$MASTER_ID/patch" "{\"path\":\"$BIG_PATCH\"}"
 assert_code 200 "POST patch (oversize)"
 do_http GET "/master/$MASTER_ID/diagnostics"
 assert_code 200 "GET diagnostics (oversize)"
-assert_jq '.state == "load_failed"' "oversize -> load_failed"
+assert_jq '.state == "load-failed"' "oversize -> load-failed"
 assert_jq '.code == "patch_too_big" and .codeColor == "blue"' "oversize hardware code"
 assert_jq '.line == 0' "oversize is a global error (no line)"
 assert_jq '.message | test("64000")' "oversize message names the limit"

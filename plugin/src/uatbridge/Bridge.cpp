@@ -1,7 +1,6 @@
 #include "Bridge.hpp"
 #include "BridgeWidget.hpp"
 #include "../MasterBase.hpp"
-#include "../MasterDiagnostics.hpp"
 #include "src/registers.hpp"   // droid::RegId, parseRegisterName, parseFaderName, canonicalize
 #include <rack.hpp>
 #include <patch.hpp>   // rack::patch::Manager -- context.hpp only forward-declares it
@@ -189,41 +188,54 @@ std::string Bridge::handleMasterStatus(DroidMasterBase* m, int* code) {
 
 // GET /master/{id}/diagnostics (issues #46, #49) — ONE structured record of the
 // master's condition, as opposed to /status's free-text statusLine that every
-// caller has to re-parse with its own regex. The derivation lives in the pure,
-// Rack-free vcvoid::diag model (../MasterDiagnostics.hpp) precisely so the
-// panel's error display and this endpoint cannot drift apart; everything below
-// is the snapshot copy (same fields, same lock, same reasoning as
-// handleMasterStatus) plus serialization.
+// caller has to re-parse with its own regex.
+//
+// It is the PANEL's verdict, serialised: state, title, message, line and the
+// hardware error code all come out of vcvoid::status::evaluate (MasterStatus.hpp,
+// issue #46), the same pure model that paints the ring, the blink code and the
+// context-menu card. There is deliberately no second derivation here — a test
+// that asserts on this record is asserting on what a human would see on the
+// panel, which is the whole point of having it.
+//
+// Everything below is therefore serialisation plus the two things the status
+// model does not carry because the panel shows them elsewhere: the FULL warning
+// list (the model counts them and quotes the first) and the MIDI diagnostic
+// (its own line in the context menu, and its own `midiWarning` in /status).
 std::string Bridge::handleMasterDiagnostics(DroidMasterBase* m, int* code) {
     *code = 200;
-    vcvoid::diag::Input in;
+    std::string statusLine, stateLine, patchPath;
+    std::vector<std::string> warnings;
+    bool midiWarn = false;
     {
         std::lock_guard<std::mutex> lk(m->engineMutex);
-        in.patchPath = m->patchPath;
-        in.statusLine = m->patchStatus;
-        in.stateLine = m->stateStatus;
-        in.chainError = m->chainError;
-        in.engineRunning = (bool)m->engine;
-        in.load = m->lastResult;
-        in.midiWarning = m->engine && m->engine->patchUsesMidi() && !m->engine->midiAvailable();
+        patchPath = m->patchPath;
+        statusLine = m->patchStatus;
+        stateLine = m->stateStatus;
+        warnings = m->lastResult.warnings;
+        midiWarn = m->engine && m->engine->patchUsesMidi() && !m->engine->midiAvailable();
     }
-    vcvoid::diag::Diagnostics d = vcvoid::diag::diagnose(in);
+    // statusReport() takes engineMutex itself, hence the separate block above —
+    // exactly the arrangement handleMasterStatus already uses for currentState().
+    vcvoid::status::Status s = vcvoid::status::evaluate(m->statusReport());
+    vcvoid::status::CodeNames cn = vcvoid::status::codeNames(s.code);
     json_t* o = json_object();
-    json_object_set_new(o, "state", json_string(vcvoid::diag::stateName(d.state)));
-    json_object_set_new(o, "severity", json_string(vcvoid::diag::severityName(d.severity)));
-    json_object_set_new(o, "code", json_string(d.code.c_str()));
-    json_object_set_new(o, "codeColor", json_string(d.codeColor.c_str()));
-    json_object_set_new(o, "line", json_integer(d.line));
-    json_object_set_new(o, "title", json_string(d.title.c_str()));
-    json_object_set_new(o, "message", json_string(d.message.c_str()));
+    json_object_set_new(o, "state", json_string(vcvoid::status::stateName(s.state)));
+    json_object_set_new(o, "severity",
+        json_string(vcvoid::status::severityName(vcvoid::status::severityFor(s.state))));
+    json_object_set_new(o, "code", json_string(cn.code));
+    json_object_set_new(o, "codeColor", json_string(cn.color));
+    json_object_set_new(o, "line", json_integer(s.line));
+    json_object_set_new(o, "title", json_string(s.title.c_str()));
+    json_object_set_new(o, "message", json_string(s.message.c_str()));
     json_t* warn = json_array();
-    for (auto& w : d.warnings) json_array_append_new(warn, json_string(w.c_str()));
+    for (auto& w : warnings) json_array_append_new(warn, json_string(w.c_str()));
     json_object_set_new(o, "warnings", warn);
-    json_object_set_new(o, "patchPath", json_string(d.patchPath.c_str()));
-    json_object_set_new(o, "stateLine", json_string(d.stateLine.c_str()));
+    json_object_set_new(o, "midiWarning", json_boolean(midiWarn));
+    json_object_set_new(o, "patchPath", json_string(patchPath.c_str()));
+    json_object_set_new(o, "stateLine", json_string(stateLine.c_str()));
     // The free-text line stays available so a failure report can quote exactly
     // what the context menu shows, without a second round-trip to /status.
-    json_object_set_new(o, "statusLine", json_string(in.statusLine.c_str()));
+    json_object_set_new(o, "statusLine", json_string(statusLine.c_str()));
     return dumpAndFree(o);
 }
 

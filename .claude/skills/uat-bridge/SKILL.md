@@ -133,38 +133,58 @@ structured fields, so a check never has to regex a human-readable sentence.
 
 ```json
 {
-  "state": "running",          // no_patch | load_failed | chain_error | warnings | running
+  "state": "running",          // no-patch | load-failed | chain-error | warnings | running
   "severity": "ok",            // ok | info | warning | error
   "code": "",                  // hardware error-code name, "" when none/unclassified
   "codeColor": "",             // the MASTER matrix blink colour for `code`, "" with it
-  "line": 0,                   // 1-based patch line of a local error; 0 = global/none
-  "title": "Running",
-  "message": "uat-core.ini — ok, 812 bytes RAM",
-  "warnings": [],              // every load warning, plus the MIDI diagnostic when it applies
+  "line": 0,                   // 1-based patch line the error points at; 0 = none
+  "title": "",                 // the card's bold line, e.g. "LOAD ERROR · line 7"
+  "message": "",               // the detail sentence; "" when there is nothing to add
+  "warnings": [],              // every load warning, verbatim
+  "midiWarning": false,        // patch uses MIDI, no MIDI hardware reachable
   "patchPath": "/abs/path/droid.ini",
   "stateLine": "state: restored (saved 12 Sep 11:02)",
   "statusLine": "uat-core.ini — ok, 812 bytes RAM"
 }
 ```
 
-- Derived by the pure model in `plugin/src/MasterDiagnostics.hpp`
-  (`vcvoid::diag::diagnose`), which the panel's own error display is meant to
-  share — assert against this, not against pixels or LED brightness.
+- **This is the panel's own verdict, serialised.** `state`, `severity`,
+  `title`, `message`, `line` and `code` all come out of
+  `vcvoid::status::evaluate` (`plugin/src/MasterStatus.hpp`, issue #46) — the
+  same pure model that paints the module's ring, the MASTER's blink code, the
+  hover tooltip and the context-menu error card. There is no second derivation
+  anywhere: asserting on this record IS asserting on what a human would see,
+  which is why the automated run never has to look at pixels or LED brightness.
+  `state` is the same string `/status` reports, spelled the same way (hyphens).
 - **State precedence** when more than one condition applies:
-  `load_failed` > `chain_error` > `warnings` > `running`. A failed load stops
+  `load-failed` > `chain-error` > `warnings` > `running`. A failed load stops
   the engine, so it wins over a chain complaint about the same load.
-- `state: "warnings"` means the patch IS running: a deprecated circuit, a
-  memory-limit downgrade (only with "ignore hardware memory limits" on), or the
-  MIDI-without-hardware diagnostic that `/status`'s `midiWarning` reports.
+- `state: "warnings"` means the patch IS running with something the load
+  raised: a deprecated circuit, or a memory-limit downgrade (only with "ignore
+  hardware memory limits" on). The MIDI-without-hardware diagnostic is its own
+  `midiWarning` boolean here and in `/status`, and its own line in the context
+  menu — it does **not** move `state` or appear in `warnings[]`, because the
+  patch is running exactly as written.
+- `title`/`message` are the card's two lines, so they are worded for a human:
+  `"LOAD ERROR · line 7"` + the error text (`" (+2 more)"` appended when the
+  load raised several), `"CHAIN ERROR"` + the mismatch, `"Running with 2
+  warnings"` + the first one, `"No patch loaded"`, and **both empty** when the
+  master is simply running — a clean master has nothing to say.
 - `code`/`codeColor` name the hardware's own error code and the colour the
   MASTER's 4×4 matrix blinks for it (`manual/basics.md` §5.4) — e.g.
   `unknown_register`/yellow, `unknown_circuit`/red, `cable_misuse`/green,
   `unknown_parameter`/orange, `invalid_syntax`/magenta, `patch_too_big`/blue
-  (global, `line == 0`), `out_of_memory`/cyan, `patch_not_found`/yellow. An
-  unrecognised engine message reports `""` rather than a guess, so
-  `code == ""` on a `load_failed` means "we have only the text".
-- `line` is the number the hardware encodes in its LEDs — the field to assert
-  when checking that an error points at the right place.
+  (global), `out_of_memory`/cyan, `patch_not_found`/yellow. The code is the one
+  the **engine tagged the error with** (`droid::ErrorCode`), not a guess made
+  from its wording; an error with no hardware equivalent reports `""`, so
+  `code == ""` on a `load-failed` means "the hardware has no code for this"
+  and the matrix stays dark.
+- `line` is the offending patch line, which for a local code is what the matrix
+  spells in its LEDs — the field to assert when checking that an error points
+  at the right place. It is 0 when the error is not tied to a line (a patch
+  over the size limit, an unreadable file). A *global* code can still carry a
+  line (`out_of_memory` names the circuit that broke the budget); the blink
+  code ignores it, the card offers to open it.
 
 ### Timing mode, adaptive rate, and CPU/profiling (issue #3)
 
