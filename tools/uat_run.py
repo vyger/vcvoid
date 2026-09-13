@@ -1682,37 +1682,57 @@ def phase8(r):
         # manual/circuits/motoquencer.md §"Start and end": "Touching a button
         # changes the END step. You can set the start step by first setting an
         # end step and HOLDING that button and then — with a second finger —
-        # press another step." Hence end = the first plate touched (step 3),
-        # start = the second (step 1). The two presses are deliberately
-        # separated in time so the same-engine-tick tie-break never applies.
-        expected = ("uat-m4-startend.ini (buttonmode = 1): press plate 3, press plate 1, "
-                    "release 3, release 1 -> endstepout = 3, startstepout = 1")
+        # press another step." Hence end = the first plate touched, start = the
+        # second. Implemented in #51 (engine/src/seqcore.hpp startEndPress: the
+        # first press sets manualEnd0_ and becomes the anchor, a press on a
+        # different lane while that anchor is down sets manualStart0_); the
+        # gesture is pinned headless by tests/golden/motoquencer/startend-*.gold.
+        #
+        # Plates 3 THEN 2, not 3 then 1: the fixture's defaults are start 1 /
+        # end numsteps (= 4), so a start of 1 would read the same whether the
+        # second finger registered or not. 3-then-2 moves BOTH numbers off
+        # their defaults, so the assertion can only pass if the whole gesture
+        # landed. The presses are deliberately separated in time so the
+        # same-engine-tick tie-break never applies.
+        #
+        # startstepout/endstepout are 1-based step NUMBERS on internal cables:
+        # an O jack clamps to +/-1.0, so the goldens read them scaled x0.1 and
+        # this step reads the cables directly instead.
+        expected = ("uat-m4-startend.ini (buttonmode = 1): defaults start 1 / end 4; then "
+                    "press plate 3, press plate 2, release 3, release 2 -> "
+                    "endstepout = 3, startstepout = 2")
         code, st, _ = r.bridge.load_patch(r.master_id, patch("uat-m4-startend.ini"))
         if code != 200:
             return "FAIL", expected, f"load uat-m4-startend.ini -> {code} {st}"
-        code, resp, _ = r.bridge.watch_arm(r.master_id, ["_SS", "_ES", "B2.1", "B2.3"])
+        ok_boot, _ = wait_for(lambda: (reg("_ES") is not None, reg("_ES")),
+                              timeout=4, interval=0.2)
+        if not ok_boot:
+            return "FAIL", expected, f"_ES never readable after load (diagnostics: {r.bridge.diagnostics(r.master_id)[1]})"
+        start0, end0 = reg("_SS"), reg("_ES")
+        code, resp, _ = r.bridge.watch_arm(r.master_id, ["_SS", "_ES", "B2.2", "B2.3"])
         if code != 200:
             return "FAIL", expected, f"watch arm -> {code} {resp}"
         r.bridge.params_hold(m4, 6)    # plate 3 = step 3 -> sets the END step
         time.sleep(0.2)
-        r.bridge.params_hold(m4, 4)    # plate 1, second finger -> sets the START step
+        r.bridge.params_hold(m4, 5)    # plate 2, second finger -> sets the START step
         time.sleep(0.2)
         r.bridge.params_release(m4, 6)
-        r.bridge.params_release(m4, 4)
+        r.bridge.params_release(m4, 5)
         time.sleep(0.3)
         _, watch, _ = r.bridge.watch_collect(r.master_id)
         sigs = (watch or {}).get("signals") or {}
         start, end = reg("_SS"), reg("_ES")
-        status = "PASS" if (end == 3 and start == 1) else "FAIL"
-        return status, expected, (f"startstepout={start} endstepout={end}; "
+        # The range must SURVIVE the release: the anchor ends the gesture, it
+        # does not undo it (only `clearstartend` does).
+        defaults_ok = (start0 == 1 and end0 == 4)
+        status = "PASS" if (defaults_ok and end == 3 and start == 2) else "FAIL"
+        return status, expected, (f"defaults start={start0} end={end0}; after gesture "
+                                  f"startstepout={start} endstepout={end}; "
                                   f"watch last: _SS={sigs.get('_SS', {}).get('last')} "
                                   f"_ES={sigs.get('_ES', {}).get('last')}; "
-                                  f"plate B registers: {sigs.get('B2.1', {})} {sigs.get('B2.3', {})}")
+                                  f"plate B registers: {sigs.get('B2.2', {})} {sigs.get('B2.3', {})}")
 
     r.step("8.5", "motoquencer buttonmode 1 start/end gesture (two fingers)", s8_5)
-    xfail_last(r, "engine support for the buttonmode 1 start/end gesture is issue #48 "
-                  "(branch feat/motoquencer-startend-doublerange) — expected to fail "
-                  "until that merges; remove this line then")
 
 
 def phase9(r):

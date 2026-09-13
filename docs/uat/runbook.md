@@ -464,15 +464,20 @@ params" list) and are Final sign-off items.
    fader's `motorTarget` are still at the toggled dent. **End state only**:
    the trajectory in between is deliberately not asserted (the motor is off
    under a finger, exactly as on hardware).
-5. ☐ `uat-m4-startend.ini` (motoquencer `buttonmode = 1`): press plate 3,
-   press plate 1, release 3, release 1 — via `POST /params/hold`/`release`,
-   with the two presses separated in time so the same-tick tie-break never
-   applies → `endstepout` (`_ES`) is **3** (a touch sets the END step) and
-   `startstepout` (`_SS`) is **1** (the second finger sets the START step),
-   per `manual/circuits/motoquencer.md` §"Start and end". **Currently
-   XFAIL**: the engine side of the gesture is issue #48 — the step is written
-   to the manual's semantics and is expected to fail until that lands; drop
-   the `xfail_last(...)` line in `tools/uat_run.py` when it does.
+5. ☐ `uat-m4-startend.ini` (motoquencer `buttonmode = 1`, engine side merged
+   as #51): read the defaults first — `startstepout` (`_SS`) **1**,
+   `endstepout` (`_ES`) **4** — then press plate 3, press plate 2, release 3,
+   release 2 via `POST /params/hold`/`release`, with the two presses separated
+   in time so the same-tick tie-break never applies → `_ES` is **3** (a touch
+   sets the END step) and `_SS` is **2** (the second finger sets the START
+   step), and both **survive the release** (only `clearstartend` undoes them),
+   per `manual/circuits/motoquencer.md` §"Start and end". Plate **2**, not
+   plate 1, precisely because the default start already is 1: 3-then-2 moves
+   both numbers off their defaults, so the assertion cannot pass on a gesture
+   that half-registered. Read `_SS`/`_ES` as **cables** — they are 1-based
+   step numbers and an `O` jack clamps to ±1.0, which is why the fixture (and
+   `tests/golden/motoquencer/startend-*.gold`) mirrors them to O3/O4 scaled
+   ×0.1.
 
 ## Phase 9 — MIDI routing (M5)
 
