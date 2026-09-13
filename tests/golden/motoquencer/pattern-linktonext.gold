@@ -1,0 +1,84 @@
+# motoquencer `pattern` across a linktonext chain (issue #54): the chain MAIN owns
+# the movement pattern and the member lanes follow it.
+#
+# The manual lists `pattern` among the inputs a linked sequencer ignores -- "it
+# always plays the same step number - including all fancy operating like
+# `shiftsteps`, `startstep`, `endstep`, `form`, `pattern` and `autoreset`. All
+# those inputs [...] are *ignored* by the next motoquencer." The member here sets
+# `pattern = 7` (random jump) on purpose to prove it is never consulted: it still
+# walks the main's pattern 1.
+#
+# The main has four steps, so pattern 1's two-forward-one-back figure gives the
+# order 0,1,2, 1,2,3, 2,3 and then restarts. The member is a continuous CV lane
+# (quantize 0, cvbase 0, cvrange 1, holdcv 0) with its four steps dialled to
+# 1.0 / 0.75 / 0.5 / 0.25, so its `cv` output (O4) spells out which step the chain
+# is on. The main's `startofsequence` (O2) fires once per turn of the figure.
+tickrate 100
+patch <<<
+[m4]
+[motoquencer]
+    clock           = I1
+    fadermode       = I2
+    numsteps        = 4
+    numfaders       = 4
+    linktonext      = 1
+    pattern         = 1
+    quantize        = 0
+    cvbase          = 0
+    cvrange         = 1
+    cv              = O1
+    startofsequence = O2
+[motoquencer]
+    linktonext      = 0
+    pattern         = 7
+    quantize        = 0
+    cvbase          = 0
+    cvrange         = 1
+    holdcv          = 0
+    cv              = O4
+>>>
+# address the linked lane (fadermode 10) and dial its four steps
+@1 set I2 10
+@2 move F1 1.0
+@2 expect F1 1.0 tol 1e-4
+@3 move F2 0.75
+@4 move F3 0.5
+@5 move F4 0.25
+@5 expect F4 0.25 tol 1e-4
+@6 set I2 0
+# two forward ...
+@8 set I1 1
+@8 expect O4 1.0 tol 1e-4
+@8 expect O2 1 tol 1e-4
+@9 set I1 0
+@10 set I1 1
+@10 expect O4 0.75 tol 1e-4
+@10 expect O2 0 tol 1e-4
+@11 set I1 0
+@12 set I1 1
+@12 expect O4 0.5 tol 1e-4
+@13 set I1 0
+# ... one back
+@14 set I1 1
+@14 expect O4 0.75 tol 1e-4
+@15 set I1 0
+@16 set I1 1
+@16 expect O4 0.5 tol 1e-4
+@17 set I1 0
+@18 set I1 1
+@18 expect O4 0.25 tol 1e-4
+@19 set I1 0
+@20 set I1 1
+@20 expect O4 0.5 tol 1e-4
+@21 set I1 0
+@22 set I1 1
+@22 expect O4 0.25 tol 1e-4
+@23 set I1 0
+# the next forward move would step past the end: the turn restarts.
+@24 set I1 1
+@24 expect O4 1.0 tol 1e-4
+@24 expect O2 1 tol 1e-4
+@25 set I1 0
+@26 set I1 1
+@26 expect O4 0.75 tol 1e-4
+@27 set I1 0

@@ -1,0 +1,94 @@
+# motoquencer `pattern` combined with `pingpong` = 1 (issue #54), the other half
+# of "according to `direction` and `pingpong`".
+#
+# Ping pong over four steps is the six-entry order 0,1,2,3,2,1 ("since the steps
+# at the turning points are played just once, a sequence of 8 steps in ping pong
+# mode has a duration of 14, not 16"). Pattern 1 walks THAT list, so its figure
+# turns around with the sequence: positions 0,1,2,1,2,3,2,3,4,3,4,5 spell the
+# steps 0,1,2,1,2,3,2,3,2,3,2,1. Reading it as step numbers instead would have
+# given 0,1,2,1,2,3,2,3,4 and run off the end of a four-step sequence.
+# Step numbers do not fit on an output jack (they clamp at +/-10 V), so
+# `currentstep` rides an internal cable scaled by 1/10: step N reads N/10.
+tickrate 100
+patch <<<
+[m4]
+[motoquencer]
+    clock           = I1
+    numsteps        = 4
+    numfaders       = 4
+    pattern         = 1
+    pingpong        = 1
+    currentstep     = _CS
+    startofsequence = O2
+[copy]
+    input  = _CS * 0.1
+    output = O1
+>>>
+@2 set I1 1
+@2 expect O1 0 tol 1e-4
+@2 expect O2 1 tol 1e-4
+@3 set I1 0
+@4 set I1 1
+@4 expect O1 0.1 tol 1e-4
+@4 expect O2 0 tol 1e-4
+@5 set I1 0
+@6 set I1 1
+@6 expect O1 0.2 tol 1e-4
+@6 expect O2 0 tol 1e-4
+@7 set I1 0
+@8 set I1 1
+@8 expect O1 0.1 tol 1e-4
+@8 expect O2 0 tol 1e-4
+@9 set I1 0
+@10 set I1 1
+@10 expect O1 0.2 tol 1e-4
+@10 expect O2 0 tol 1e-4
+@11 set I1 0
+@12 set I1 1
+@12 expect O1 0.3 tol 1e-4
+@12 expect O2 0 tol 1e-4
+@13 set I1 0
+@14 set I1 1
+@14 expect O1 0.2 tol 1e-4
+@14 expect O2 0 tol 1e-4
+@15 set I1 0
+@16 set I1 1
+@16 expect O1 0.3 tol 1e-4
+@16 expect O2 0 tol 1e-4
+@17 set I1 0
+@18 set I1 1
+@18 expect O1 0.2 tol 1e-4
+@18 expect O2 0 tol 1e-4
+@19 set I1 0
+@20 set I1 1
+@20 expect O1 0.3 tol 1e-4
+@20 expect O2 0 tol 1e-4
+@21 set I1 0
+@22 set I1 1
+@22 expect O1 0.2 tol 1e-4
+@22 expect O2 0 tol 1e-4
+@23 set I1 0
+@24 set I1 1
+@24 expect O1 0.1 tol 1e-4
+@24 expect O2 0 tol 1e-4
+@25 set I1 0
+@26 set I1 1
+@26 expect O1 0.2 tol 1e-4
+@26 expect O2 0 tol 1e-4
+@27 set I1 0
+@28 set I1 1
+@28 expect O1 0.1 tol 1e-4
+@28 expect O2 0 tol 1e-4
+@29 set I1 0
+@30 set I1 1
+@30 expect O1 0 tol 1e-4
+@30 expect O2 1 tol 1e-4
+@31 set I1 0
+@32 set I1 1
+@32 expect O1 0.1 tol 1e-4
+@32 expect O2 0 tol 1e-4
+@33 set I1 0
+@34 set I1 1
+@34 expect O1 0.2 tol 1e-4
+@34 expect O2 0 tol 1e-4
+@35 set I1 0
