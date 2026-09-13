@@ -1,0 +1,54 @@
+# motoquencer play-order CHARACTERISATION (2 of 4) — pins direction + pingpong
+# so the song-form work (issue #53) cannot change them by accident.
+#
+# `direction = 1` means backwards (the `direction` row) and `pingpong = 1` makes
+# the sequencer "change the direction every time it reaches the start or end of
+# the sequence". Over four steps that is one cycle of 3,2,1,0,1,2 — the turning
+# points are played once, not twice — and then it wraps back to 3.
+#
+# A wrap is still a start of the sequence, so `startofsequence` fires on the first
+# step (3) and on each return to it, and nowhere in between.
+tickrate 100
+patch <<<
+[m4]
+[motoquencer]
+    clock           = I1
+    numsteps        = 4
+    numfaders       = 4
+    direction       = 1
+    pingpong        = 1
+    currentstep     = _CS
+    startofsequence = O2
+[copy]
+    input  = _CS * 0.1
+    output = O1
+>>>
+@2 set I1 1
+@2 expect O1 0.3 tol 1e-4
+@2 expect O2 1 tol 1e-4
+@3 set I1 0
+@4 set I1 1
+@4 expect O1 0.2 tol 1e-4
+@4 expect O2 0 tol 1e-4
+@5 set I1 0
+@6 set I1 1
+@6 expect O1 0.1 tol 1e-4
+@7 set I1 0
+# the turning point (step 0) is played once
+@8 set I1 1
+@8 expect O1 0.0 tol 1e-4
+@9 set I1 0
+@10 set I1 1
+@10 expect O1 0.1 tol 1e-4
+@11 set I1 0
+@12 set I1 1
+@12 expect O1 0.2 tol 1e-4
+@12 expect O2 0 tol 1e-4
+@13 set I1 0
+# ... and so is the other one: the cycle is six long, then it wraps.
+@14 set I1 1
+@14 expect O1 0.3 tol 1e-4
+@14 expect O2 1 tol 1e-4
+@15 set I1 0
+@16 set I1 1
+@16 expect O1 0.2 tol 1e-4

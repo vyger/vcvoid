@@ -1,0 +1,45 @@
+# motoquencer play-order CHARACTERISATION (3 of 4) — pins the interaction of
+# start/end with direction, so the song-form work (issue #53) cannot change it.
+#
+# `startstep` "sets the first step to be used" and `endstep` "defines the last of
+# the steps to be played", both 1-based. With startstep = 3 and endstep = 6 only
+# the 0-based steps 2..5 are in play, and `direction = 1` plays that window
+# backwards: 5,4,3,2 then wrap to 5 again. Steps 0 and 1 are never touched.
+tickrate 100
+patch <<<
+[m4]
+[m4]
+[motoquencer]
+    clock           = I1
+    numsteps        = 6
+    numfaders       = 6
+    startstep       = 3
+    endstep         = 6
+    direction       = 1
+    currentstep     = _CS
+    startofsequence = O2
+[copy]
+    input  = _CS * 0.1
+    output = O1
+>>>
+@2 set I1 1
+@2 expect O1 0.5 tol 1e-4
+@2 expect O2 1 tol 1e-4
+@3 set I1 0
+@4 set I1 1
+@4 expect O1 0.4 tol 1e-4
+@5 set I1 0
+@6 set I1 1
+@6 expect O1 0.3 tol 1e-4
+@7 set I1 0
+@8 set I1 1
+@8 expect O1 0.2 tol 1e-4
+@8 expect O2 0 tol 1e-4
+@9 set I1 0
+# the window is four steps long, then it wraps to the start of the window
+@10 set I1 1
+@10 expect O1 0.5 tol 1e-4
+@10 expect O2 1 tol 1e-4
+@11 set I1 0
+@12 set I1 1
+@12 expect O1 0.4 tol 1e-4

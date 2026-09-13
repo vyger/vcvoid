@@ -1,0 +1,59 @@
+# motoquencer play-order CHARACTERISATION (4 of 4) — pins WHEN the pitch
+# accumulator advances, so the song-form work (issue #53) cannot change it.
+#
+# "Every time it restarts from step 1, the internal accumulator is increased by
+# one" and "if accumulatorrange = 4, the accumulator is reset after the sequence
+# has played four times" — so with two steps and accumulatorrange = 3 the
+# `accumulator` output reads 0,0,1,1,2,2,3,3,0 over four turns: exactly one
+# advance per wrap, none in the middle of a turn, and a wrap back to 0 past the
+# range. The first turn is turn zero — starting the sequence is not a wrap.
+#
+# The accumulator is an integer 0..16, so like currentstep it rides an internal
+# cable scaled by 1/10.
+tickrate 100
+patch <<<
+[m4]
+[motoquencer]
+    clock            = I1
+    numsteps         = 2
+    numfaders        = 2
+    accumulatorrange = 3
+    accumulator      = _ACC
+    startofsequence  = O2
+[copy]
+    input  = _ACC * 0.1
+    output = O1
+>>>
+@2 set I1 1
+@2 expect O1 0.0 tol 1e-4
+@2 expect O2 1 tol 1e-4
+@3 set I1 0
+@4 set I1 1
+@4 expect O1 0.0 tol 1e-4
+@4 expect O2 0 tol 1e-4
+@5 set I1 0
+# wrap 1
+@6 set I1 1
+@6 expect O1 0.1 tol 1e-4
+@6 expect O2 1 tol 1e-4
+@7 set I1 0
+@8 set I1 1
+@8 expect O1 0.1 tol 1e-4
+@9 set I1 0
+# wrap 2
+@10 set I1 1
+@10 expect O1 0.2 tol 1e-4
+@11 set I1 0
+@12 set I1 1
+@12 expect O1 0.2 tol 1e-4
+@13 set I1 0
+# wrap 3 — the accumulator is now at its range
+@14 set I1 1
+@14 expect O1 0.3 tol 1e-4
+@15 set I1 0
+@16 set I1 1
+@16 expect O1 0.3 tol 1e-4
+@17 set I1 0
+# wrap 4 — past the range, back to 0
+@18 set I1 1
+@18 expect O1 0.0 tol 1e-4
