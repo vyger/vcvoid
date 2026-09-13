@@ -1287,12 +1287,12 @@ protected:
     // Layer 3: walk ONE window — a form part, or the whole range when there is no
     // form — according to direction and pingpong, appending to `outSteps`.
     //
-    // SEAM for issue #54: the movement `pattern` (1..7) belongs here and nowhere
-    // else. The manual is explicit that stepping modifications "are always
-    // applied within each individual part", and a pattern re-walks exactly the
-    // direction+pingpong sequence computed below ("always two steps forwards
-    // (according to `direction` and `pingpong`) and then one step backwards"), so
-    // it slots in as a rewrite of `part` just before it is appended.
+    // The order built here is exactly what a movement `pattern` (issue #54)
+    // re-walks: the manual's patterns move "according to `direction` and
+    // `pingpong`", so "one step forward" means the next element of the sequence
+    // below. The walk itself cannot live here — patterns 5..7 are random and must
+    // draw once per played step rather than once per playOrder() rebuild — so it
+    // sits in nextPlayedPos(), confined to one part run (see runBounds).
     void stepThrough(EngineState& s, std::vector<int> part, std::vector<int>& outSteps) {
         if (part.empty()) return;
         if (in("direction").value(s) >= kHigh)
@@ -1403,7 +1403,7 @@ protected:
         if (pulse_ + 1 < reps) { pulse_++; return; }   // same step, next pulse
         pulse_ = 0;
         bool wrapped = false;
-        int next = nextPlayedPos(s, order.steps, playPos_, wrapped);
+        int next = nextPlayedPos(s, order, playPos_, wrapped);
         playPos_ = next;
         // A wrap is the end of the COMPLETE form, not of a part: "if you enable a
         // form like AAAB, the accumulator is increased at the end of the complete
@@ -1452,12 +1452,39 @@ protected:
         return cur_.repeats[phys];
     }
 
-    // Advance to the next non-skipped position; sets wrapped if we passed the end.
-    int nextPlayedPos(EngineState& s, const std::vector<int>& order, int pos, bool& wrapped) {
+    // The contiguous run of play positions that belong to the same form-part
+    // ENTRY as `pos`, as the inclusive bounds [lo, hi]. playOrder() lays the part
+    // entries down back to back, so a part entry is always one contiguous run;
+    // without a form there is a single run covering the whole order.
+    //
+    // This is the arena a movement pattern is confined to (issue #54): the manual
+    // says stepping modifications "are always applied within each individual
+    // part", so "forward" means the next position of THIS run and leaving the run
+    // forwards is what ends a cycle.
+    void runBounds(const PlayOrder& o, int pos, int& lo, int& hi) const {
+        int n = (int)o.steps.size();
+        if (!o.formed || (int)o.part.size() != n) { lo = 0; hi = n - 1; return; }
+        int at = clampi(pos, 0, n - 1), p = o.part[at];
+        lo = at; while (lo > 0     && o.part[lo - 1] == p) lo--;
+        hi = at; while (hi < n - 1 && o.part[hi + 1] == p) hi++;
+    }
+
+    // Leave the run ending at `hi` forwards: the first position of the next run,
+    // or position 0 with `wrapped` set when that was the last run of the form.
+    static int enterNextRun(const PlayOrder& o, int hi, bool& wrapped) {
+        int q = hi + 1;
+        if (q >= (int)o.steps.size()) { q = 0; wrapped = true; }
+        return q;
+    }
+
+    // Advance to the next non-skipped position; sets wrapped if we passed the end
+    // of the whole order (= the end of the complete form).
+    int nextPlayedPos(EngineState& s, const PlayOrder& o, int pos, bool& wrapped) {
+        const std::vector<int>& order = o.steps;
         int n = (int)order.size();
         for (int tries = 0; tries < n; tries++) {
-            pos++;
-            if (pos >= n) { pos = 0; wrapped = true; }
+            int lo, hi; runBounds(o, pos, lo, hi);
+            pos = (pos >= lo && pos < hi) ? pos + 1 : enterNextRun(o, hi, wrapped);
             if (!cur_.skip[physOf(s, order[pos])]) return pos;
         }
         return pos;   // all skipped -> hold (manual: repeats the most recent step)
