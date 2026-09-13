@@ -1,0 +1,54 @@
+# motoquencer: a randomized step may leave cvbase..cvbase+cvrange (issue #57).
+# motoquencer.md: "At position 7 (the maximum), the offset is up to `cvrange`, so
+# if your CV is at maximum, this could double up your CV range." The offset is
+# therefore NOT clamped back into the dialed range (SPEC-GAP: the jack output
+# still clamps at +/-10 V like every other register, nothing else does).
+#
+# cvrange 0.5 (5 V), detent 7 -> offset +/- 0.25 (2.5 V). A step dialed to the TOP
+# of the range (5 V) lands above 5 V whenever the draw is positive, and a step
+# dialed to the BOTTOM (cvbase = 0 V) goes negative whenever it is negative.
+seed 1
+tickrate 100
+patch <<<
+[m4]
+[motoquencer]
+    numfaders = 1
+    numsteps  = 1
+    clock     = I1
+    fadermode = I2
+    quantize  = 0
+    cvbase    = 0
+    cvrange   = 0.5
+    holdcv    = 0
+    cv        = O1
+>>>
+@1 set I2 1
+@2 move F1 1.0
+@4 set I2 0
+# step at the top of the range: 0.5 + u * 0.25
+@5 move F1 1.0
+@10 set I1 1
+@10 expect O1 0.2500315 tol 1e-5
+@11 set I1 0
+@12 set I1 1
+@12 expect O1 0.2578737 tol 1e-5
+@13 set I1 0
+@14 set I1 1
+@14 expect O1 0.5582020 tol 1e-5      # above cvbase + cvrange
+@15 set I1 0
+@16 set I1 1
+@16 expect O1 0.2858093 tol 1e-5
+@17 set I1 0
+@18 set I1 1
+@18 expect O1 0.5292442 tol 1e-5      # above cvbase + cvrange
+@19 set I1 0
+# step at the bottom of the range: 0 + u * 0.25 -> below cvbase
+@20 move F1 0.0
+@22 set I1 1
+@22 expect O1 -0.1632129 tol 1e-5
+@23 set I1 0
+@24 set I1 1
+@24 expect O1 -0.1763748 tol 1e-5
+@25 set I1 0
+@26 set I1 1
+@26 expect O1 -0.1992713 tol 1e-5

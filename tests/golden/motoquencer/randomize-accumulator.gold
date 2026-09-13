@@ -1,0 +1,65 @@
+# motoquencer: randomization and the accumulator share one fader (issue #57).
+# motoquencer.md, accumulatorrange: "the fader in the fader mode 'pitch
+# randomization' changes its meaning slightly. The upper four settings are now
+# dedicated to the accumulator while the lower three settings still do pitch
+# randomization" — 7/6/5/4 = shift up twice/up/down/down twice per turn, 3/2/1 =
+# strong/medium/slight randomization, 0 = both off.
+#
+# SPEC-GAP: the manual gives no separate strengths for "slight/medium/strong", so
+# detents 1..3 keep the same n/7-of-cvrange scaling they have when the
+# accumulator is off — they are the bottom three rungs of the same ladder.
+#
+# Two steps, accumulatorrange 2, C lydian over 24 semitones (see
+# randomize-quantized.gold for the 15-note list):
+#   step 1, detent 6 -> accumulator only: C, D, E, C, ... one scale note per turn,
+#                       not one grain of jitter.
+#   step 2, detent 2 -> randomization only (+/- 2/7 of cvrange/2 = +/- 2 notes),
+#                       and it never moves the accumulator.
+seed 1
+tickrate 100
+patch <<<
+[m4]
+[motoquencer]
+    numfaders        = 2
+    numsteps         = 2
+    clock            = I1
+    fadermode        = I2
+    quantize         = 2
+    cvbase           = 0
+    cvrange          = 0.2
+    accumulatorrange = 2
+    holdcv           = 0
+    cv               = O1
+>>>
+# randomize lane: step 1 -> detent 6 (accumulator up), step 2 -> detent 2
+@1 set I2 1
+@2 move F1 0.8571429
+@2 move F2 0.2857143
+@4 set I2 0
+# CV lane: step 1 -> C (notch 0), step 2 -> C' (notch 7)
+@5 move F1 0.0
+@5 move F2 0.5
+@10 set I1 1
+@10 expect O1 0.0 tol 1e-5            # step 1, accumulator 0 -> C
+@11 set I1 0
+@12 set I1 1
+@12 expect O1 0.075 tol 1e-5          # step 2, -2 notes -> A (9)
+@13 set I1 0
+@14 set I1 1
+@14 expect O1 0.0166667 tol 1e-5      # step 1, accumulator 1 -> D
+@15 set I1 0
+@16 set I1 1
+@16 expect O1 0.075 tol 1e-5          # step 2, -2 notes -> A (9)
+@17 set I1 0
+@18 set I1 1
+@18 expect O1 0.0333333 tol 1e-5      # step 1, accumulator 2 -> E
+@19 set I1 0
+@20 set I1 1
+@20 expect O1 0.1 tol 1e-5            # step 2, +-0 notes -> C' (12)
+@21 set I1 0
+@22 set I1 1
+@22 expect O1 0.0 tol 1e-5            # step 1, accumulator wraps -> C
+@23 set I1 0
+@24 set I1 1
+@24 expect O1 0.075 tol 1e-5          # step 2, -2 notes -> A (9)
+@25 set I1 0

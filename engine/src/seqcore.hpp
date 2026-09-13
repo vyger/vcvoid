@@ -54,6 +54,9 @@
 //     even / odd / every-4th / conditional) with a per-turn counter + engine RNG.
 //   * pitch accumulator (accumulatorrange) — the four accumulator fader
 //     positions (idx 4..7 of randomize-CV) shifting the note per turn.
+//   * per-step CV randomization (randomize-CV idx 1..7, and only 1..3 once the
+//     accumulator owns the top four): a fresh bipolar offset each step entry,
+//     before quantization. See the SPEC-GAPs below for the exact reading.
 //   * outputs: cv, gate, startofsequence, currentstep, currentpage, accumulator,
 //     startstepout, endstepout.
 //   * `linktonext` multi-track linking: the FADER and BUTTON/LED editing
@@ -123,10 +126,6 @@
 //     shared-button rule for stepcopy + doublerange on one button — doublerange
 //     then fires on the RELEASE, if no step was touched meanwhile — lands with
 //     stepcopy; see the TODO at the doublerange edge detector.)
-//   * pitch randomization (randomize-CV positions when accumulatorrange = 0, and
-//     idx 1..3 when it is > 0): the manual says only "a different random offset
-//     each time" with no distribution — left inert (the value is still stored/
-//     edited, it just does not perturb the pitch).
 //   * taptempo (gate-length stabiliser), DB8E display (cvname/gatename/display),
 //     dontsave/SD persistence, buttoncolor/LED feel — panel-only or no-op headless.
 //
@@ -171,6 +170,24 @@
 //     the scale is restored, but the exact original semitone is not separately
 //     stored.
 //   * probability decided once at step entry (pulse 0), using the engine RNG.
+//   * per-step CV randomization (#57). The manual gives only "a different random
+//     offset each time the step is played" and "at position 7 the offset is up to
+//     cvrange", so: (a) the offset is BIPOLAR uniform, ±(idx/7)·cvrange/2 around
+//     the dialed pitch — a full cvrange peak-to-peak at the top detent — and is
+//     NOT clamped back into cvbase..cvrange (the manual expects a maxed step to
+//     leave it: "could double up your CV range"); only the jack's ±10 V clamp
+//     applies. (b) ONE draw per step entry, not per repeat/ratchet — the same
+//     rule the gate probability follows — from the engine RNG, and only when the
+//     step's detent actually randomizes, so an unused lane leaves the stream (and
+//     other circuits' seeded goldens) untouched. (c) Applied BEFORE quantization
+//     so a quantized track stays in scale: in the quantized path the dialed CV is
+//     an index into the in-range scale notes, so the offset converts to that
+//     index space (round(offset/cvrange·(notes−1))) and any surplus past either
+//     end keeps walking the same notes; a notched CV (cvnotches ≥ 2) moves by
+//     whole notches and stays inside the notch list, since it emits a number.
+//     (d) with accumulatorrange > 0 the remaining detents 1..3 ("slight/medium/
+//     strong", the manual gives no strengths) keep the same idx/7 scaling.
+//     (e) composemode auditions the dialed note itself, unrandomized.
 //   * the start/end gesture with two plates going down in the SAME engine tick:
 //     the manual only describes the sequential gesture ("first setting an end
 //     step and *holding* that button"). Both skins walk their lanes ascending, so
@@ -1630,6 +1647,14 @@ protected:
         latchCvpos_ = cur_.cvpos[phys];
         latchRandcv_ = cur_.randcv[phys];
         plays_ = cur_.gate[phys] && probabilityPlays(s, phys);
+        // ONE randomization draw per step entry ("a different random offset each
+        // time the step is played"), so every repeat and ratchet inside the step
+        // sings the same note — the rule the gate probability above already
+        // follows. Drawn only when this step actually randomizes, so a patch that
+        // does not use the lane consumes no RNG at all (and the probability coin
+        // keeps its place in the stream).
+        latchRandU_ = randAmount(s) > 0 ? (2.0f * randUniform(s.rngState) - 1.0f)
+                                        : 0.0f;
         stepStart_ = s.tick;
         pitchCached_ = false;   // recompute the step's raw pitch on entry
         stepEpoch_++;           // published to the chain members
@@ -1696,21 +1721,36 @@ protected:
         float base = in("cvbase").value(s);
         float range = clampf(in("cvrange").value(s), 0.0f, 1.0f);
         float pos = clampf(latchCvpos_, 0.0f, 1.0f);
+        float rnd = randPosOffset(s);                // 0 unless the step randomizes
         if (cn >= 2) {
             int idx = fc::notchIndex(pos, cn);
             if (invert) idx = cn - 1 - idx;
+            // A notched CV emits a NUMBER, so randomization moves it by whole
+            // notches and stays inside the notch list (an out-of-range number
+            // would mean nothing downstream).
+            idx = clampi(idx + (int)std::lround(rnd * float(cn - 1)), 0, cn - 1);
             return (float)idx;                       // notched: integer number
         }
         int quant = (int)std::lround(in("quantize").value(s));
         if (quant == 0) {
             float v = invert ? (1.0f - pos) : pos;
-            return base + v * range;                 // continuous CV
+            return base + (v + rnd) * range;         // continuous CV
         }
         std::vector<long> allowed = allowedSemis(s);
         int N = (int)allowed.size();
         if (N < 1) return base;
         int idx = fc::notchIndex(pos, N);
         if (invert) idx = N - 1 - idx;
+        // Randomization goes in BEFORE quantization, so a quantized track stays in
+        // scale: the dialed CV here IS an index into the allowed notes, so the
+        // offset converts to that index space. Past either end of the list the
+        // surplus keeps climbing/falling along the same note material (folded into
+        // the note shifter below) instead of clamping — the manual explicitly
+        // allows a randomized step to leave the dialed range.
+        idx += (int)std::lround(rnd * float(N - 1));
+        int surplus = 0;
+        if (idx > N - 1)  { surplus = idx - (N - 1); idx = N - 1; }
+        else if (idx < 0) { surplus = idx;           idx = 0; }
         long semi = allowed[idx];
         NoteSelector ns = selector(s);
         int sns = (int)std::lround(in("selectnoteshift").value(s));
@@ -1718,6 +1758,10 @@ protected:
         long rs = std::lround(in("repeatshift").value(s)) * (long)pulse;
         long ras = std::lround(in("ratchetshift").value(s)) * (long)ratchet;
         int accShift = accumulatorShift(s);
+        // quantize 1 = every semitone: the list steps by one semitone, so the
+        // surplus continues in semitones. quantize 2 = selected notes: it is a
+        // shift along those notes, which is what shiftNote's first shift does.
+        if (quant == 1) semi += surplus; else sns += surplus;
         semi = ns.shiftNote((int)semi, sns + (int)rs + (int)ras + accShift, nos);
         if (semi > kPitchBorderSemis) semi = kPitchBorderSemis;
         if (semi < -kPitchBorderSemis) semi = -kPitchBorderSemis;
@@ -1733,6 +1777,30 @@ protected:
         if (r == 7) factor = 2; else if (r == 6) factor = 1;
         else if (r == 5) factor = -1; else if (r == 4) factor = -2;
         return factor * acc_;
+    }
+
+    // ---- per-step CV randomization (fadermode 1) ---------------------------
+    // How strongly the playing step randomizes: 0 (off) .. 7. With
+    // accumulatorrange > 0 the top four detents belong to the accumulator, so
+    // only 1..3 ("slight / medium / strong") are left to randomize — at the same
+    // n/7 scaling they have when the accumulator is off (the manual names no
+    // separate strengths for those three words).
+    int randAmount(EngineState& s) {
+        int idx = clampi(latchRandcv_, 0, 7);
+        if (idx >= 4 && std::lround(in("accumulatorrange").value(s)) > 0) return 0;
+        return idx;
+    }
+
+    // The step's random offset, in FADER-POSITION units (multiply by cvrange for
+    // volts): u * (amount/7) / 2, u uniform in [-1, +1). The manual only says the
+    // step's CV gets "a different random offset each time the step is played" and
+    // that at detent 7 "the offset is up to cvrange" — read as a bipolar uniform
+    // offset spanning cvrange peak-to-peak at the top detent, NOT clamped back
+    // into cvbase..cvrange (only the jack's own +/-10 V clamp applies).
+    float randPosOffset(EngineState& s) {
+        int amt = randAmount(s);
+        if (amt <= 0) return 0.0f;
+        return latchRandU_ * (float(amt) / 7.0f) * 0.5f;
     }
 
     // ---- outputs -----------------------------------------------------------
@@ -1758,6 +1826,7 @@ protected:
             if (composeActive_) {
                 latchCvpos_ = cur_.cvpos[composeStep_];
                 latchRandcv_ = cur_.randcv[composeStep_];
+                latchRandU_ = 0.0f;   // auditioning shows the dialed note itself
                 cvHeld_ = dressPitch(s, playedPitch(s, 0, 0), cn);
                 gateHigh = (long)s.tick < composeGateUntil_;
             }
@@ -1990,6 +2059,7 @@ protected:
     int  playStep_ = -1, playLogical_ = 0;
     bool ledsLit_ = false;   // we currently drive the step LEDs (clear on deselect)
     float latchCvpos_ = 0.0f; int latchRandcv_ = 0;
+    float latchRandU_ = 0.0f;   // this step's random offset, uniform [-1, +1)
     float cvHeld_ = 0.0f;
     bool plays_ = false, tie_ = false, lastRandomPos_ = false;
     long sosUntil_ = 0;                         // startofsequence trigger-window end
