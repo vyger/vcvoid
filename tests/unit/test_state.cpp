@@ -302,11 +302,10 @@ TEST(state_roundtrip_encoquencer) {
     CHECK(allEqual);     // survive the reload
 }
 
-// Characterisation (issue #62): a motoquencer's interactively set start/end
-// range does NOT survive a reload today. The buttonmode-1 plate gesture writes
-// manualStart0_ / manualEnd0_, which saveState() deliberately leaves out, so a
-// restore — even an exact one, into the same patch — snaps the range back to
-// the startstep / endstep inputs while the dialed steps come back fine.
+// A motoquencer's interactively set start/end range (issue #62). The
+// buttonmode-1 plate gesture is manual interaction — exactly what DROIDSTA.BIN
+// keeps (hardware.md 11.1) — and `startstepout` / `endstepout` exist to read it
+// back, so the range must survive a reload just like the dialed steps do.
 //
 // The minimal repro from the issue: one motoquencer with a 16-step sequence, an
 // `endstep = 8` default and `buttonmode = 1`; touch a plate, save, reload.
@@ -335,21 +334,115 @@ static void setRange(Engine& e, int endLane, int startLane) {
     e.tick();
 }
 
-TEST(state_motoquencer_manual_range_lost_on_reload) {
-    Engine a; CHECK(a.load(kRangeQuencer).ok);
+// Dial the range on a fresh engine and hand back its snapshot.
+static StateSnapshot dialRange(Engine& a, const char* patch) {
+    CHECK(a.load(patch).ok);
     a.tick();
     CHECK_NEAR(a.getValue("_SS"), 1.0, 1e-6);      // the startstep default
     CHECK_NEAR(a.getValue("_ES"), 8.0, 1e-6);      // the endstep input
     setRange(a, /*end=*/3, /*start=*/2);
     CHECK_NEAR(a.getValue("_SS"), 2.0, 1e-6);
     CHECK_NEAR(a.getValue("_ES"), 3.0, 1e-6);
-    // The dialed range is not in the blob at all.
-    StateSnapshot snap = a.saveState();
-    CHECK(snap.entries.size() == 1 && snap.entries[0].version == 1);
+    return a.saveState();
+}
+
+TEST(state_roundtrip_motoquencer_manual_range) {
+    Engine a; StateSnapshot snap = dialRange(a, kRangeQuencer);
+    CHECK(snap.entries.size() == 1 && snap.entries[0].version == 2);
 
     Engine b; CHECK(b.load(kRangeQuencer).ok);
     b.restoreState(snap);
     b.tick();
-    CHECK_NEAR(b.getValue("_SS"), 1.0, 1e-6);      // back to the input default
-    CHECK_NEAR(b.getValue("_ES"), 8.0, 1e-6);      // ...and the 3-step range is gone
+    CHECK_NEAR(b.getValue("_SS"), 2.0, 1e-6);
+    CHECK_NEAR(b.getValue("_ES"), 3.0, 1e-6);
+}
+
+TEST(state_motoquencer_manual_range_v1_snapshot_loads) {
+    // A snapshot saved before #62 has no range in it. It must still load (the
+    // sequence is the bulk of it) and simply come back with no override — which
+    // is what a v1 save meant. The blob is the v2 one minus its last two slots.
+    Engine a; StateSnapshot snap = dialRange(a, kRangeQuencer);
+    CircuitState& e0 = snap.entries[0];
+    e0.version = 1;
+    e0.values.resize(e0.values.size() - 2);
+
+    Engine b; CHECK(b.load(kRangeQuencer).ok);
+    b.restoreState(snap);
+    b.tick();
+    CHECK_NEAR(b.getValue("_SS"), 1.0, 1e-6);      // no override: the inputs win
+    CHECK_NEAR(b.getValue("_ES"), 8.0, 1e-6);
+}
+
+TEST(state_motoquencer_manual_range_dropped_when_steps_vanish) {
+    // The patch was edited down to 2 steps between the save and the load, so the
+    // saved end (step 3) no longer exists. A stale slot falls back to the
+    // startstep / endstep inputs rather than naming a step that is not there.
+    Engine a; StateSnapshot snap = dialRange(a, kRangeQuencer);
+
+    const char* shorter =
+        "[m4]\n"
+        "[motoquencer]\n clock = I1\n numsteps = 2\n numfaders = 4\n"
+        " endstep = 2\n buttonmode = 1\n cv = O2\n"
+        " startstepout = _SS\n endstepout = _ES\n"
+        "[copy]\n input = _SS + _ES\n output = O1\n";
+    Engine b; CHECK(b.load(shorter).ok);
+    b.restoreState(snap);
+    b.tick();
+    CHECK_NEAR(b.getValue("_SS"), 2.0, 1e-6);      // step 2 still exists: kept
+    CHECK_NEAR(b.getValue("_ES"), 2.0, 1e-6);      // step 3 does not: dropped
+}
+
+TEST(state_motoquencer_manual_range_cleared_not_saved) {
+    // clearstartend drops the override, and that is what gets saved: a reload
+    // must not resurrect the range the user just cleared.
+    Engine a; CHECK(a.load(
+        "[m4]\n"
+        "[motoquencer]\n clock = I1\n numsteps = 16\n numfaders = 4\n"
+        " endstep = 8\n buttonmode = 1\n cv = O2\n clearstartend = I2\n"
+        " startstepout = _SS\n endstepout = _ES\n"
+        "[copy]\n input = _SS + _ES\n output = O1\n").ok);
+    a.tick();
+    setRange(a, 3, 2);
+    CHECK_NEAR(a.getValue("_ES"), 3.0, 1e-6);
+    press(a, "I2");                                // clearstartend
+    CHECK_NEAR(a.getValue("_SS"), 1.0, 1e-6);
+    CHECK_NEAR(a.getValue("_ES"), 8.0, 1e-6);
+    StateSnapshot snap = a.saveState();
+
+    Engine b; CHECK(b.load(kRangeQuencer).ok);
+    b.restoreState(snap);
+    b.tick();
+    CHECK_NEAR(b.getValue("_SS"), 1.0, 1e-6);
+    CHECK_NEAR(b.getValue("_ES"), 8.0, 1e-6);
+}
+
+TEST(state_motoquencer_manual_range_follows_the_chain_main) {
+    // `linktonext`: the range belongs to the chain MAIN and a member plays it.
+    // The gesture is performed on the member's own plates (buttonmode 1x), so
+    // the main is the one that saves it — and on reload the member must follow
+    // the main again rather than its own (empty) saved pair.
+    const char* chained =
+        "[m4]\n"
+        "[motoquencer]\n clock = I1\n numsteps = 16\n numfaders = 4\n"
+        " endstep = 8\n buttonmode = 11\n linktonext = 1\n"
+        " cv = O2\n startstepout = _SS\n endstepout = _ES\n"
+        "[motoquencer]\n cv = O3\n"
+        " startstepout = _SS2\n endstepout = _ES2\n"
+        "[mixer]\n input1 = _SS\n input2 = _ES\n input3 = _SS2\n"
+        " input4 = _ES2\n output = O1\n";
+    Engine a; CHECK(a.load(chained).ok);
+    a.tick();
+    setRange(a, /*end=*/3, /*start=*/2);           // the member owns the plates
+    CHECK_NEAR(a.getValue("_ES"), 3.0, 1e-6);      // main: end = step 3
+    CHECK_NEAR(a.getValue("_ES2"), 3.0, 1e-6);     // member reports the main's
+    StateSnapshot snap = a.saveState();
+    CHECK(snap.entries.size() == 2);
+
+    Engine b; CHECK(b.load(chained).ok);
+    b.restoreState(snap);
+    b.tick();
+    CHECK_NEAR(b.getValue("_SS"), 2.0, 1e-6);
+    CHECK_NEAR(b.getValue("_ES"), 3.0, 1e-6);
+    CHECK_NEAR(b.getValue("_SS2"), 2.0, 1e-6);
+    CHECK_NEAR(b.getValue("_ES2"), 3.0, 1e-6);
 }

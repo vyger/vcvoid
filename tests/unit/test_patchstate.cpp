@@ -222,6 +222,42 @@ TEST(migrate_motoquencers_survive_same_type_insert_before) {
     CHECK_NEAR(c.getValue("O3"), lane1, 1e-4);
 }
 
+// The interactive start/end range travels with the sequence (issue #62): the
+// motivating case is a patch that was EDITED between the save and the load —
+// new circuits inserted ahead of the sequencer — where migration, not an exact
+// fingerprint hit, is what brings the state back.
+TEST(migrate_motoquencer_manual_range_survives_an_edit) {
+    const std::string before =
+        "[m4]\n"
+        "[motoquencer]\n clock = I1\n numsteps = 16\n numfaders = 4\n"
+        " endstep = 8\n buttonmode = 1\n cv = _LANE_CV\n"
+        " startstepout = _SS\n endstepout = _ES\n"
+        "[mixer]\n input1 = _LANE_CV\n input2 = _SS\n input3 = _ES\n output = O1\n";
+
+    Engine a; CHECK(a.load(before).ok);
+    a.tick();
+    // buttonmode 1: hold plate 3 (the END), then a second finger on plate 2
+    // (the START) — the manual's two-finger gesture.
+    a.touchFader(3, true); a.pressFaderPlate(3, true); a.tick();
+    a.touchFader(2, true); a.pressFaderPlate(2, true); a.tick();
+    a.pressFaderPlate(2, false); a.touchFader(2, false);
+    a.pressFaderPlate(3, false); a.touchFader(3, false); a.tick();
+    CHECK_NEAR(a.getValue("_SS"), 2.0, 1e-6);
+    CHECK_NEAR(a.getValue("_ES"), 3.0, 1e-6);
+    StateSnapshot snap = a.saveState();
+
+    // The edit from the issue in miniature: circuits of another type inserted
+    // before the sequencer, so the fingerprint changes and migration runs.
+    const std::string after =
+        "[m4]\n[lfo]\n hz = 5\n square = O5\n[lfo]\n hz = 3\n square = O6\n" +
+        before.substr(std::string("[m4]\n").size());
+    Engine b; CHECK(b.load(after).ok);
+    b.migrateState(snap);
+    b.tick();
+    CHECK_NEAR(b.getValue("_SS"), 2.0, 1e-6);
+    CHECK_NEAR(b.getValue("_ES"), 3.0, 1e-6);
+}
+
 TEST(migrate_rewired_circuit_falls_back_to_ordinal) {
     // Signatures that match nothing (the cable was renamed) must still land
     // positionally among the leftovers — the hardware rule, as a floor.
