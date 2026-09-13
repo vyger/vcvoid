@@ -1069,7 +1069,11 @@ circuits:
       clearstartend, setendstep sets the end 'as if you had manually changed
       it', and every consumer of the range (play order, green/red LEDs,
       luckyscope, startstepout/endstepout) reads it off the range OWNER, which
-      for a linked member is the chain main; doublerange (copies the played
+      for a linked member is the chain main, and the two slots PERSIST with the
+      rest of the circuit state (state v2, #62 -- a plate gesture is manual
+      interaction; a v1 snapshot loads with no override, and a saved slot whose
+      step no longer exists under the live numsteps is dropped back to the
+      startstep/endstep inputs); doublerange (copies the played
       range's steps -- all columns -- into the second half on this instance AND
       every linked member, moves the end there as a manual override, ignored on
       a member and a no-op at maximum); repeats (duration), ratchets

@@ -376,25 +376,52 @@ public:
     virtual void setLaneLed(EngineState& s, int lane, float bright, float color) = 0;
 
     // --- persistent state (DROIDSTA.BIN contract) ---------------------------
-    // The dialed sequence (all per-step parameters) + the 4 presets + slot. The
-    // transport (playPos_, period_, gate windows, ...) is runtime dynamics and
-    // is NOT saved. Serialized at the fixed 32-step width for a stable length.
+    // The dialed sequence (all per-step parameters) + the 4 presets + slot + the
+    // interactive start/end range. The transport (playPos_, period_, gate
+    // windows, ...) is runtime dynamics and is NOT saved. Serialized at the
+    // fixed 32-step width for a stable length.
+    //
+    // v1 = everything but the range (pre-#62). v2 appends manualStart0_ and
+    // manualEnd0_, so a v1 blob still loads and simply comes back with no
+    // manual range — which is exactly what a v1 save meant.
     static constexpr size_t kSeqLen = 8 * (size_t)kSteps;
-    int stateVersion() const override { return 1; }
+    static constexpr size_t kStateLenV1 = kSeqLen * (kPresets + 1) + 1;
+    int stateVersion() const override { return 2; }
     void saveState(StateWriter& w) const override {
         writeSeq(w, cur_);
         for (int p = 0; p < kPresets; p++) writeSeq(w, preset_[p]);
         w.n(prevPreset_);
+        w.n(manualStart0_);
+        w.n(manualEnd0_);
     }
     void loadState(EngineState& s, int version, const std::vector<double>& in) override {
-        if (version != 1 || in.size() != kSeqLen * (kPresets + 1) + 1) return;
+        if (version < 1 || version > 2) return;
+        size_t want = version == 1 ? kStateLenV1 : kStateLenV1 + 2;
+        if (in.size() != want) return;
         if (!inited_) init(s);
         StateReader r{in};
         readSeq(r, cur_);
         for (int p = 0; p < kPresets; p++) readSeq(r, preset_[p]);
         prevPreset_ = (int)r.n();
+        if (version >= 2) {
+            // The range lives on the chain main (see rangeOwner), so a linked
+            // member ignores its own saved pair exactly as it ignores its own
+            // startstep / endstep inputs — it plays the main's range.
+            int st = (int)r.n(), en = (int)r.n();
+            if (!chainMain_) {
+                manualStart0_ = validRange0(st);
+                manualEnd0_   = validRange0(en);
+            }
+        }
         shownPage_ = shownMode_ = -1;   // force a motor/encoder recall next tick
     }
+
+    // A saved override only means something if the step it names still exists:
+    // the patch may have been edited to a shorter `numsteps` between the save
+    // and the load. A stale slot is DROPPED rather than clamped — the fallback
+    // is the patch's own startstep / endstep inputs, which is what
+    // `clearstartend` does, instead of inventing a range the user never set.
+    int validRange0(int v) const { return (v >= 0 && v < numsteps_) ? v : -1; }
 
     static void writeSeq(StateWriter& w, const SeqState& st) {
         for (int i = 0; i < kSteps; i++) w.f(st.cvpos[i]);
@@ -2010,9 +2037,11 @@ protected:
     // endstep inputs): a plate touch, setendstep and doublerange override only
     // the END; the two-finger gesture also overrides the START. They live on the
     // range owner (the chain main) and are dropped by clear / clearall /
-    // clearstartend. NOT persisted: the manual calls them "temporarily
-    // modified", so like playPos_ they are runtime state and stateVersion()
-    // stays 1.
+    // clearstartend. PERSISTED (state v2, issue #62): a plate gesture is manual
+    // interaction, which is precisely what DROIDSTA.BIN keeps (hardware.md
+    // §11.1) — the manual's "temporarily modified" is about overriding the
+    // startstep / endstep INPUTS until a clear, not about surviving a reload,
+    // and startstepout / endstepout exist to read the range back.
     int  manualStart0_ = -1, manualEnd0_ = -1;
     // The plate that set the end and is still held — the anchor for the second
     // finger. Identified by LANE, not step, so flipping pages mid-gesture keeps
