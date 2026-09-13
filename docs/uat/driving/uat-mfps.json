@@ -1,5 +1,5 @@
 {
-  "_comment": "MFPS gesture map for patches/uat-mfps.ini (Phase 10 capstone). Rack row: master | p2b8 | b32 | m4 | m4. 'module' is the generic vcvoid slug from modules.json; the runner resolves it to the actual Rack module id assembled for that row position. paramId ints per docs/uat/driving/modules.json (cite plugin/src/<Module>.cpp). 'desc' is copied from patches/uat-mfps.ini's own header comments (the patch's single source of truth for what each control does). Gestures: tap (holdMs 300), longpress (holdMs >=1500 threshold; use 1800 — the runner verifies each longpress fired via the /watch endpoint and retries, so no extra margin is needed), chord (hold modifier's holdMs, tap the primary control inside that window).",
+  "_comment": "MFPS gesture map for patches/uat-mfps.ini (Phase 10 capstone). Rack row: master | p2b8 | b32 | m4 | m4. 'module' is the generic vcvoid slug from modules.json; the runner resolves it to the actual Rack module id assembled for that row position. paramId ints per docs/uat/driving/modules.json (cite plugin/src/<Module>.cpp). 'desc' is copied from patches/uat-mfps.ini's own header comments (the patch's single source of truth for what each control does). Gestures: tap (holdMs 300), longpress (holdMs >=1500 threshold; use 1800 — the runner verifies each longpress fired via the /watch endpoint and retries, so no extra margin is needed), chord (POST /params/hold the modifier, tap the primary control inside that window, POST /params/release the modifier — the modifier's hold is UN-TIMED, so it cannot expire mid-chord).",
   "_source_patch": "patches/uat-mfps.ini (header comments, lines ~19-45)",
   "modifiers": {
     "CTRL": {
@@ -7,7 +7,8 @@
       "paramId": 9,
       "label": "B1.8",
       "desc": "[CTRL] Switch some of the button functions",
-      "holdMs": 1500
+      "holdMs": 1500,
+      "note": "holdMs is vestigial for chords since the runner drives the modifier with the un-timed POST /params/hold + /params/release verbs; it stays as documentation of the hold a human would perform."
     }
   },
   "controls": {
@@ -67,7 +68,7 @@
       "gesture": "chord",
       "modifier": "CTRL",
       "holdMs": 300,
-      "note": "load is wired b = B2.1 * _CONTROL with _CONTROL = B1.8 (CTRL) -- a bare tap on B2.1 evaluates B2.1*0=0 and silently does nothing (the 2026-07-12 false FAIL). Drive as: hold CTRL (holdMs 1500), then within that window tap B2.1 (holdMs 300)."
+      "note": "load is wired b = B2.1 * _CONTROL with _CONTROL = B1.8 (CTRL) -- a bare tap on B2.1 evaluates B2.1*0=0 and silently does nothing (the 2026-07-12 false FAIL). Drive as: POST /params/hold CTRL, tap B2.1 (holdMs 300) inside that window, POST /params/release CTRL."
     },
     "PRESET_B_SAVE": {
       "module": "b32",

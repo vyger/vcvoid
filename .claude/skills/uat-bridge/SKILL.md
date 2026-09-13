@@ -45,6 +45,12 @@ user's session up).
 then `/Applications/Rack.app` in that order if `$RACK` isn't set; `-u`
 pins the autosave dir the script later parses.)
 
+**`make smoke`** (repo root) is the canonical invocation of that script — the
+fast contract gate: every endpoint's status codes and response shapes, the
+`/diagnostics` classes, the state-store lines and the hold/release verbs. It
+attaches to a running bridge when one answers and leaves it running. Env
+overrides pass straight through (`make smoke SKIP_HASH=1`).
+
 **Scripted full UAT**: `tools/uat_run.py` is the canonical executor for the
 whole runbook (`docs/uat/runbook.md`) — it owns this entire lifecycle
 (mktemp session copy, launch, `/ping` hash gate, readiness polls, graceful
@@ -96,7 +102,10 @@ listed here 404 with `{"error":"no such route"}`.
 ### Meta
 | Route | Request | Response 200 | Other codes |
 |---|---|---|---|
-| `GET /ping` | — | `{bridgeVersion:1, gitHash:"<short-sha>"}` | — |
+| `GET /ping` | — | `{bridgeVersion:2, gitHash:"<short-sha>"}` | — |
+
+`bridgeVersion` 2 adds `GET /master/{id}/diagnostics` and the un-timed
+`POST /params/hold` / `POST /params/release` verbs; 1 has neither.
 
 ### Master — patch & status
 | Route | Request | Response 200 | Other codes |
@@ -112,7 +121,70 @@ listed here 404 with `{"error":"no such route"}`.
 Note: `statusLine` carries both the success message (`"ok, N bytes RAM"`) and
 load errors (`"LOAD ERROR line N: ..."`) — there is no separate `ok`/
 `errorLine`/`errorText`/`ramBytes` field despite the design doc's sketch;
-parse `statusLine` with a regex/`test()`.
+parse `statusLine` with a regex/`test()`. **For anything but a quick eyeball,
+prefer `GET /master/{id}/diagnostics` below**: it answers the same questions as
+structured fields, so a check never has to regex a human-readable sentence.
+
+### Master — diagnostics (the structured condition record)
+
+| Route | Request | Response 200 | Other codes |
+|---|---|---|---|
+| `GET /master/{id}/diagnostics` | — | see below | 404 unknown master |
+
+```json
+{
+  "state": "running",          // no-patch | load-failed | chain-error | warnings | running
+  "severity": "ok",            // ok | info | warning | error
+  "code": "",                  // hardware error-code name, "" when none/unclassified
+  "codeColor": "",             // the MASTER matrix blink colour for `code`, "" with it
+  "line": 0,                   // 1-based patch line the error points at; 0 = none
+  "title": "",                 // the card's bold line, e.g. "LOAD ERROR · line 7"
+  "message": "",               // the detail sentence; "" when there is nothing to add
+  "warnings": [],              // every load warning, verbatim
+  "midiWarning": false,        // patch uses MIDI, no MIDI hardware reachable
+  "patchPath": "/abs/path/droid.ini",
+  "stateLine": "state: restored (saved 12 Sep 11:02)",
+  "statusLine": "uat-core.ini — ok, 812 bytes RAM"
+}
+```
+
+- **This is the panel's own verdict, serialised.** `state`, `severity`,
+  `title`, `message`, `line` and `code` all come out of
+  `vcvoid::status::evaluate` (`plugin/src/MasterStatus.hpp`, issue #46) — the
+  same pure model that paints the module's ring, the MASTER's blink code, the
+  hover tooltip and the context-menu error card. There is no second derivation
+  anywhere: asserting on this record IS asserting on what a human would see,
+  which is why the automated run never has to look at pixels or LED brightness.
+  `state` is the same string `/status` reports, spelled the same way (hyphens).
+- **State precedence** when more than one condition applies:
+  `load-failed` > `chain-error` > `warnings` > `running`. A failed load stops
+  the engine, so it wins over a chain complaint about the same load.
+- `state: "warnings"` means the patch IS running with something the load
+  raised: a deprecated circuit, or a memory-limit downgrade (only with "ignore
+  hardware memory limits" on). The MIDI-without-hardware diagnostic is its own
+  `midiWarning` boolean here and in `/status`, and its own line in the context
+  menu — it does **not** move `state` or appear in `warnings[]`, because the
+  patch is running exactly as written.
+- `title`/`message` are the card's two lines, so they are worded for a human:
+  `"LOAD ERROR · line 7"` + the error text (`" (+2 more)"` appended when the
+  load raised several), `"CHAIN ERROR"` + the mismatch, `"Running with 2
+  warnings"` + the first one, `"No patch loaded"`, and **both empty** when the
+  master is simply running — a clean master has nothing to say.
+- `code`/`codeColor` name the hardware's own error code and the colour the
+  MASTER's 4×4 matrix blinks for it (`manual/basics.md` §5.4) — e.g.
+  `unknown_register`/yellow, `unknown_circuit`/red, `cable_misuse`/green,
+  `unknown_parameter`/orange, `invalid_syntax`/magenta, `patch_too_big`/blue
+  (global), `out_of_memory`/cyan, `patch_not_found`/yellow. The code is the one
+  the **engine tagged the error with** (`droid::ErrorCode`), not a guess made
+  from its wording; an error with no hardware equivalent reports `""`, so
+  `code == ""` on a `load-failed` means "the hardware has no code for this"
+  and the matrix stays dark.
+- `line` is the offending patch line, which for a local code is what the matrix
+  spells in its LEDs — the field to assert when checking that an error points
+  at the right place. It is 0 when the error is not tied to a line (a patch
+  over the size limit, an unreadable file). A *global* code can still carry a
+  line (`out_of_memory` names the circuit that broke the budget); the blink
+  code ignores it, the card offers to open it.
 
 ### Timing mode, adaptive rate, and CPU/profiling (issue #3)
 
@@ -196,7 +268,29 @@ square feeds) read back as **0/1**, not 0/10 — only the Rack-port voltage
 | `POST /cables` | `{outputModuleId, outputId, inputModuleId, inputId}` | `{id}` | 400 invalid body / portId out of range; 404 no such module; 503 ui-not-attached |
 | `DELETE /cables/{id}` | — | `{ok:true}` | 404 no such cable; 503 ui-not-attached |
 | `POST /params` | `{moduleId, paramId, value, holdMs}` — `holdMs` omitted/0 = plain set; `>0` = set now, auto-reset to `0` after `holdMs` ms **of ENGINE SAMPLE TIME** (frame-deadline, anchored when the set lands on the UI thread). Equals wall time when a real audio device drives the engine; with no Audio module, Rack's CPU-clocked fallback engine thread can run up to ~26% slower than wall (observed), so the release can take proportionally longer in wall terms — but the gesture's duration as the DROID engine measures it (longpress thresholds!) is always exactly `holdMs`. | `{ok:true, holdMs?}` (holdMs echoed only if >0) | 400 missing/non-numeric moduleId/paramId, negative paramId, or paramId out of range for the module; 404 no such module; 503 ui-not-attached |
+| `POST /params/hold` | `{moduleId, paramId, value?}` — press and KEEP pressing, with **no deadline** (`value` defaults to `1`). The press survives across engine ticks until something releases it. Idempotent: holding an already-held param re-asserts the value and keeps the original rest value; holding one that is under a timed hold drops that deadline. | `{ok:true, held:true}` | same codes as `POST /params` (400 body/paramId, 404 module, 503 ui-not-attached) |
+| `POST /params/release` | `{moduleId, paramId}` — let go, restoring the value the param had when the hold started (0 for a momentary button, wherever it was for a fader). Releasing an unheld param is a 200 no-op that writes nothing. | `{ok:true}` | same codes as `POST /params` |
 | `GET /probe?moduleId=&portId=&kind=out\|in&ms=500` | query only | `{min, max, avg, edges, periodStddevMs, sampleRateHz}` | 400 missing/invalid moduleId, portId, kind, or ms; 400 portId out of range; 404 no such module (or module removed mid-probe) |
+
+**Timed vs un-timed holds.** `POST /params ... holdMs` is one gesture whose end
+is fixed when it starts — right for a tap or a longpress, wrong for anything
+whose shape is an ORDER. `hold`/`release` express the order directly:
+
+```sh
+# press A, press B, release A, release B (motoquencer start/end; any chord)
+curl -sX POST :2601/params/hold    -d '{"moduleId":12,"paramId":6}'
+curl -sX POST :2601/params/hold    -d '{"moduleId":12,"paramId":4}'
+curl -sX POST :2601/params/release -d '{"moduleId":12,"paramId":6}'
+curl -sX POST :2601/params/release -d '{"moduleId":12,"paramId":4}'
+```
+
+Both verbs are queued onto the UI thread like every other param write, and that
+queue is FIFO — an immediate hold→release pair cannot invert. Everything held
+is released automatically by a patch (re)load (the new patch gives the control
+a different job) and by `POST /rack/quit` (so the autosave cannot persist a
+button the bridge was pressing). Nothing else ends an un-timed hold: if a run
+aborts between hold and release, the finger stays down until the next patch
+load or quit.
 
 `503 {"error":"ui bridge not attached; add any vcvoid module or launch from
 the runbook template"}` is returned by every route that marshals onto the UI
@@ -250,7 +344,9 @@ DROID register: `O1` = outputs[0], `O4` = outputs[3], etc.
 ## Driving knowledge
 
 - `POST /params` with `holdMs≈300` simulates a tap; `holdMs>=1500` simulates
-  a longpress (save/load-preset gestures etc.). UI clicks issued through
+  a longpress (save/load-preset gestures etc.). A CHORD is not two overlapping
+  `holdMs` calls — drive the modifier with `POST /params/hold` +
+  `/params/release` around the tap, so it cannot expire mid-chord. UI clicks issued through
   other tools (e.g. an MCP server's `set_params`) do **not** reliably
   register as holds — always drive longpresses through this bridge's
   `holdMs`, never a scripted click-and-wait.

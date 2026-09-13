@@ -560,6 +560,12 @@ public:
     }
 
     void loadPatchFile(const std::string& path) {
+        // A UAT script may be holding a control down (POST /params/hold has no
+        // deadline — issue #49). The incoming patch gives that button a
+        // different job, or none, so let go of every held param first; the
+        // release is queued onto the UI thread and is a no-op when nothing is
+        // held (and when the bridge isn't running at all).
+        if (auto* b = uat::Bridge::instance()) b->releaseAllHolds();
         std::string text;
         {   // read whole file
             std::ifstream f(path, std::ios::binary);

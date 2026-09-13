@@ -200,6 +200,30 @@ class Bridge:
             settle_for(hold_ms)
         return result
 
+    def params_hold(self, module_id, param_id, value=1):
+        """POST /params/hold — press and KEEP pressing, with no deadline
+        (bridge >= 2). The press survives across engine ticks until
+        params_release (or a patch load / quit) lets go, which is what makes an
+        ORDERED multi-finger gesture expressible: press A, press B, release A,
+        release B. Returns immediately — nothing to settle, because nothing is
+        scheduled to end."""
+        return self.post("/params/hold", {"moduleId": module_id,
+                                           "paramId": param_id, "value": value})
+
+    def params_release(self, module_id, param_id):
+        """POST /params/release — let go, restoring the value the param had
+        when the hold started. Idempotent: releasing an unheld param is a
+        200 no-op."""
+        return self.post("/params/release", {"moduleId": module_id,
+                                              "paramId": param_id})
+
+    def diagnostics(self, mid):
+        """GET /master/{id}/diagnostics — the structured condition record
+        (state / severity / code / line / message / warnings). Used here for
+        failure context; the per-class contract assertions live in
+        tools/uatbridge-smoke.sh."""
+        return self.get(f"/master/{mid}/diagnostics")
+
     def cables(self):
         return self.get("/cables")
 
@@ -596,6 +620,50 @@ class Runner:
             return (chain == expect, chain)
         return wait_for(check, timeout=timeout, interval=0.25)
 
+    def wait_ticked(self, timeout=4.0):
+        """Block until the engine has actually ticked since the last patch load.
+
+        POST /master/{id}/patch returns as soon as the Engine is built, but the
+        registers are only written by the engine tick that runs on the audio
+        thread. A GET /registers served in between reads EVERY register as 0.0
+        — indistinguishable from a real zero, so a step that samples a
+        fixture's documented boot value right after the load can latch 0.0 and
+        assert against it (2026-09-12: 8.4 read O1 boot=0.0 instead of 1.0 and
+        8.5 read the start/end defaults as 0/0 instead of 1/4 — both false
+        FAILs on behaviour the goldens pin correctly).
+
+        The watch endpoint is the only one that reports a tick COUNT, so arm it
+        on a syntactically-valid register (plain names are parse-checked only,
+        never existence-checked, so `O1` arms against any loaded patch) and
+        collect until `ticks` is non-zero. Returns (ok, ticks)."""
+        deadline = time.monotonic() + timeout
+        ticks = 0
+        while True:
+            code, _, _ = self.bridge.watch_arm(self.master_id, ["O1"])
+            if code == 200:
+                time.sleep(0.1)
+                code, w, _ = self.bridge.watch_collect(self.master_id)
+                sigs = ((w or {}).get("signals") or {}) if code == 200 else {}
+                ticks = max([s.get("ticks", 0) for s in sigs.values()] or [0])
+                if ticks > 0:
+                    return True, ticks
+            if time.monotonic() >= deadline:
+                return False, ticks
+            time.sleep(0.1)
+
+    def wait_chain_error_clear(self, timeout=6.0):
+        """Poll GET /master/{id}/status until .chainError is empty. The chain
+        validation is recomputed on the ~1s chain debounce, not synchronously
+        inside POST /patch, so the status returned by a load still carries the
+        PREVIOUS patch's declaration (2026-09-12: 10.1 read "patch declares e4"
+        — the fixture phase 8 left loaded — off a uat-mfps.ini load that was in
+        fact clean). Returns (ok, last_chain_error)."""
+        def check():
+            _, st, _ = self.bridge.status(self.master_id)
+            err = (st or {}).get("chainError")
+            return (not err, err)
+        return wait_for(check, timeout=timeout, interval=0.25)
+
     def tap(self, module_id, param_id, hold_ms=300):
         return self.bridge.params(module_id, param_id, 1, hold_ms=hold_ms)
 
@@ -699,20 +767,23 @@ class Runner:
         elif gtype == "longpress":
             self.bridge.params(mid, entry["paramId"], 1, hold_ms=entry.get("holdMs", 1800))
         elif gtype == "chord":
-            # Two overlapping holds: start the modifier hold (async), tap the
-            # primary control INSIDE that window, then wait out the longer of
-            # the two holds before returning (settle=False keeps the calls
-            # overlapping; a default settle on the modifier would serialize
-            # them and the chord would never register).
+            # A chord is an ORDER, not two overlapping timers: hold the
+            # modifier down (un-timed, bridge >= 2), tap the primary control
+            # inside that window, then let go. The old shape raced the
+            # modifier's holdMs against the tap's — both measured in engine
+            # sample time, which the no-audio-module fallback engine can pace
+            # ~26% slower than wall clock, so a modifier that expired early
+            # turned the chord into a bare tap (and B2.1 * _CONTROL silently
+            # evaluated to 0 — the 2026-07-12 false FAIL). An un-timed hold
+            # cannot expire, so the only ordering left is the one written here.
             mod = self.driving_mfps["modifiers"][entry["modifier"]]
             mod_slug = row_slug_map.get(mod["module"], mod["module"])
             mod_id = self.resolve_module_id(mod_slug)
-            mod_hold = mod.get("holdMs", 1500)
             tap_hold = entry.get("holdMs", 300)
-            self.bridge.params(mod_id, mod["paramId"], 1, hold_ms=mod_hold, settle=False)
+            self.bridge.params_hold(mod_id, mod["paramId"])
             time.sleep(0.15)  # ensure the modifier registers first
-            self.bridge.params(mid, entry["paramId"], 1, hold_ms=tap_hold, settle=False)
-            settle_for(max(mod_hold, tap_hold))
+            self.bridge.params(mid, entry["paramId"], 1, hold_ms=tap_hold)
+            self.bridge.params_release(mod_id, mod["paramId"])
         else:
             raise ValueError(f"unknown gesture type {gtype} for {name}")
 
@@ -1611,6 +1682,111 @@ def phase8(r):
 
     r.step("8.3", "MIDI file player patch shows activity", s8_3)
 
+    def fader_state(idx=0):
+        _, f, _ = r.bridge.faders(r.master_id)
+        return f[idx] if isinstance(f, list) and len(f) > idx else {}
+
+    def reg(name):
+        _, regs, _ = r.bridge.registers(r.master_id, [name])
+        v = (regs or {}).get(name)
+        return v if isinstance(v, (int, float)) else None
+
+    def s8_4():
+        # Issue #45: the recall used to survive exactly one tick and then be
+        # overwritten by the fader's own (unmoved) physical position, because a
+        # finger on the plate counts as holding the fader. END STATE ONLY — the
+        # trajectory between dents is not asserted (and must not be: the motor
+        # is deliberately frozen under a finger).
+        expected = ("uat-m4-toggle.ini (notches = 2, button = _T / clear = _T): a plate "
+                    "press toggles the fader and it STAYS toggled after release")
+        code, st, _ = r.bridge.load_patch(r.master_id, patch("uat-m4-toggle.ini"))
+        if code != 200:
+            return "FAIL", expected, f"load uat-m4-toggle.ini -> {code} {st}"
+        # The boot value IS the assertion's baseline, so it must be read after
+        # the engine has run — not off the load response's stale zeros.
+        ticked, nticks = r.wait_ticked()
+        if not ticked:
+            return "FAIL", expected, f"engine never ticked after load (diagnostics: {r.bridge.diagnostics(r.master_id)[1]})"
+        ok_boot, boot = wait_for(lambda: (reg("O1") is not None, reg("O1")),
+                                  timeout=4, interval=0.2)
+        if not ok_boot:
+            return "FAIL", expected, f"O1 never readable after load (diagnostics: {r.bridge.diagnostics(r.master_id)[1]})"
+        # Un-timed press: hold the plate, wait for the toggle to land WHILE
+        # held (the recall), then let go.
+        r.bridge.params_hold(m4, 4)
+        ok_toggled, held = wait_for(lambda: (reg("O1") != boot, reg("O1")),
+                                     timeout=4, interval=0.2)
+        r.bridge.params_release(m4, 4)
+        time.sleep(0.6)   # deliberate dwell: "it stays" is a claim about time
+        after = reg("O1")
+        target = fader_state(0).get("motorTarget")
+        stable = after == held and after != boot
+        status = "PASS" if ok_toggled and stable else "FAIL"
+        return status, expected, (f"O1 boot={boot} while_held={held} after_release={after}; "
+                                  f"fader motorTarget={target}; engine ticked {nticks}x "
+                                  f"before the boot read")
+
+    r.step("8.4", "motorfader toggle trick: recall holds after plate release (#45)", s8_4)
+
+    def s8_5():
+        # manual/circuits/motoquencer.md §"Start and end": "Touching a button
+        # changes the END step. You can set the start step by first setting an
+        # end step and HOLDING that button and then — with a second finger —
+        # press another step." Hence end = the first plate touched, start = the
+        # second. Implemented in #51 (engine/src/seqcore.hpp startEndPress: the
+        # first press sets manualEnd0_ and becomes the anchor, a press on a
+        # different lane while that anchor is down sets manualStart0_); the
+        # gesture is pinned headless by tests/golden/motoquencer/startend-*.gold.
+        #
+        # Plates 3 THEN 2, not 3 then 1: the fixture's defaults are start 1 /
+        # end numsteps (= 4), so a start of 1 would read the same whether the
+        # second finger registered or not. 3-then-2 moves BOTH numbers off
+        # their defaults, so the assertion can only pass if the whole gesture
+        # landed. The presses are deliberately separated in time so the
+        # same-engine-tick tie-break never applies.
+        #
+        # startstepout/endstepout are 1-based step NUMBERS on internal cables:
+        # an O jack clamps to +/-1.0, so the goldens read them scaled x0.1 and
+        # this step reads the cables directly instead.
+        expected = ("uat-m4-startend.ini (buttonmode = 1): defaults start 1 / end 4; then "
+                    "press plate 3, press plate 2, release 3, release 2 -> "
+                    "endstepout = 3, startstepout = 2")
+        code, st, _ = r.bridge.load_patch(r.master_id, patch("uat-m4-startend.ini"))
+        if code != 200:
+            return "FAIL", expected, f"load uat-m4-startend.ini -> {code} {st}"
+        # The defaults are half the assertion, so wait for a real tick first:
+        # a cable read served before one reports 0.0 with a 200, and `is not
+        # None` can never tell that apart from a genuine zero.
+        ticked, nticks = r.wait_ticked()
+        if not ticked:
+            return "FAIL", expected, f"engine never ticked after load (diagnostics: {r.bridge.diagnostics(r.master_id)[1]})"
+        start0, end0 = reg("_SS"), reg("_ES")
+        code, resp, _ = r.bridge.watch_arm(r.master_id, ["_SS", "_ES", "B2.2", "B2.3"])
+        if code != 200:
+            return "FAIL", expected, f"watch arm -> {code} {resp}"
+        r.bridge.params_hold(m4, 6)    # plate 3 = step 3 -> sets the END step
+        time.sleep(0.2)
+        r.bridge.params_hold(m4, 5)    # plate 2, second finger -> sets the START step
+        time.sleep(0.2)
+        r.bridge.params_release(m4, 6)
+        r.bridge.params_release(m4, 5)
+        time.sleep(0.3)
+        _, watch, _ = r.bridge.watch_collect(r.master_id)
+        sigs = (watch or {}).get("signals") or {}
+        start, end = reg("_SS"), reg("_ES")
+        # The range must SURVIVE the release: the anchor ends the gesture, it
+        # does not undo it (only `clearstartend` does).
+        defaults_ok = (start0 == 1 and end0 == 4)
+        status = "PASS" if (defaults_ok and end == 3 and start == 2) else "FAIL"
+        return status, expected, (f"defaults start={start0} end={end0} (engine ticked "
+                                  f"{nticks}x before the read); after gesture "
+                                  f"startstepout={start} endstepout={end}; "
+                                  f"watch last: _SS={sigs.get('_SS', {}).get('last')} "
+                                  f"_ES={sigs.get('_ES', {}).get('last')}; "
+                                  f"plate B registers: {sigs.get('B2.2', {})} {sigs.get('B2.3', {})}")
+
+    r.step("8.5", "motoquencer buttonmode 1 start/end gesture (two fingers)", s8_5)
+
 
 def phase9(r):
     r.set_row(["x7"])
@@ -1673,9 +1849,13 @@ def phase10(r):
         # statusLine is "<file> — ok, N bytes RAM" (filename-prefixed), so
         # search, don't anchor (observed live 2026-07-12).
         ok = bool(st and re.search(r"ok, \d+ bytes RAM", st.get("statusLine", "")))
-        chain_err_empty = not st.get("chainError") if st else False
+        # chainError is recomputed on the ~1s chain debounce, not inside the
+        # load, so the status a load returns can still be judging the PREVIOUS
+        # patch's declared chain — poll it out rather than reading it off the
+        # response (see wait_chain_error_clear).
+        chain_err_empty, chain_err = r.wait_chain_error_clear()
         status = "PASS" if ok and chain_err_empty else "FAIL"
-        return status, expected, f"statusLine={st.get('statusLine') if st else None}; chainError={st.get('chainError') if st else None}"
+        return status, expected, f"statusLine={st.get('statusLine') if st else None}; chainError={chain_err!r}"
 
     r.step("10.1", "load uat-mfps.ini (capstone)", s10_1)
 

@@ -28,13 +28,41 @@ in the phases** — if a step is in a phase body, it is machine-verified.
 Each step keeps its original phase/number so results can cite `10.5`-style
 locators.
 
-**The canonical executor is `tools/uat_run.py`** (`python3 tools/uat_run.py`;
+**Two executors, two jobs.** `make smoke` (`tools/uatbridge-smoke.sh`) is the
+**contract gate**: one pass over every endpoint's status codes and response
+shapes, the `GET /master/{id}/diagnostics` classes (`no-patch`, `running`,
+`load-failed` with the right line, `warnings`, `chain-error`), the state-store
+lines from #42, the 64 000-byte size gate from #41 and the `POST /params/hold`
+/ `/params/release` contract. It is fail-fast and takes seconds; run it first,
+and treat a failure there as "stop, this build is broken" rather than as one
+red row. Everything timing- or state-dependent — gestures, persistence,
+sequencer behaviour — belongs to the phases below and their runner.
+
+**The canonical executor for the phases is `tools/uat_run.py`** (`python3 tools/uat_run.py`;
 `--list` prints the steps, `--phases 1,3,10` selects a subset): it runs every
 machine-checkable step deterministically, loads gestures/paramIds from the
 driving maps in `docs/uat/driving/`, and writes the per-step record to
 `docs/uat/results/` (exit code = FAIL count). An agent's role is to run it and
 triage failures; manual step-by-step bridge driving remains the fallback, and
 this document remains the spec.
+
+### Deliberately NOT checked live
+
+Not every fix belongs in a live run. These are verified headless (`make test`)
+and are **intentionally absent** from the phases and from `make smoke` — adding
+a live check for them would buy a slower, flakier copy of a test that already
+exists:
+
+- **Button chords: mod-hold and Latch (#39)** — pure pointer/widget logic in
+  `plugin/src/ButtonHold.hpp`, unit-tested in `tests/unit/test_buttonhold.cpp`.
+  The bridge drives params directly and never goes through the widget's
+  modifier handling, so a "live" check would exercise nothing the unit tests
+  do not, and could not observe the keyboard modifier at all.
+- **motoquencer page/linked-lane inheritance (#34)** — engine behaviour, pinned
+  by goldens under `tests/golden/motoquencer/`.
+- Anything about LED *brightness*, panel pixels, or a blinking matrix: the
+  automated run asserts the structured `/diagnostics` record instead, and the
+  visual side stays in the Final sign-off's sensory list.
 
 ## Preconditions
 
@@ -98,6 +126,9 @@ write the results file, and stop.
   `uat-core.ini`, `uat-overlays.ini`, `uat-gates.ini`,
   `test-m6-master18.ini`, `test-m5-extclock.ini`, `uat-mfps.ini`,
   `uat-err-register.ini`, `uat-err-cable.ini`, `uat-err-inputasoutput.ini`,
+  `uat-warn-deprecated.ini` (loads WITH a warning — droidcheck flags its
+  deprecated circuit, which is the point of the fixture),
+  `uat-m4-toggle.ini`, `uat-m4-startend.ini`,
   `uat-midi-nox7.ini`, `test-m4-e4.ini`, `test-m4-m4.ini`,
   `test-m4-db8e.ini`, `test-m6-midifileplayer.ini` (+ `patches/midi1.mid`
   beside it), `test-m5-midiout.ini`, `test-m5-loopback.ini`.
@@ -109,8 +140,10 @@ write the results file, and stop.
 
 ### paramId lookup tables (no label-resolver endpoint exists)
 
-`POST /params` takes a raw Rack `Module::paramId` int, not a `P1.2`/`B1.1`
-label — SKILL.md documents this gap explicitly. Derived from each module's
+`POST /params` (and `POST /params/hold` / `POST /params/release`, the un-timed
+press/release pair used for ordered multi-finger gestures) takes a raw Rack
+`Module::paramId` int, not a `P1.2`/`B1.1` label — SKILL.md documents this gap
+explicitly. Derived from each module's
 `ParamId` enum (`plugin/src/<Module>.cpp`):
 
 | Module | paramId | Control |
@@ -141,8 +174,11 @@ automated run.
 ## Phase 1 — Build, install, smoke
 
 1. ☐ Follow Preconditions: build+install, launch, `/ping` gitHash gate,
-   master-registration poll. Equivalent to running
-   `tools/uatbridge-smoke.sh` up through its ping/discovery section.
+   master-registration poll. Equivalent to running `make smoke`
+   (`tools/uatbridge-smoke.sh`) up through its ping/discovery section — and
+   running the whole of `make smoke` first is the recommended way to start a
+   session: it is the contract gate described above, and it leaves an
+   attached Rack running for the phases.
 2. ☐ First record the template master's id from `GET /modules` — that
    module is the run's lifeline and must NEVER be deleted: the bridge's UI
    drain detaches with zero vcvoid modules in the rack, after which every
@@ -380,6 +416,10 @@ g8-first row pins `chainError` and freezes the G8 gates).
    no patch → `"no-patch"` + grey ring + dark matrix; a deprecated-circuit patch
    → `"warnings"` + amber ring, still running; a broken chain → `"chain-error"`
    + red ring, clearing to `"running"` (no ring) the moment the chain is fixed.
+   `GET /master/{id}/diagnostics` is the SAME verdict as structured fields
+   (`severity`, `code`/`codeColor`, `line`, the card's `title`/`message`) —
+   one model, `plugin/src/MasterStatus.hpp`, so what it reports is what the
+   panel paints. Use it for the assertions and keep your eyes for the pixels.
 3. ☐ Recovery: fix the error in a scratch copy of the errored
    `.ini` on disk (e.g. `O9`→`O1`) while it's the loaded path; poll
    `GET /master/{id}/status` for `.statusLine` to flip to `^ok` within
@@ -416,6 +456,28 @@ params" list) and are Final sign-off items.
    over the file's known duration → edges/voltage pattern consistent with
    the file's notes (exercises the SD-card file provider without needing
    to listen).
+4. ☐ `uat-m4-toggle.ini` (issue #45, the motor-fader toggle trick —
+   `notches = 2`, `button = _T` / `clear = _T`, `startvalue` wired to the
+   inverse of the output): `POST /params/hold` the M4's plate 1
+   (`paramId 4`), wait for `O1` to flip to the other dent **while still
+   held**, `POST /params/release`, then re-read after a dwell → `O1` and the
+   fader's `motorTarget` are still at the toggled dent. **End state only**:
+   the trajectory in between is deliberately not asserted (the motor is off
+   under a finger, exactly as on hardware).
+5. ☐ `uat-m4-startend.ini` (motoquencer `buttonmode = 1`, engine side merged
+   as #51): read the defaults first — `startstepout` (`_SS`) **1**,
+   `endstepout` (`_ES`) **4** — then press plate 3, press plate 2, release 3,
+   release 2 via `POST /params/hold`/`release`, with the two presses separated
+   in time so the same-tick tie-break never applies → `_ES` is **3** (a touch
+   sets the END step) and `_SS` is **2** (the second finger sets the START
+   step), and both **survive the release** (only `clearstartend` undoes them),
+   per `manual/circuits/motoquencer.md` §"Start and end". Plate **2**, not
+   plate 1, precisely because the default start already is 1: 3-then-2 moves
+   both numbers off their defaults, so the assertion cannot pass on a gesture
+   that half-registered. Read `_SS`/`_ES` as **cables** — they are 1-based
+   step numbers and an `O` jack clamps to ±1.0, which is why the fixture (and
+   `tests/golden/motoquencer/startend-*.gold`) mirrors them to O3/O4 scaled
+   ×0.1.
 
 ## Phase 9 — MIDI routing (M5)
 
@@ -477,9 +539,12 @@ CLAUDE.md) — same bytes as would ship to hardware.
    load button is wired `b = B2.1 * _CONTROL` with `_CONTROL = B1.8` (the
    p2b8 CTRL button), so a bare tap on B2.1 computes `B2.1 × 0 = 0` and
    silently does nothing (exactly the 2026-07-12 run's false FAIL). Drive
-   the chord as two overlapping holds: `POST /params` B1.8 (p2b8
-   `paramId:9`, `value:1`, `holdMs:1500`), then immediately `POST /params`
-   B2.1 (b32 `paramId:0`, `value:1`, `holdMs:300`) inside that window.
+   the chord with the un-timed verbs, so the modifier cannot expire
+   mid-chord: `POST /params/hold` B1.8 (p2b8 `paramId:9`), then
+   `POST /params` B2.1 (b32 `paramId:0`, `value:1`, `holdMs:300`) inside that
+   window, then `POST /params/release` B1.8. (Two overlapping `holdMs` calls
+   were the old shape and raced two engine-time deadlines against each
+   other.)
    `GET /master/{id}/faders` → matches the saved baseline. If it does not,
    `POST /master/{id}/reset-state` (fresh-boot re-seed from startvalues)
    and repeat save→mangle→load once from a known-clean state to isolate

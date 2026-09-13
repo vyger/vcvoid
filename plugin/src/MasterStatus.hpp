@@ -199,6 +199,35 @@ inline const char* stateName(State st) {
     return "running";
 }
 
+// How loudly a state has to be said. Purely a function of the state — it adds
+// no information, it just saves every consumer writing the same switch. The
+// UAT bridge reports it alongside the state (GET /master/{id}/diagnostics,
+// issue #49) so a check can ask "is anything wrong" without enumerating
+// states, and the two can never disagree about whether NoPatch is an error
+// (it is not — a freshly placed module has no patch by definition).
+enum class Severity { Ok, Info, Warning, Error };
+
+inline Severity severityFor(State st) {
+    switch (st) {
+        case State::NoPatch:    return Severity::Info;
+        case State::LoadFailed: return Severity::Error;
+        case State::ChainError: return Severity::Error;
+        case State::Warnings:   return Severity::Warning;
+        case State::Running:    return Severity::Ok;
+    }
+    return Severity::Ok;
+}
+
+inline const char* severityName(Severity sv) {
+    switch (sv) {
+        case Severity::Ok:      return "ok";
+        case Severity::Info:    return "info";
+        case Severity::Warning: return "warning";
+        case Severity::Error:   return "error";
+    }
+    return "ok";
+}
+
 // What the MASTER's 4x4 LED matrix does. (The MASTER18 has no matrix; on the
 // hardware its four rear LEDs carry a reduced code, which is not visible in
 // Rack at all, so there the ring carries everything.)
@@ -264,6 +293,55 @@ inline bool errorColor(droid::ErrorCode code, RGB& out, bool& global) {
 // white = no SD card). The tables are the normative list — §5.4 is literally
 // headed "Table of error codes" — so the tables win here, and the captions are
 // treated as a slip in the manual.
+
+// The same table in words: the stable machine-readable name of one hardware
+// error code and of the colour it blinks. Empty strings for Unmapped — an
+// error vcvoid raises that the hardware has no code for reports NOTHING rather
+// than a plausible-looking guess, so a caller can tell "we know the hardware
+// code" from "we only have the text".
+//
+// These are the `code` / `codeColor` fields of the UAT bridge's
+// GET /master/{id}/diagnostics (issue #49) and the one place the colours are
+// named; `errorColor` above is the same table in RGB, and
+// status_code_names_match_the_colour_table pins the two together.
+struct CodeNames {
+    const char* code = "";
+    const char* color = "";
+};
+
+inline CodeNames codeNames(droid::ErrorCode code) {
+    using C = droid::ErrorCode;
+    switch (code) {
+        case C::PatchNotFound:      return {"patch_not_found",      "yellow"};
+        case C::TooManyControllers: return {"too_many_controllers", "red"};
+        case C::PatchTooBig:        return {"patch_too_big",        "blue"};
+        case C::OutOfMemory:        return {"out_of_memory",        "cyan"};
+        case C::InvalidFirmware:    return {"invalid_firmware",     "magenta"};
+        case C::NoSdCard:           return {"no_sd_card",           "white"};
+        case C::UnknownRegister:    return {"unknown_register",     "yellow"};
+        case C::UnknownParameter:   return {"unknown_parameter",    "orange"};
+        case C::UnknownCircuit:     return {"unknown_circuit",      "red"};
+        case C::LineTooLong:        return {"line_too_long",        "blue"};
+        case C::CableMisuse:        return {"cable_misuse",         "green"};
+        case C::InvalidSyntax:      return {"invalid_syntax",       "magenta"};
+        case C::Unmapped:           break;
+    }
+    return {};
+}
+
+// The RGB one of those colour names stands for. Returns false for a name that
+// is not one of them (including the empty name of an Unmapped code).
+inline bool colorByName(const std::string& name, RGB& out) {
+    if (name == "yellow")  { out = kYellow;  return true; }
+    if (name == "orange")  { out = kOrange;  return true; }
+    if (name == "red")     { out = kRed;     return true; }
+    if (name == "blue")    { out = kBlue;    return true; }
+    if (name == "green")   { out = kGreen;   return true; }
+    if (name == "magenta") { out = kMagenta; return true; }
+    if (name == "cyan")    { out = kCyan;    return true; }
+    if (name == "white")   { out = kWhite;   return true; }
+    return false;
+}
 
 // The LEDs that spell one decimal digit (or the hundreds count): LED n stands
 // for n and the flashing LEDs are ADDED UP. Returns a bitmask of LEDs 1..8 in
@@ -348,6 +426,11 @@ struct Status {
     std::string title;     // bold card title, e.g. "LOAD ERROR · line 99"
     std::string message;   // the detail line; empty when there is nothing to add
     int line = 0;          // the offending line, 0 = none (no "open at line")
+    // The hardware error code behind `blink`, kept as the enum so a caller
+    // that reports the condition in words (the bridge's /diagnostics) does not
+    // have to reverse-engineer it out of the LED colours. Unmapped for every
+    // state but LoadFailed, and for a load error the hardware has no code for.
+    droid::ErrorCode code = droid::ErrorCode::Unmapped;
 };
 
 // One line for a tooltip / an LED description: title, plus the message when
@@ -381,6 +464,7 @@ inline Status evaluate(const Report& r) {
         droid::ErrorCode code = r.fileUnreadable
             ? droid::ErrorCode::PatchNotFound : r.errorCode;
         int line = r.fileUnreadable ? 0 : r.errorLine;
+        s.code = code;
         s.blink = blinkCode(code, line);
         s.matrix = s.blink.active ? Matrix::Blink : Matrix::Dark;
         s.line = line;

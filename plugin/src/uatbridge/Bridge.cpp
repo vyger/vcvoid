@@ -186,6 +186,59 @@ std::string Bridge::handleMasterStatus(DroidMasterBase* m, int* code) {
     return dumpAndFree(o);
 }
 
+// GET /master/{id}/diagnostics (issues #46, #49) — ONE structured record of the
+// master's condition, as opposed to /status's free-text statusLine that every
+// caller has to re-parse with its own regex.
+//
+// It is the PANEL's verdict, serialised: state, title, message, line and the
+// hardware error code all come out of vcvoid::status::evaluate (MasterStatus.hpp,
+// issue #46), the same pure model that paints the ring, the blink code and the
+// context-menu card. There is deliberately no second derivation here — a test
+// that asserts on this record is asserting on what a human would see on the
+// panel, which is the whole point of having it.
+//
+// Everything below is therefore serialisation plus the two things the status
+// model does not carry because the panel shows them elsewhere: the FULL warning
+// list (the model counts them and quotes the first) and the MIDI diagnostic
+// (its own line in the context menu, and its own `midiWarning` in /status).
+std::string Bridge::handleMasterDiagnostics(DroidMasterBase* m, int* code) {
+    *code = 200;
+    std::string statusLine, stateLine, patchPath;
+    std::vector<std::string> warnings;
+    bool midiWarn = false;
+    {
+        std::lock_guard<std::mutex> lk(m->engineMutex);
+        patchPath = m->patchPath;
+        statusLine = m->patchStatus;
+        stateLine = m->stateStatus;
+        warnings = m->lastResult.warnings;
+        midiWarn = m->engine && m->engine->patchUsesMidi() && !m->engine->midiAvailable();
+    }
+    // statusReport() takes engineMutex itself, hence the separate block above —
+    // exactly the arrangement handleMasterStatus already uses for currentState().
+    vcvoid::status::Status s = vcvoid::status::evaluate(m->statusReport());
+    vcvoid::status::CodeNames cn = vcvoid::status::codeNames(s.code);
+    json_t* o = json_object();
+    json_object_set_new(o, "state", json_string(vcvoid::status::stateName(s.state)));
+    json_object_set_new(o, "severity",
+        json_string(vcvoid::status::severityName(vcvoid::status::severityFor(s.state))));
+    json_object_set_new(o, "code", json_string(cn.code));
+    json_object_set_new(o, "codeColor", json_string(cn.color));
+    json_object_set_new(o, "line", json_integer(s.line));
+    json_object_set_new(o, "title", json_string(s.title.c_str()));
+    json_object_set_new(o, "message", json_string(s.message.c_str()));
+    json_t* warn = json_array();
+    for (auto& w : warnings) json_array_append_new(warn, json_string(w.c_str()));
+    json_object_set_new(o, "warnings", warn);
+    json_object_set_new(o, "midiWarning", json_boolean(midiWarn));
+    json_object_set_new(o, "patchPath", json_string(patchPath.c_str()));
+    json_object_set_new(o, "stateLine", json_string(stateLine.c_str()));
+    // The free-text line stays available so a failure report can quote exactly
+    // what the context menu shows, without a second round-trip to /status.
+    json_object_set_new(o, "statusLine", json_string(statusLine.c_str()));
+    return dumpAndFree(o);
+}
+
 // ids= is a comma-separated list of register/cable/fader handles. Cables
 // ("_NAME") and faders ("F<n>") route through Engine::getValue (the same
 // dispatch the golden-test harness uses, engine.cpp:242); plain registers go
@@ -309,6 +362,35 @@ std::string Bridge::handleMasterResetState(DroidMasterBase* m, int* code) {
 // BridgeWidget::step() (UI thread) rather than called here on the HTTP
 // thread. getModule() *is* documented "Share-locks.", so the existence
 // check below is a direct call.
+// Shared HTTP-thread validation for /params, /params/hold and /params/release.
+// The set is queued onto the UI thread (setParamValue), so — like the generic
+// rack ops in uiCall() — it silently no-ops if no BridgeWidget has attached the
+// drain hook yet: gate on that rather than returning 200 on a write that will
+// never run. getModule() is documented "Share-locks." (Engine.hpp), so
+// resolving the module and reading params.size() here on the HTTP thread is
+// safe — do it to reject an out-of-range paramId with a 400 up front rather
+// than letting the queued closure index module->params unchecked (a UI-thread
+// crash on a curl typo).
+bool Bridge::checkParamTarget(int64_t moduleId, int paramId, int* code, std::string* body) {
+    if (!uiAttached()) {
+        *code = 503;
+        *body = "{\"error\":\"ui bridge not attached; add any vcvoid module or launch from the runbook template\"}";
+        return false;
+    }
+    rack::engine::Module* mod = APP->engine->getModule(moduleId);
+    if (!mod) {
+        *code = 404;
+        *body = "{\"error\":\"no such module\"}";
+        return false;
+    }
+    if (paramId >= (int)mod->params.size()) {
+        *code = 400;
+        *body = "{\"error\":\"paramId out of range\"}";
+        return false;
+    }
+    return true;
+}
+
 std::string Bridge::handleParams(const Request& req, int* code) {
     json_t* root = parseJsonBody(req.body, code);
     if (!root) return "{\"error\":\"invalid JSON body\"}";
@@ -334,29 +416,8 @@ std::string Bridge::handleParams(const Request& req, int* code) {
         return "{\"error\":\"paramId must be non-negative\"}";
     }
 
-    // The set is queued onto the UI thread (setParamValue), so — like the
-    // generic rack ops in uiCall() — it silently no-ops if no BridgeWidget has
-    // attached the drain hook yet. Gate the same way rather than returning 200
-    // on a set that will never run.
-    if (!uiAttached()) {
-        *code = 503;
-        return "{\"error\":\"ui bridge not attached; add any vcvoid module or launch from the runbook template\"}";
-    }
-
-    // getModule() is documented Share-locks. (Engine.hpp), so resolving the
-    // module and reading params.size() here on the HTTP thread is safe — do it
-    // to reject an out-of-range paramId with a 400 up front rather than letting
-    // the queued closure index module->params unchecked (a UI-thread crash on a
-    // curl typo).
-    rack::engine::Module* mod = APP->engine->getModule(moduleId);
-    if (!mod) {
-        *code = 404;
-        return "{\"error\":\"no such module\"}";
-    }
-    if (paramId >= (int)mod->params.size()) {
-        *code = 400;
-        return "{\"error\":\"paramId out of range\"}";
-    }
+    std::string err;
+    if (!checkParamTarget(moduleId, paramId, code, &err)) return err;
 
     runOnUi([this, moduleId, paramId, value, holdMs] {
         // Re-resolve on the UI thread and re-check bounds defensively: the
@@ -384,6 +445,126 @@ std::string Bridge::handleParams(const Request& req, int* code) {
     json_t* o = json_object();
     json_object_set_new(o, "ok", json_boolean(true));
     if (holdMs > 0) json_object_set_new(o, "holdMs", json_integer(holdMs));
+    return dumpAndFree(o);
+}
+
+// POST /params/hold {moduleId, paramId, value?} — press and KEEP pressing
+// (issue #49). The timed POST /params ... holdMs is one gesture whose end is
+// fixed when it starts; a chord like "press A, press B, release A, release B"
+// cannot be expressed that way without racing two deadlines against each other
+// and against the engine's own pace. These two verbs give the script the
+// ordering instead: the hold lives across engine ticks until something releases
+// it (POST /params/release, a patch (re)load, or /rack/quit).
+//
+// `value` defaults to 1 — an un-timed hold is a press, and that is the only
+// thing every momentary control does. The pre-press value is captured on the UI
+// thread and restored on release, so a hold on a control that was not at rest
+// (a fader) puts it back where it was rather than at 0.
+//
+// Idempotent: holding an already-held param re-asserts the value and keeps the
+// ORIGINAL rest value. Holding a param that is currently under a TIMED hold
+// converts it to un-timed (the deadline is dropped) — the explicit verb wins.
+std::string Bridge::handleParamsHold(const Request& req, int* code) {
+    json_t* root = parseJsonBody(req.body, code);
+    if (!root) return "{\"error\":\"invalid JSON body\"}";
+    json_t* jModuleId = json_object_get(root, "moduleId");
+    json_t* jParamId = json_object_get(root, "paramId");
+    json_t* jValue = json_object_get(root, "value");
+    if (!jModuleId || !json_is_number(jModuleId) || !jParamId || !json_is_number(jParamId)) {
+        json_decref(root);
+        *code = 400;
+        return "{\"error\":\"missing or non-numeric moduleId/paramId\"}";
+    }
+    int64_t moduleId = (int64_t)json_number_value(jModuleId);
+    int paramId = (int)json_number_value(jParamId);
+    float value = (jValue && json_is_number(jValue)) ? (float)json_number_value(jValue) : 1.f;
+    json_decref(root);
+    if (paramId < 0) {
+        *code = 400;
+        return "{\"error\":\"paramId must be non-negative\"}";
+    }
+    std::string err;
+    if (!checkParamTarget(moduleId, paramId, code, &err)) return err;
+
+    runOnUi([this, moduleId, paramId, value] {
+        rack::engine::Module* m = APP->engine->getModule(moduleId);
+        if (!m || paramId < 0 || paramId >= (int)m->params.size()) return;
+        {
+            std::lock_guard<std::mutex> lk(holdsMutex_);
+            bool found = false;
+            for (auto& h : holds_) {
+                if (h.moduleId == moduleId && h.paramId == paramId) {
+                    h.untimed = true;           // an explicit hold outlives any deadline
+                    h.frameDeadline = INT64_MAX;
+                    found = true;               // keep the original restValue
+                    break;
+                }
+            }
+            if (!found)
+                holds_.push_back({moduleId, paramId, INT64_MAX,
+                                  APP->engine->getParamValue(m, paramId), true});
+        }
+        APP->engine->setParamValue(m, paramId, value);
+    });
+
+    *code = 200;
+    json_t* o = json_object();
+    json_object_set_new(o, "ok", json_boolean(true));
+    json_object_set_new(o, "held", json_boolean(true));
+    return dumpAndFree(o);
+}
+
+// POST /params/release {moduleId, paramId} — let go of a held param, restoring
+// the value it had when the hold started. Idempotent: releasing a param that is
+// not held is a 200 no-op (it does NOT write a value).
+//
+// Both halves run inside the queued UI closure rather than erasing the hold
+// record here on the HTTP thread, because the UI queue is FIFO: that is what
+// makes an immediate hold->release pair behave, instead of the release finding
+// nothing to erase and the still-queued hold then leaving the finger down.
+std::string Bridge::handleParamsRelease(const Request& req, int* code) {
+    json_t* root = parseJsonBody(req.body, code);
+    if (!root) return "{\"error\":\"invalid JSON body\"}";
+    json_t* jModuleId = json_object_get(root, "moduleId");
+    json_t* jParamId = json_object_get(root, "paramId");
+    if (!jModuleId || !json_is_number(jModuleId) || !jParamId || !json_is_number(jParamId)) {
+        json_decref(root);
+        *code = 400;
+        return "{\"error\":\"missing or non-numeric moduleId/paramId\"}";
+    }
+    int64_t moduleId = (int64_t)json_number_value(jModuleId);
+    int paramId = (int)json_number_value(jParamId);
+    json_decref(root);
+    if (paramId < 0) {
+        *code = 400;
+        return "{\"error\":\"paramId must be non-negative\"}";
+    }
+    std::string err;
+    if (!checkParamTarget(moduleId, paramId, code, &err)) return err;
+
+    runOnUi([this, moduleId, paramId] {
+        bool found = false;
+        float rest = 0.f;
+        {
+            std::lock_guard<std::mutex> lk(holdsMutex_);
+            for (size_t i = 0; i < holds_.size(); ++i) {
+                if (holds_[i].moduleId == moduleId && holds_[i].paramId == paramId) {
+                    rest = holds_[i].restValue;
+                    holds_.erase(holds_.begin() + i);
+                    found = true;
+                    break;
+                }
+            }
+        }
+        if (!found) return;
+        if (rack::engine::Module* m = APP->engine->getModule(moduleId))
+            if (paramId >= 0 && paramId < (int)m->params.size())
+                APP->engine->setParamValue(m, paramId, rest);
+    });
+
+    *code = 200;
+    json_t* o = json_object();
+    json_object_set_new(o, "ok", json_boolean(true));
     return dumpAndFree(o);
 }
 
@@ -1224,6 +1405,11 @@ std::string Bridge::handleRackSave(int* code) {
 // the client (e.g. curl) well within the frame-or-more of headroom before the
 // process actually exits. No response-torn-off race in practice.
 std::string Bridge::handleRackQuit(int* code) {
+    // Let go of anything a script was still holding before the window closes,
+    // so the autosave Rack writes on the way out does not persist a param
+    // pressed by the bridge. Queued first, and the UI queue is FIFO, so it
+    // drains in the same frame batch as the close below.
+    releaseAllHolds();
     return uiCall([](int* c) -> json_t* {
         APP->window->close();
         *c = 200;
@@ -1585,7 +1771,9 @@ void Bridge::expireHolds() {
     {
         std::lock_guard<std::mutex> lk(holdsMutex_);
         auto it = std::remove_if(holds_.begin(), holds_.end(), [&](const Hold& h) {
-            return h.frameDeadline <= nowFrame;
+            // Un-timed holds (POST /params/hold) have no deadline: only an
+            // explicit release, a patch load or /rack/quit ends them.
+            return !h.untimed && h.frameDeadline <= nowFrame;
         });
         expired.assign(it, holds_.end());
         holds_.erase(it, holds_.end());
@@ -1596,14 +1784,35 @@ void Bridge::expireHolds() {
         // module->params unchecked. Skip silently on a miss — nothing to do.
         if (rack::engine::Module* m = APP->engine->getModule(h.moduleId))
             if (h.paramId >= 0 && h.paramId < (int)m->params.size())
-                APP->engine->setParamValue(m, h.paramId, 0.f);
+                APP->engine->setParamValue(m, h.paramId, h.restValue);
     }
+}
+
+// Drop EVERY hold, timed or un-timed, back to its rest value. Called from
+// DroidMasterBase::loadPatchFile (a new patch means the controls mean something
+// else now — and an un-timed hold has no deadline to save it) and from
+// /rack/quit. Queued onto the UI thread like every other param write, so it is
+// callable from the HTTP thread, the engine thread or the UI thread alike.
+void Bridge::releaseAllHolds() {
+    runOnUi([this] {
+        std::vector<Hold> all;
+        {
+            std::lock_guard<std::mutex> lk(holdsMutex_);
+            all.swap(holds_);
+        }
+        for (auto& h : all)
+            if (rack::engine::Module* m = APP->engine->getModule(h.moduleId))
+                if (h.paramId >= 0 && h.paramId < (int)m->params.size())
+                    APP->engine->setParamValue(m, h.paramId, h.restValue);
+    });
 }
 
 std::string Bridge::handlePing(int* code) {
     *code = 200;
     json_t* o = json_object();
-    json_object_set_new(o, "bridgeVersion", json_integer(1));
+    // 1 -> 2: added GET /master/{id}/diagnostics and the un-timed
+    // POST /params/hold + POST /params/release verbs (issue #49).
+    json_object_set_new(o, "bridgeVersion", json_integer(2));
     json_object_set_new(o, "gitHash", json_string(VCVOID_GIT_HASH));
     return dumpAndFree(o);
 }
@@ -1616,6 +1825,10 @@ std::string Bridge::dispatch(const Request& req) {
         body = handlePing(&code);
     else if (req.method == "POST" && req.path == "/params")
         body = handleParams(req, &code);
+    else if (req.method == "POST" && req.path == "/params/hold")
+        body = handleParamsHold(req, &code);
+    else if (req.method == "POST" && req.path == "/params/release")
+        body = handleParamsRelease(req, &code);
     else if (req.method == "GET" && req.path == "/probe")
         body = handleProbe(req, &code);
     else if (parts.size() == 3 && parts[0] == "master") {
@@ -1624,6 +1837,8 @@ std::string Bridge::dispatch(const Request& req) {
         if (!m) { code = 404; body = "{\"error\":\"no such master\"}"; }
         else if (req.method == "GET" && parts[2] == "status")
             body = handleMasterStatus(m, &code);
+        else if (req.method == "GET" && parts[2] == "diagnostics")
+            body = handleMasterDiagnostics(m, &code);
         else if (req.method == "GET" && parts[2] == "registers")
             body = handleMasterRegisters(m, req, &code);
         else if (req.method == "POST" && parts[2] == "patch")
