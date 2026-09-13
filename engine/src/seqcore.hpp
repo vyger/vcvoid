@@ -54,6 +54,9 @@
 //     even / odd / every-4th / conditional) with a per-turn counter + engine RNG.
 //   * pitch accumulator (accumulatorrange) — the four accumulator fader
 //     positions (idx 4..7 of randomize-CV) shifting the note per turn.
+//   * per-step CV randomization (randomize-CV idx 1..7, and only 1..3 once the
+//     accumulator owns the top four): a fresh bipolar offset each step entry,
+//     before quantization. See the SPEC-GAPs below for the exact reading.
 //   * outputs: cv, gate, startofsequence, currentstep, currentpage, accumulator,
 //     startstepout, endstepout.
 //   * `linktonext` multi-track linking: the FADER and BUTTON/LED editing
@@ -123,10 +126,6 @@
 //     shared-button rule for stepcopy + doublerange on one button — doublerange
 //     then fires on the RELEASE, if no step was touched meanwhile — lands with
 //     stepcopy; see the TODO at the doublerange edge detector.)
-//   * pitch randomization (randomize-CV positions when accumulatorrange = 0, and
-//     idx 1..3 when it is > 0): the manual says only "a different random offset
-//     each time" with no distribution — left inert (the value is still stored/
-//     edited, it just does not perturb the pitch).
 //   * taptempo (gate-length stabiliser), DB8E display (cvname/gatename/display),
 //     dontsave/SD persistence, buttoncolor/LED feel — panel-only or no-op headless.
 //
@@ -171,6 +170,24 @@
 //     the scale is restored, but the exact original semitone is not separately
 //     stored.
 //   * probability decided once at step entry (pulse 0), using the engine RNG.
+//   * per-step CV randomization (#57). The manual gives only "a different random
+//     offset each time the step is played" and "at position 7 the offset is up to
+//     cvrange", so: (a) the offset is BIPOLAR uniform, ±(idx/7)·cvrange/2 around
+//     the dialed pitch — a full cvrange peak-to-peak at the top detent — and is
+//     NOT clamped back into cvbase..cvrange (the manual expects a maxed step to
+//     leave it: "could double up your CV range"); only the jack's ±10 V clamp
+//     applies. (b) ONE draw per step entry, not per repeat/ratchet — the same
+//     rule the gate probability follows — from the engine RNG, and only when the
+//     step's detent actually randomizes, so an unused lane leaves the stream (and
+//     other circuits' seeded goldens) untouched. (c) Applied BEFORE quantization
+//     so a quantized track stays in scale: in the quantized path the dialed CV is
+//     an index into the in-range scale notes, so the offset converts to that
+//     index space (round(offset/cvrange·(notes−1))) and any surplus past either
+//     end keeps walking the same notes; a notched CV (cvnotches ≥ 2) moves by
+//     whole notches and stays inside the notch list, since it emits a number.
+//     (d) with accumulatorrange > 0 the remaining detents 1..3 ("slight/medium/
+//     strong", the manual gives no strengths) keep the same idx/7 scaling.
+//     (e) composemode auditions the dialed note itself, unrandomized.
 //   * the start/end gesture with two plates going down in the SAME engine tick:
 //     the manual only describes the sequential gesture ("first setting an end
 //     step and *holding* that button"). Both skins walk their lanes ascending, so
