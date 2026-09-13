@@ -1,0 +1,59 @@
+# motoquencer: the `startstepout` / `endstepout` status outputs report the
+# current start and end step as 1-based integers, clamped to 1..numsteps.
+#
+# Two independent sequencers (no linktonext): the first reads its range from the
+# `startstep` / `endstep` inputs; the second wires neither, so it reports the
+# defaults — start 1 and end = numsteps ("the default is to play all steps").
+# The second one is deselected so it releases the shared fader bank.
+#
+# A step NUMBER does not fit on an output jack: `O` registers clamp to +/-10 V
+# (= +/-1.0 in engine units, engine/src/registers.cpp), so every step count
+# above 1 would read back as 1. The status outputs therefore travel on internal
+# cables and are scaled by 1/10 into the O jacks (which also gives the Forge the
+# cable reader it insists on): step N reads back as N/10.
+tickrate 100
+patch <<<
+[m4]
+[motoquencer]
+    numsteps     = 4
+    numfaders    = 4
+    startstep    = I2
+    endstep      = I3
+    startstepout = _SS
+    endstepout   = _ES
+[motoquencer]
+    select       = 0
+    numsteps     = 6
+    numfaders    = 4
+    startstepout = _SS2
+    endstepout   = _ES2
+[copy]
+    input  = _SS * 0.1
+    output = O3
+[copy]
+    input  = _ES * 0.1
+    output = O4
+[copy]
+    input  = _SS2 * 0.1
+    output = O5
+[copy]
+    input  = _ES2 * 0.1
+    output = O6
+>>>
+@0 set I2 2
+@0 set I3 3
+@0 expect O3 0.2 tol 1e-4
+@0 expect O4 0.3 tol 1e-4
+# the unwired sequencer: start 1, end = numsteps = 6
+@0 expect O5 0.1 tol 1e-4
+@0 expect O6 0.6 tol 1e-4
+# out-of-range input values clamp into 1..numsteps
+@1 set I2 0
+@1 expect O3 0.1 tol 1e-4
+@2 set I3 9
+@2 expect O4 0.4 tol 1e-4
+# a reversed range (start after end) is legal and is reported verbatim
+@3 set I2 4
+@3 set I3 2
+@3 expect O3 0.4 tol 1e-4
+@3 expect O4 0.2 tol 1e-4

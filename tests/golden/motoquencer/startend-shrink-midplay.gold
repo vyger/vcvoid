@@ -1,0 +1,47 @@
+# motoquencer `buttonmode = 1`: shrinking the range under the playhead. The play
+# order is rebuilt on every clock edge, so a range edit takes effect from the
+# next edge. Playing step 4 of 4 when the end is pulled back to step 2, the next
+# edge wraps to the start rather than running off the end of the new order.
+tickrate 100
+patch <<<
+[m4]
+[motoquencer]
+    clock       = I1
+    numsteps    = 4
+    numfaders   = 4
+    buttonmode  = 1
+    defaultgate = 1
+    currentstep = _CS
+    endstepout  = _ES
+[copy]
+    input  = _CS * 0.1
+    output = O3
+[copy]
+    input  = _ES * 0.1
+    output = O4
+>>>
+@1 set I1 1
+@1 expect O3 0.0 tol 1e-4
+@2 set I1 0
+@3 set I1 1
+@3 expect O3 0.1 tol 1e-4
+@4 set I1 0
+@5 set I1 1
+@5 expect O3 0.2 tol 1e-4
+@6 set I1 0
+@7 set I1 1
+@7 expect O3 0.3 tol 1e-4
+# playing step 4: pull the end back to step 2
+@8 set I1 0
+@8 touch F2 1
+@8 expect O4 0.2 tol 1e-4
+@9 touch F2 0
+# the next edge wraps to the start of the shortened range
+@10 set I1 1
+@10 expect O3 0.0 tol 1e-4
+@11 set I1 0
+@12 set I1 1
+@12 expect O3 0.1 tol 1e-4
+@13 set I1 0
+@14 set I1 1
+@14 expect O3 0.0 tol 1e-4

@@ -1,0 +1,51 @@
+# motoquencer `buttonmode = 1` across pages: the plate under lane i addresses
+# step `page * numfaders + i`, exactly as the faders do — there is no separate
+# rule for the start/end gesture. 8 steps over 4 faders: pressing plate 1 while
+# page 1 is displayed sets the end to step 5, not step 1.
+#
+# The played range is read back from `currentstep` (0-based, scaled by 1/10 into
+# an O jack), so no pitches need dialling.
+tickrate 100
+patch <<<
+[m4]
+[motoquencer]
+    clock       = I1
+    numsteps    = 8
+    numfaders   = 4
+    page        = I2
+    buttonmode  = 1
+    defaultgate = 1
+    currentstep = _CS
+    endstepout  = _ES
+[copy]
+    input  = _CS * 0.1
+    output = O3
+[copy]
+    input  = _ES * 0.1
+    output = O4
+>>>
+@0 set I2 1
+@0 expect O4 0.8 tol 1e-4
+# plate 1 on page 1 = step 5
+@1 touch F1 1
+@1 expect O4 0.5 tol 1e-4
+@2 touch F1 0
+@3 set I2 0
+# steps 1..5, then wrap
+@4 set I1 1
+@4 expect O3 0.0 tol 1e-4
+@5 set I1 0
+@6 set I1 1
+@6 expect O3 0.1 tol 1e-4
+@7 set I1 0
+@8 set I1 1
+@8 expect O3 0.2 tol 1e-4
+@9 set I1 0
+@10 set I1 1
+@10 expect O3 0.3 tol 1e-4
+@11 set I1 0
+@12 set I1 1
+@12 expect O3 0.4 tol 1e-4
+@13 set I1 0
+@14 set I1 1
+@14 expect O3 0.0 tol 1e-4

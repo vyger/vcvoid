@@ -1,0 +1,57 @@
+# motoquencer linktonext: a linked member ignores its own `startstep` /
+# `endstep`. motoquencer.md:677 — "The linked sequencer does not react to
+# `clock`, `reset`, `startstep`, `endstep`, `form`, `direction`, `pingpong`,
+# `pattern`, `autoreset`, `shiftsteps` [...] Instead the current step number of
+# the linked sequencer will always be the same as the step number of the main
+# sequencer."
+#
+# The member is fed startstep = 3 and endstep = 3 — a one-step range that, if it
+# were honoured, would pin the member to its step 3 forever. Its four steps carry
+# four distinct CVs (1.0 / 0.75 / 0.5 / 0.25), so its `cv` names the step the
+# chain is on: all four must be heard, in the main's order.
+tickrate 100
+patch <<<
+[m4]
+[motoquencer]
+    clock      = I1
+    fadermode  = I2
+    numsteps   = 4
+    numfaders  = 4
+    linktonext = 1
+    quantize   = 0
+    cvbase     = 0
+    cvrange    = 1
+    cv         = O1
+[motoquencer]
+    startstep  = 3
+    endstep    = 3
+    quantize   = 0
+    cvbase     = 0
+    cvrange    = 1
+    holdcv     = 0
+    cv         = O2
+>>>
+# the member's CV lane (fadermode 10): one distinct value per step
+@1 set I2 10
+@2 move F1 1.0
+@3 move F2 0.75
+@4 move F3 0.5
+@5 move F4 0.25
+# park the faders back on the main's CV lane (no more edits) and run the clock
+@6 set I2 0
+@7 set I1 1
+@7 expect O2 1.0 tol 1e-4
+@8 set I1 0
+@9 set I1 1
+@9 expect O2 0.75 tol 1e-4
+@10 set I1 0
+@11 set I1 1
+@11 expect O2 0.5 tol 1e-4
+@12 set I1 0
+@13 set I1 1
+@13 expect O2 0.25 tol 1e-4
+@14 set I1 0
+# wrap: back to the main's step 1, not the member's own "step 3 only" range
+@15 set I1 1
+@15 expect O2 1.0 tol 1e-4
+@16 set I1 0

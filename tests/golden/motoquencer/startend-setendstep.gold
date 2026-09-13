@@ -1,0 +1,59 @@
+# motoquencer `setendstep`: "This input acts as a number input and trigger at the
+# same time. As soon as you send a different number than 0, the end step is set to
+# that value *as if you had manually changed it* with the step buttons in button
+# mode 1. The effect always happens when you change the input number. [...] The
+# input value 0 does not change the end step."
+#
+# SPEC-GAP: the manual says "whenever this number changes", leaving the FIRST
+# observed value undefined. Literal reading here: the first value is latched
+# silently at boot, so a constant `setendstep` — or a `buttongroup` sitting at
+# its start value — never shrinks the sequence behind your back. The patch proves
+# it: the boot value is 1, and the end still reads the `endstep` input's 3.
+tickrate 100
+patch <<<
+[m4]
+[motoquencer]
+    clock         = I1
+    numsteps      = 4
+    numfaders     = 4
+    endstep       = 3
+    setendstep    = I2
+    clearstartend = I4
+    startstepout  = _SS
+    endstepout    = _ES
+[copy]
+    input  = _SS * 0.1
+    output = O3
+[copy]
+    input  = _ES * 0.1
+    output = O4
+>>>
+# boot: setendstep = 1 is latched silently, the end stays at the endstep input
+@0 set I2 1
+@0 expect O4 0.3 tol 1e-4
+# a change to 0 does nothing
+@1 set I2 0
+@1 expect O4 0.3 tol 1e-4
+# 0 -> 2: the end is set to 2, once
+@2 set I2 2
+@2 expect O4 0.2 tol 1e-4
+# unchanged input: nothing happens again
+@3 expect O4 0.2 tol 1e-4
+# back to 0: still nothing ("the input value 0 does not change the end step")
+@4 set I2 0
+@4 expect O4 0.2 tol 1e-4
+# 0 -> 4
+@5 set I2 4
+@5 expect O4 0.4 tol 1e-4
+# out of range clamps into 1..numsteps
+@6 set I2 9
+@6 expect O4 0.4 tol 1e-4
+# the start is never touched by setendstep
+@6 expect O3 0.1 tol 1e-4
+# clearstartend returns the end to its default, the `endstep` input
+@7 set I4 1
+@7 expect O4 0.3 tol 1e-4
+@8 set I4 0
+# ...and setendstep still works afterwards
+@9 set I2 2
+@9 expect O4 0.2 tol 1e-4

@@ -34,6 +34,19 @@
 //     plus cvbase / cvrange / cvnotches / invert / transpose / tuningmode.
 //   * transport: clock / reset (step-0 arming) / run / mute, direction, pingpong,
 //     startstep / endstep, numsteps, shiftsteps, autoreset.
+//   * the interactive start/end range (buttonmode 1): a plate/push touch sets the
+//     END, a second finger on another step while the first is held sets the
+//     START, and the two override slots beat the startstep / endstep inputs until
+//     clear / clearall / clearstartend drops them. `setendstep` sets the end "as
+//     if you had manually changed it". Every consumer of the range — the play
+//     order, the green/red LEDs, luckyscope and startstepout / endstepout — reads
+//     it through rangeStart0() / rangeEnd0() on the range OWNER, which for a
+//     linked member is the chain main. The override is runtime state: not saved,
+//     not part of a preset.
+//   * `doublerange`: copies the played range's steps (all per-step columns) into
+//     the second half, on this instance AND every linked member, and moves the
+//     end there as a manual override. Ignored on a member (the main does it for
+//     the whole chain) and a no-op when the range is already at maximum.
 //   * per-step timing: repeats (step duration), ratchets (sub-clock), gate
 //     patterns (once/all/long/tie), repeatshift / ratchetshift, gatelength,
 //     holdcv.
@@ -85,10 +98,10 @@
 //     repeat/skip length compensation (both read but inert).
 //   * keyboard recording: keyboardcv/keyboardgate/keyboardmode/recordmode/
 //     recordsilence.
-//   * copy / paste / pastefaders / pastebuttons / stepcopy / doublerange / bulkedit.
-//   * interactive start/end (buttonmode 1) and setendstep / clearstartend — the
-//     input-driven startstep/endstep ARE honoured; the two-finger button gesture
-//     and its override state are not.
+//   * copy / paste / pastefaders / pastebuttons / stepcopy / bulkedit. (Note the
+//     shared-button rule for stepcopy + doublerange on one button — doublerange
+//     then fires on the RELEASE, if no step was touched meanwhile — lands with
+//     stepcopy; see the TODO at the doublerange edge detector.)
 //   * pitch randomization (randomize-CV positions when accumulatorrange = 0, and
 //     idx 1..3 when it is > 0): the manual says only "a different random offset
 //     each time" with no distribution — left inert (the value is still stored/
@@ -119,6 +132,17 @@
 //     the scale is restored, but the exact original semitone is not separately
 //     stored.
 //   * probability decided once at step entry (pulse 0), using the engine RNG.
+//   * the start/end gesture with two plates going down in the SAME engine tick:
+//     the manual only describes the sequential gesture ("first setting an end
+//     step and *holding* that button"). Both skins walk their lanes ascending, so
+//     the lower lane becomes the end/anchor and the higher lane the start.
+//   * `setendstep` at boot: "whenever this number changes" leaves the FIRST
+//     observed value undefined. It is latched silently, so a constant setendstep
+//     — or a buttongroup sitting at its start value — never shrinks the sequence.
+//   * `doublerange` when the doubled range does not fit (a 5-step range of 8):
+//     the manual only rules out a range already at maximum. Copy as many steps as
+//     fit and clamp the end to numsteps; the alternative (no-op unless 2L fits)
+//     would make doublerange silently dead on most odd ranges.
 //   * "I Feel Lucky" distributions: the manual describes each op's INTENT and its
 //     luckyamount meaning but never pins an exact distribution or bit-for-bit
 //     rounding. Literal, property-faithful readings (all draws from the engine RNG,
@@ -198,7 +222,21 @@ public:
             for (int i = 0; i < numsteps_; i++) cur_.skip[i] = false;
         if (risingEdge(crpPrev_, in("clearrepeats").value(s)))
             for (int i = 0; i < numsteps_; i++) cur_.repeats[i] = 1;
-        (void)risingEdge(csePrev_, in("clearstartend").value(s));   // interactive: deferred
+        handleStartEndInputs(s);
+        // The chain main rewrote our steps this tick (doublerange): re-command
+        // the motors so the copied values show. Picked up here because the main
+        // always ticks before its members.
+        if (pendingRecall_) { pendingRecall_ = false; recall = true; }
+        // `doublerange` (also always-run — MFPS fires it from a track button,
+        // not from the fader selection). TODO: when `stepcopy` lands, the
+        // shared-button rule (motoquencer.md §"Copy & paste single steps") moves
+        // this to the FALLING edge whenever `stepcopy` is connected too.
+        bool drFired = risingEdge(drPrev_, in("doublerange").value(s));
+        // A chain member ignores its own `doublerange`: the main copies every
+        // member's steps as well, and the Forge's MFPS generator wires the input
+        // on every lane of a track — a member that fired too would double an
+        // already-doubled range. (Same rule as the step-order lucky ops.)
+        if (drFired && !chainMain_ && doubleRange(s)) recall = true;
 
         // "I Feel Lucky" one-time randomization (also always-run — a trigger fires
         // regardless of selection). A fired op permanently mutates the sequence, so
@@ -220,6 +258,11 @@ public:
         // standalone is always its own owner).
         bool showFaders  = selected && faderOwner;
         bool showButtons = selected && buttonOwner;
+        // A plate release is only observed while we read the plates, so a
+        // start/end gesture anchor held across a deselect (or across a loss of
+        // button ownership in a chain) would silently turn the NEXT single
+        // press into a start press. Drop it.
+        if (!showButtons) seAnchorLane_ = -1;
 
         // recall the motors when the visible page/mode changed
         if (page != shownPage_ || fadermode != shownMode_) recall = true;
@@ -501,15 +544,152 @@ protected:
         }
     }
 
-    // Push-button edit shared by both skins (M4 touch plate / E4 encoder push):
-    // one press toggles/cycles the buttonmode parameter of a step.
-    void pressStep(int bm, int step) {
+    // Push-button edit shared by both skins (M4 touch plate / E4 encoder push).
+    // BOTH edges are reported, not just the press: buttonmode 1 (start/end) is a
+    // two-finger gesture whose first finger stays down as the anchor, so the
+    // release is what ends it. `lane` is the physical plate index within this
+    // instance's lanes; `step` is the step it currently addresses (page-mapped).
+    void plateEdge(int bm, int lane, int step, bool pressed) {
+        if (!pressed) {
+            if (seAnchorLane_ == lane) seAnchorLane_ = -1;
+            return;
+        }
         switch (bm) {
             case 0: cur_.gate[step] = !cur_.gate[step]; break;
+            case 1: startEndPress(lane, step); break;
             case 2: cur_.gatepat[step] = (cur_.gatepat[step] + 1) & 3; break;
             case 3: cur_.skip[step] = !cur_.skip[step]; break;
-            default: break;   // buttonmode 1 (start/end) deferred
+            default: break;
         }
+    }
+
+    // buttonmode 1, motoquencer.md §"Start and end": "Touching a button changes
+    // the *end* step. You can set the start step by first setting an end step and
+    // *holding* that button and then – with a second finger – press another step.
+    // This will set the start step."
+    //
+    // So a lone press only ever moves the END; the START is reachable only while
+    // another plate is still held. The two override slots are independent — a
+    // single touch does not reset the start, which is what makes "clearstartend
+    // resets the end step to its default" coherent. The anchor is a physical
+    // finger and so lives on the instance that owns the buttons, while the range
+    // lives on the chain main (see rangeOwner): a gesture performed on a linked
+    // member (buttonmode 1x) edits the main's range, since a member has no play
+    // order of its own.
+    //
+    // SPEC-GAP: two plates going down in the SAME engine tick. The manual only
+    // describes the sequential gesture. Both skins walk their lanes ascending, so
+    // the lower lane becomes the end/anchor and the higher lane the start.
+    void startEndPress(int lane, int step) {
+        SeqCore* o = rangeOwner();
+        if (seAnchorLane_ >= 0 && seAnchorLane_ != lane) {
+            o->manualStart0_ = step;            // second finger -> START
+        } else {
+            o->manualEnd0_ = step;              // single touch -> END
+            seAnchorLane_ = lane;               // ...and becomes the anchor
+        }
+    }
+
+    // `clearstartend` and `setendstep`, the non-gestural halves of the same
+    // feature. A linked member ignores both (motoquencer.md:677 — the range is
+    // the main's), but its edge latches are still advanced so nothing fires late.
+    void handleStartEndInputs(EngineState& s) {
+        bool cleared = risingEdge(csePrev_, in("clearstartend").value(s));
+        if (chainMain_) return;                 // a member has no range of its own
+        // "A trigger here clears the manual settings of the start and end step",
+        // i.e. both slots fall back to the startstep / endstep inputs.
+        if (cleared) manualStart0_ = manualEnd0_ = -1;
+        if (!in("setendstep").connected()) return;
+        // "As soon as you send a different number than 0, the end step is set to
+        // that value as if you had manually changed it [...] The input value 0
+        // does not change the end step."
+        // SPEC-GAP: the manual never defines the FIRST observed value. Latch it
+        // silently, so a constant setendstep — or a buttongroup sitting at its
+        // start value at boot — cannot shrink the sequence behind your back.
+        int v = (int)std::lround(in("setendstep").value(s));
+        if (!setEndSeen_) { setEndSeen_ = true; prevSetEnd_ = v; return; }
+        if (v == prevSetEnd_) return;
+        prevSetEnd_ = v;
+        if (v != 0) manualEnd0_ = clampi(v - 1, 0, numsteps_ - 1);
+    }
+
+    // The next instance of THIS chain in patch order, or nullptr at its end.
+    SeqCore* nextChainMember() {
+        SeqCore* p = asSeq(nextPeer());
+        return (p && p->chainMain_ == rangeOwner()) ? p : nullptr;
+    }
+
+    // `doublerange` — motoquencer.md §"Doubling the range": "A trigger here
+    // doubles the current playing range and copies the contents of the previous
+    // range to the second half of the new range. This only works if the playing
+    // range (start/stop) is not at maximum." The end "is set to step 16 (and
+    // counts as manually modified)", i.e. it becomes an interactive override
+    // exactly like a plate press; the START is left alone, so a range 5..8
+    // doubles to 5..12.
+    //
+    // What is copied is "the contents of the previous range" — and copying a
+    // step copies "always *all* aspects of the step" (§"Copy & paste"), which is
+    // every per-step column, i.e. copyStep. Linked sequencers are handled with
+    // it ("If you have linked sequencers, those will automatically be handled as
+    // well"), over the same step indices, since the whole chain plays one step
+    // number.
+    //
+    // SPEC-GAP: the manual only rules out a range already at maximum, leaving a
+    // range that does not have room for a full second copy undefined (5 steps of
+    // 8). Literal reading: copy as many as fit and clamp the end to numsteps —
+    // the alternative (no-op unless 2L fits) would make doublerange silently
+    // dead on most odd ranges. Returns whether anything happened.
+    bool doubleRange(EngineState& s) {
+        int a = rangeStart0(s), b = rangeEnd0(s);
+        int hi = numsteps_ - 1;
+        int dir = (b >= a) ? 1 : -1;                 // a reversed range doubles backwards
+        if (dir > 0 ? (b >= hi) : (b <= 0)) return false;   // already at maximum
+        int len  = (dir > 0 ? b - a : a - b) + 1;
+        int room = dir > 0 ? hi - b : b;             // steps left beyond the end
+        int fit  = len < room ? len : room;
+        for (int k = 0; k < fit; k++) {
+            int src = a + dir * k, dst = b + dir * (k + 1);
+            copyStep(cur_, dst, cur_, src);
+            for (SeqCore* m = nextChainMember(); m; m = m->nextChainMember())
+                copyStep(m->cur_, dst, m->cur_, src);
+        }
+        manualEnd0_ = clampi(b + dir * fit, 0, hi);  // "counts as manually modified"
+        for (SeqCore* m = nextChainMember(); m; m = m->nextChainMember())
+            m->pendingRecall_ = true;
+        return true;
+    }
+
+    // ---- the played range (startstep / endstep) ----------------------------
+    // ONE accessor pair for every consumer of the range — the play order, the
+    // buttonmode-1 LEDs, `luckyscope` and the startstepout / endstepout
+    // outputs — so they cannot drift apart.
+    //
+    // The range belongs to the chain MAIN. A linked member "does not react to
+    // clock, reset, startstep, endstep, form, direction, pingpong, pattern,
+    // autoreset, shiftsteps [...] Instead the current step number of the linked
+    // sequencer will always be the same as the step number of the main
+    // sequencer" (motoquencer.md:677) — so its own startstep / endstep inputs
+    // are ignored everywhere, not just in the transport, and the range it
+    // reports and scopes lucky ops to is the one it actually plays.
+    SeqCore* rangeOwner() { return chainMain_ ? chainMain_ : this; }
+
+    // 0-based, clamped into this instance's step count. An interactive override
+    // (the buttonmode-1 gesture, setendstep, doublerange) wins over the
+    // startstep / endstep inputs until a clear / clearall / clearstartend drops
+    // it: "the manual settings override the inputs startstep and endstep until
+    // you do a clear or clearstartend" (motoquencer.md). The two slots are
+    // independent, so a manual end can sit over an input-driven start.
+    int rangeStart0(EngineState& s) {
+        SeqCore* o = rangeOwner();
+        if (o->manualStart0_ >= 0) return clampi(o->manualStart0_, 0, numsteps_ - 1);
+        return clampi((int)std::lround(o->in("startstep").value(s)) - 1, 0, numsteps_ - 1);
+    }
+    int rangeEnd0(EngineState& s) {
+        SeqCore* o = rangeOwner();
+        if (o->manualEnd0_ >= 0) return clampi(o->manualEnd0_, 0, numsteps_ - 1);
+        long es = o->in("endstep").connected()
+                ? std::lround(o->in("endstep").value(s)) : (long)o->numsteps_;
+        return clampi((int)es - 1, 0, numsteps_ - 1);
     }
 
     // ---- I Feel Lucky ------------------------------------------------------
@@ -552,10 +732,7 @@ protected:
     std::vector<int> luckyTargets(EngineState& s, int page) {
         int scope = (int)std::lround(in("luckyscope").value(s));
         float chance = clampf(in("luckychance").value(s), 0.0f, 1.0f);
-        long ss = std::lround(in("startstep").value(s));
-        long es = in("endstep").connected() ? std::lround(in("endstep").value(s)) : numsteps_;
-        int s0 = clampi((int)ss - 1, 0, numsteps_ - 1);
-        int e0 = clampi((int)es - 1, 0, numsteps_ - 1);
+        int s0 = rangeStart0(s), e0 = rangeEnd0(s);
         int lo = std::min(s0, e0), hi = std::max(s0, e0);
         int pLo = page * numFaders_, pHi = std::min(pLo + numFaders_ - 1, numsteps_ - 1);
         std::vector<int> out;
@@ -726,10 +903,7 @@ protected:
             return;
         }
         ledsLit_ = true;
-        long ss = std::lround(in("startstep").value(s));
-        long es = in("endstep").connected() ? std::lround(in("endstep").value(s)) : numsteps_;
-        int start0 = clampi((int)ss - 1, 0, numsteps_ - 1);
-        int end0   = clampi((int)es - 1, 0, numsteps_ - 1);
+        int start0 = rangeStart0(s), end0 = rangeEnd0(s);
         static constexpr float kPatColor[4] = {kLedCyan, kLedPink, kLedOrange, kLedYellow};
         for (int i = 0; i < numFaders_; i++) {
             int step = page * numFaders_ + i;
@@ -798,10 +972,7 @@ protected:
 
     // Build the logical play order for one full cycle (range + direction + pingpong).
     std::vector<int> playOrder(EngineState& s) {
-        long ss = std::lround(in("startstep").value(s));
-        long es = in("endstep").connected() ? std::lround(in("endstep").value(s)) : numsteps_;
-        int start0 = clampi((int)ss - 1, 0, numsteps_ - 1);
-        int end0   = clampi((int)es - 1, 0, numsteps_ - 1);
+        int start0 = rangeStart0(s), end0 = rangeEnd0(s);
         std::vector<int> o;
         if (start0 <= end0) for (int i = start0; i <= end0; i++) o.push_back(i);
         else                for (int i = start0; i >= end0; i--) o.push_back(i);
@@ -1130,10 +1301,8 @@ protected:
         out("currentpage").set(s, (float)((playStep_ < 0 ? 0 : playStep_) / numFaders_));
         out("accumulator").set(s, (float)acc_);
 
-        long ss = std::lround(in("startstep").value(s));
-        long es = in("endstep").connected() ? std::lround(in("endstep").value(s)) : numsteps_;
-        out("startstepout").set(s, (float)clampi((int)ss, 1, numsteps_));
-        out("endstepout").set(s, (float)clampi((int)es, 1, numsteps_));
+        out("startstepout").set(s, (float)(rangeStart0(s) + 1));   // 1-based
+        out("endstepout").set(s, (float)(rangeEnd0(s) + 1));
     }
 
     // ---- presets / select --------------------------------------------------
@@ -1155,6 +1324,9 @@ protected:
             if (immediate) preset_[prevPreset_] = cur_;
             recall = true;
         }
+        // An interactive start/end override does not survive a clear: "They are
+        // reactived if you clear everything" (the startstep / endstep rows).
+        if (clearAll || clr) manualStart0_ = manualEnd0_ = -1;
         if (savePatched && risingEdge(spPrev_, in("savepreset").value(s)))
             preset_[presetNum(s, in("savepreset").value(s), presetPatched)] = cur_;
         if (loadPatched && risingEdge(lpPrev_, in("loadpreset").value(s))) {
@@ -1227,6 +1399,27 @@ protected:
     // editing view
     int  shownPage_ = -1, shownMode_ = -1;
     bool wasSelected_ = false;
+
+    // Interactive start/end (motoquencer.md §"Start and end"). Two INDEPENDENT
+    // override slots, 0-based, -1 = not overridden (follow the startstep /
+    // endstep inputs): a plate touch, setendstep and doublerange override only
+    // the END; the two-finger gesture also overrides the START. They live on the
+    // range owner (the chain main) and are dropped by clear / clearall /
+    // clearstartend. NOT persisted: the manual calls them "temporarily
+    // modified", so like playPos_ they are runtime state and stateVersion()
+    // stays 1.
+    int  manualStart0_ = -1, manualEnd0_ = -1;
+    // The plate that set the end and is still held — the anchor for the second
+    // finger. Identified by LANE, not step, so flipping pages mid-gesture keeps
+    // it. Lives on the instance that owns the buttons (it is a finger).
+    int  seAnchorLane_ = -1;
+    // setendstep change detector; the first observed value is latched silently.
+    bool setEndSeen_ = false;
+    int  prevSetEnd_ = 0;
+    bool drPrev_ = false;          // doublerange trigger edge
+    // Set on a chain member by the main when doublerange rewrote its steps, so
+    // the member re-commands its motors when it ticks (later the same tick).
+    bool pendingRecall_ = false;
 
     // linktonext chain (resolved once at init). chainMain_ is the chain's first
     // instance (nullptr if this is the main or a standalone); chainIndex_ is our

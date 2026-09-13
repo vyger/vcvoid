@@ -1,0 +1,50 @@
+# motoquencer linktonext: a linked member has no range of its own, so its
+# `startstepout` / `endstepout` report the CHAIN MAIN's range — the range it
+# actually plays. Its own `startstep` / `endstep` inputs are among the ones
+# motoquencer.md:677 says a linked sequencer does not react to, so feeding it a
+# one-step range (4..4) must change nothing.
+#
+# Step numbers travel on cables and are scaled by 1/10 into the O jacks (`O`
+# registers clamp to +/-10 V — see startend-out.gold).
+tickrate 100
+patch <<<
+[m4]
+[motoquencer]
+    clock        = I1
+    numsteps     = 4
+    numfaders    = 4
+    linktonext   = 1
+    startstep    = I2
+    endstep      = I3
+    startstepout = _SS
+    endstepout   = _ES
+[motoquencer]
+    startstep    = 4
+    endstep      = 4
+    startstepout = _MSS
+    endstepout   = _MES
+[copy]
+    input  = _SS * 0.1
+    output = O3
+[copy]
+    input  = _ES * 0.1
+    output = O4
+[copy]
+    input  = _MSS * 0.1
+    output = O5
+[copy]
+    input  = _MES * 0.1
+    output = O6
+>>>
+@0 set I2 2
+@0 set I3 3
+@0 expect O3 0.2 tol 1e-4
+@0 expect O4 0.3 tol 1e-4
+# the member reports the main's 2..3, not its own 4..4
+@0 expect O5 0.2 tol 1e-4
+@0 expect O6 0.3 tol 1e-4
+# and it follows the main when the main's range changes
+@1 set I2 1
+@1 set I3 4
+@1 expect O5 0.1 tol 1e-4
+@1 expect O6 0.4 tol 1e-4

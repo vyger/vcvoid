@@ -1,0 +1,82 @@
+# motoquencer `doublerange` — motoquencer.md §"Doubling the range": "A trigger
+# here doubles the current playing range and copies the contents of the previous
+# range to the second half of the new range [...] The end step is set to step 16
+# (and counts as manually modified)." And: "You even can start with a single step
+# [...] Pressing `doublerange` once doubles the length from 1 to 2. Pressing
+# again makes a sequence of 4 identical steps."
+#
+# 8 steps over 4 faders. Steps 1 and 2 are dialled to 0.5 and 0.25 and the end is
+# pulled back to step 2 with `setendstep`. One trigger copies them into steps 3
+# and 4 and moves the end to 4; a second copies steps 1..4 into 5..8 and moves
+# the end to 8. The copies are read back both off the recalled motor faders and
+# off the played CV.
+tickrate 100
+patch <<<
+[m4]
+[motoquencer]
+    clock       = I1
+    numsteps    = 8
+    numfaders   = 4
+    page        = I5
+    quantize    = 0
+    cvbase      = 0
+    cvrange     = 1
+    defaultgate = 1
+    setendstep  = I3
+    doublerange = I4
+    cv          = O1
+    endstepout  = _ES
+[copy]
+    input  = _ES * 0.1
+    output = O4
+>>>
+@1 move F1 0.5
+@2 move F2 0.25
+# pull the end back to step 2 (the range must not be at maximum)
+@3 set I3 2
+@3 expect O4 0.2 tol 1e-4
+# first trigger: steps 3, 4 <- steps 1, 2 and the end moves to 4
+@4 set I4 1
+@4 expect O4 0.4 tol 1e-4
+@5 set I4 0
+@5 expect F3 0.5 tol 1e-4
+@5 expect F4 0.25 tol 1e-4
+# second trigger: steps 5..8 <- steps 1..4, the end moves to 8
+@6 set I4 1
+@6 expect O4 0.8 tol 1e-4
+@7 set I4 0
+# page 1 shows the freshly copied second half
+@8 set I5 1
+@9 expect F1 0.5 tol 1e-4
+@9 expect F2 0.25 tol 1e-4
+@9 expect F3 0.5 tol 1e-4
+@9 expect F4 0.25 tol 1e-4
+@10 set I5 0
+# and the whole doubled sequence plays as two identical halves
+@11 set I1 1
+@11 expect O1 0.5 tol 1e-4
+@12 set I1 0
+@13 set I1 1
+@13 expect O1 0.25 tol 1e-4
+@14 set I1 0
+@15 set I1 1
+@15 expect O1 0.5 tol 1e-4
+@16 set I1 0
+@17 set I1 1
+@17 expect O1 0.25 tol 1e-4
+@18 set I1 0
+@19 set I1 1
+@19 expect O1 0.5 tol 1e-4
+@20 set I1 0
+@21 set I1 1
+@21 expect O1 0.25 tol 1e-4
+@22 set I1 0
+@23 set I1 1
+@23 expect O1 0.5 tol 1e-4
+@24 set I1 0
+@25 set I1 1
+@25 expect O1 0.25 tol 1e-4
+@26 set I1 0
+# wrap back to step 1
+@27 set I1 1
+@27 expect O1 0.5 tol 1e-4

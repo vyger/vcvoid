@@ -271,6 +271,126 @@ TEST(engine_motoquencer_leds_startend) {
     CHECK_NEAR(e.faderLed(4), 0.0f, 1e-6f);
 }
 
+// buttonmode 1 across pages, and against the played step. motoquencer.md "LED
+// colors": green = start step, red = end step, and "the currently played step"
+// is white regardless of buttonmode. A marker that is not on the displayed page
+// shows nothing. Characterises the range as read by updateLeds().
+TEST(engine_motoquencer_leds_startend_pages) {
+    Engine e;
+    auto r = e.load(
+        "[m4]\n"
+        "[motoquencer]\n"
+        "    clock = I1\n"
+        "    numsteps = 8\n"
+        "    numfaders = 4\n"
+        "    page = I2\n"
+        "    defaultgate = 1\n"
+        "    buttonmode = 1\n"
+        "    startstep = 2\n"
+        "    endstep = 7\n"
+        "    cv = O1\n");
+    CHECK(r.ok);
+    e.tick();
+    // page 0 shows steps 1..4: only the green start marker, on step 2.
+    CHECK_NEAR(e.faderLed(1), 0.0f, 1e-6f);
+    CHECK_NEAR(e.faderLed(2), 1.0f, 1e-6f);
+    CHECK_NEAR(e.faderLedColor(2), 0.4f, 1e-6f);   // green start
+    CHECK_NEAR(e.faderLed(3), 0.0f, 1e-6f);
+    CHECK_NEAR(e.faderLed(4), 0.0f, 1e-6f);
+    // page 1 shows steps 5..8: only the red end marker, on step 7 = lane 3.
+    e.setValue("I2", 1.0f); e.tick();
+    CHECK_NEAR(e.faderLed(1), 0.0f, 1e-6f);
+    CHECK_NEAR(e.faderLed(2), 0.0f, 1e-6f);
+    CHECK_NEAR(e.faderLed(3), 1.0f, 1e-6f);
+    CHECK_NEAR(e.faderLedColor(3), 0.8f, 1e-6f);   // red end
+    CHECK_NEAR(e.faderLed(4), 0.0f, 1e-6f);
+    // back to page 0; the first clock edge enters the START step (2), whose
+    // white played-step LED wins over the green marker.
+    e.setValue("I2", 0.0f); e.tick();
+    e.setValue("I1", 1.0f); e.tick();
+    CHECK_NEAR(e.faderLed(2), 1.0f, 1e-6f);
+    CHECK(e.faderLedColor(2) < 0.0f);              // white sentinel
+    // next step: lane 2 is green again, lane 3 goes white.
+    e.setValue("I1", 0.0f); e.tick();
+    e.setValue("I1", 1.0f); e.tick();
+    CHECK_NEAR(e.faderLedColor(2), 0.4f, 1e-6f);
+    CHECK(e.faderLedColor(3) < 0.0f);
+}
+
+// buttonmode 1, interactive: the green start / red end markers follow the
+// gesture, not just the startstep / endstep inputs (motoquencer.md §"Start and
+// end" + §"LED colors").
+TEST(engine_motoquencer_leds_startend_interactive) {
+    Engine e;
+    auto r = e.load(
+        "[m4]\n"
+        "[motoquencer]\n"
+        "    clock = I1\n"
+        "    numsteps = 4\n"
+        "    numfaders = 4\n"
+        "    defaultgate = 1\n"
+        "    buttonmode = 1\n"
+        "    cv = O1\n");
+    CHECK(r.ok);
+    e.tick();
+    CHECK_NEAR(e.faderLedColor(1), 0.4f, 1e-6f);   // green: the default start 1
+    CHECK_NEAR(e.faderLedColor(4), 0.8f, 1e-6f);   // red: the default end 4
+    // hold plate 3 -> the end marker moves there
+    e.touchFader(3, true); e.pressFaderPlate(3, true); e.tick();
+    CHECK_NEAR(e.faderLedColor(3), 0.8f, 1e-6f);
+    CHECK_NEAR(e.faderLed(4), 0.0f, 1e-6f);
+    CHECK_NEAR(e.faderLedColor(1), 0.4f, 1e-6f);   // start untouched
+    // second finger on plate 2 -> the start marker moves there
+    e.touchFader(2, true); e.pressFaderPlate(2, true); e.tick();
+    CHECK_NEAR(e.faderLedColor(2), 0.4f, 1e-6f);
+    CHECK_NEAR(e.faderLed(1), 0.0f, 1e-6f);
+    CHECK_NEAR(e.faderLedColor(3), 0.8f, 1e-6f);
+    e.pressFaderPlate(2, false); e.touchFader(2, false);
+    e.pressFaderPlate(3, false); e.touchFader(3, false);
+    e.tick();
+    // the first clock edge enters the new start step: white wins over green
+    e.setValue("I1", 1.0f); e.tick();
+    CHECK_NEAR(e.faderLed(2), 1.0f, 1e-6f);
+    CHECK(e.faderLedColor(2) < 0.0f);
+    CHECK_NEAR(e.faderLedColor(3), 0.8f, 1e-6f);   // the red end is still there
+}
+
+// The gesture anchor is a physical finger: a release that happens while the
+// circuit is deselected is never observed, so the anchor must be dropped when
+// the buttons are released to another overlay. Otherwise the next single press
+// would set the START instead of the end.
+TEST(engine_motoquencer_startend_anchor_dropped_on_deselect) {
+    Engine e;
+    auto r = e.load(
+        "[m4]\n"
+        "[motoquencer]\n"
+        "    clock = I1\n"
+        "    numsteps = 4\n"
+        "    numfaders = 4\n"
+        "    select = I2\n"
+        "    buttonmode = 1\n"
+        "    startstepout = _SS\n"
+        "    endstepout = _ES\n"
+        // step NUMBERS do not fit on an output jack (O registers clamp to
+        // +/-10 V), so they are read straight off the cables — which need a
+        // reader for the patch to load.
+        "[copy]\n"
+        "    input = _SS + _ES\n"
+        "    output = O1\n");
+    CHECK(r.ok);
+    e.setValue("I2", 1.0f); e.tick();
+    CHECK_NEAR(e.getValue("_SS"), 1.0f, 1e-6f);
+    CHECK_NEAR(e.getValue("_ES"), 4.0f, 1e-6f);
+    e.touchFader(3, true); e.pressFaderPlate(3, true); e.tick();
+    CHECK_NEAR(e.getValue("_ES"), 3.0f, 1e-6f);    // end = 3, plate 3 anchored
+    e.setValue("I2", 0.0f); e.tick();              // deselected: anchor dropped
+    e.pressFaderPlate(3, false); e.touchFader(3, false); e.tick();
+    e.setValue("I2", 1.0f); e.tick();
+    e.touchFader(1, true); e.pressFaderPlate(1, true); e.tick();
+    CHECK_NEAR(e.getValue("_ES"), 1.0f, 1e-6f);    // a plain press: the END moved
+    CHECK_NEAR(e.getValue("_SS"), 1.0f, 1e-6f);    // start still its default
+}
+
 // A deselected circuit releases the LEDs: cleared once on the falling edge so
 // another overlaid circuit can drive them (manual `select` semantics).
 TEST(engine_motoquencer_leds_select_release) {

@@ -1,0 +1,68 @@
+# motoquencer linktonext + `doublerange`. motoquencer.md §"Copy & paste": "If you
+# have linked sequencers, those will automatically be handled as well." So the
+# main copies its members' step contents over the same indices — and a member
+# must IGNORE its own `doublerange` input, or one press would double an already
+# doubled range.
+#
+# That matters in practice: the Forge's MFPS generator wires `doublerange` to the
+# same track button on all three motoquencers of a track (the pitch main and both
+# linked lanes). Here the input is wired on both instances, exactly as MFPS does,
+# and 8 steps make the difference visible: from end = 2 one press must reach
+# end = 4, never end = 8.
+tickrate 100
+patch <<<
+[m4]
+[motoquencer]
+    clock       = I1
+    fadermode   = I6
+    numsteps    = 8
+    numfaders   = 4
+    linktonext  = 1
+    quantize    = 0
+    cvbase      = 0
+    cvrange     = 1
+    defaultgate = 1
+    setendstep  = I3
+    doublerange = I4
+    cv          = O1
+    endstepout  = _ES
+[motoquencer]
+    doublerange = I4
+    quantize    = 0
+    cvbase      = 0
+    cvrange     = 1
+    holdcv      = 0
+    cv          = O2
+[copy]
+    input  = _ES * 0.1
+    output = O4
+>>>
+# dial the MEMBER's steps 1 and 2 (fadermode 10), leaving its steps 3..8 at 0
+@1 set I6 10
+@2 move F1 0.5
+@3 move F2 0.25
+# park the faders back on the main's lane
+@4 set I6 0
+# end = 2, then ONE doublerange trigger
+@5 set I3 2
+@5 expect O4 0.2 tol 1e-4
+@6 set I4 1
+@6 expect O4 0.4 tol 1e-4
+@7 set I4 0
+# the member's steps 3, 4 are copies of its steps 1, 2 — and the range doubled
+# exactly once (a member firing too would have reached end = 8)
+@8 set I1 1
+@8 expect O2 0.5 tol 1e-4
+@9 set I1 0
+@10 set I1 1
+@10 expect O2 0.25 tol 1e-4
+@11 set I1 0
+@12 set I1 1
+@12 expect O2 0.5 tol 1e-4
+@13 set I1 0
+@14 set I1 1
+@14 expect O2 0.25 tol 1e-4
+@15 set I1 0
+# wrap at the new end (step 4), not at step 8
+@16 set I1 1
+@16 expect O2 0.5 tol 1e-4
