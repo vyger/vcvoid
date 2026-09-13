@@ -100,12 +100,19 @@
 //     start/end, the parts always run forward, direction/pingpong apply inside
 //     each part, and a wrap (accumulator + startofsequence) marks the end of the
 //     complete form, not of a part. A chain member follows the main's form.
+//   * movement `pattern` 0..7: linear, two-forward-one-back, double-forward-one-
+//     back, double-fwd-double-back-single-fwd, double-single-double-single, a
+//     random single step forward or backward, forward by a small random number of
+//     steps, and a random jump to another step. 1..4 are the arpeggio circuit's
+//     delta cycles and 5 / 7 its random walk and jump ("much the same as in the
+//     arpeggio circuit with the addition of pattern 6"). The walk moves
+//     "according to `direction` and `pingpong`" — over the play ORDER those build,
+//     not over step numbers — and inside a form it stays within the current part
+//     run. A chain member follows the main's walk and ignores its own `pattern`.
 //
 // DEFERRED (documented, NOT implemented — every one is either a live-performance
 // convenience the manual frames as advanced, an interactive gesture with no
 // headless analog, or panel-only):
-//   * movement `pattern` 1..7 (two-forward-one-back etc.) — pattern 0 (linear)
-//     only. It belongs inside stepThrough(), where a form part is walked.
 //   * `metricsaver` — the polymetric clock snap-back (read but inert). Unlike
 //     `constantlength` (implemented, see below) it needs a running count of the
 //     clock cycles since the last external reset plus a rule for re-entering the
@@ -146,6 +153,15 @@
 //     parts are INDEPENDENT WINDOWS with respect to skips, so a skipped step
 //     shortens only the part entry it sits in, and a part whose steps are all
 //     skipped is passed over without a startofpart.
+//   * movement patterns, four readings the manual leaves open: (a) a backward move
+//     off the START of the play order wraps modulo its length, rather than
+//     clamping or bouncing; (b) a CYCLE — startofsequence, the accumulator,
+//     autoreset, and moving on to the next form part — happens when the walk's
+//     forward progress crosses the END of the order (patterns 1..4 and 6); (c)
+//     patterns 5 and 7 never cross anything, being a drunk walk and a jump, so
+//     their cycle is every N moves for an order of N steps (that Nth move being
+//     the restart itself) — as many notes per turn as a linear pass; (d) pattern
+//     6's "small random number of steps" is a uniform 1..3.
 //   * DROID triggers are 10 ms, not 1 tick: startofsequence emits a 10 ms window,
 //     gatelength = 0 floors each once/all gate to a ~10 ms minimum, and the
 //     composemode audition gate opens for the same 10 ms after a CV edit. The
