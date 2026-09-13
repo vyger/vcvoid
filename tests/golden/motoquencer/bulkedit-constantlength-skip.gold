@@ -1,0 +1,101 @@
+# motoquencer `bulkedit` + `constantlength = 2` on the skip lane — the button-lane
+# half of bulkedit-constantlength-repeats.gold, same SPEC-GAP: while bulkedit is
+# high the skip edit AND the stamp it lays to the right bypass the compensation.
+#
+# Three gestures on one track (buttonmode 3 = skip, and the faders parked on the
+# repeats lane so the plates own the skips; the skip lane is only visited to read
+# it back):
+#   1. bulkedit LOW — compensation intact. Skipping step 1 takes 1 clock out, so
+#      the forward search hands it to step 2 (1 -> 2 repeats). Cycle stays 4.
+#   2. bulkedit HIGH — skipping step 2 stamps "skipped" onto step 3 as well. No
+#      step is grown to pay for the two lost clocks: the repeats lane still reads
+#      1 / 1 / 2 / 1 (a compensating level 2 would have had to buy the length back
+#      from somewhere, and the only un-skipped step left is step 0, to the LEFT).
+#   3. bulkedit still HIGH — un-skipping step 1 stamps "not skipped" onto steps 2
+#      and 3, so the whole track plays again with the repeats untouched: the cycle
+#      is 1 + 1 + 2 + 1 = 5 clocks, including the extra repeat gesture 1 legally
+#      bought on step 2.
+tickrate 100
+patch <<<
+[m4]
+[motoquencer]
+    clock          = I1
+    fadermode      = I2
+    buttonmode     = 3
+    constantlength = I3
+    bulkedit       = I4
+    numsteps       = 4
+    numfaders      = 4
+    quantize       = 0
+    cvbase         = 0
+    cvrange        = 1
+    defaultgate    = 1
+    cv             = O1
+>>>
+@2 move F1 0.0
+@3 move F2 0.25
+@4 move F3 0.5
+@5 move F4 0.75
+@6 set I3 2
+# fadermode 3 = repeats (notch k rests at k/15 and means k+1 repeats).
+@6 set I2 3
+# gesture 1, bulkedit LOW: plate 2 skips step 1, step 2 is handed the clock.
+@8 touch F2 1
+@9 touch F2 0
+@10 expect F1 0 tol 1e-4
+@10 expect F2 0 tol 1e-4
+@10 expect F3 0.0666667 tol 1e-4
+@10 expect F4 0 tol 1e-4
+# fadermode 7 = skip: only step 1 is out.
+@11 set I2 7
+@13 expect F1 0 tol 1e-4
+@13 expect F2 1 tol 1e-4
+@13 expect F3 0 tol 1e-4
+@13 expect F4 0 tol 1e-4
+@14 set I2 3
+# gesture 2, bulkedit HIGH: plate 3 skips step 2 and stamps that onto step 3.
+@16 set I4 1
+@17 touch F3 1
+@18 touch F3 0
+# nothing was bought back: the repeats lane is exactly as gesture 1 left it.
+@19 expect F1 0 tol 1e-4
+@19 expect F2 0 tol 1e-4
+@19 expect F3 0.0666667 tol 1e-4
+@19 expect F4 0 tol 1e-4
+@20 set I2 7
+@22 expect F1 0 tol 1e-4
+@22 expect F2 1 tol 1e-4
+@22 expect F3 1 tol 1e-4
+@22 expect F4 1 tol 1e-4
+@23 set I2 3
+# gesture 3, bulkedit still HIGH: plate 2 un-skips step 1 and stamps "playing"
+# onto steps 2 and 3 — again with no compensation anywhere.
+@25 touch F2 1
+@26 touch F2 0
+@27 expect F3 0.0666667 tol 1e-4
+@28 set I2 7
+@30 expect F1 0 tol 1e-4
+@30 expect F2 0 tol 1e-4
+@30 expect F3 0 tol 1e-4
+@30 expect F4 0 tol 1e-4
+@31 set I4 0
+@31 set I2 0
+# 5 clocks per cycle: step 0, step 1, step 2 twice, step 3.
+@33 set I1 1
+@33 expect O1 0 tol 1e-4
+@34 set I1 0
+@35 set I1 1
+@35 expect O1 0.25 tol 1e-4
+@36 set I1 0
+@37 set I1 1
+@37 expect O1 0.5 tol 1e-4
+@38 set I1 0
+@39 set I1 1
+@39 expect O1 0.5 tol 1e-4
+@40 set I1 0
+@41 set I1 1
+@41 expect O1 0.75 tol 1e-4
+@42 set I1 0
+@43 set I1 1
+@43 expect O1 0 tol 1e-4
+@44 set I1 0

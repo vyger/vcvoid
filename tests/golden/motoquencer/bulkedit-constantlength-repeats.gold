@@ -1,0 +1,96 @@
+# motoquencer `bulkedit` + `constantlength = 1` on the repeats lane.
+#
+# SPEC-GAP: the manual never puts the two inputs in the same sentence. A bulk
+# stamp is an explicit whole-track gesture ("all other faders at the right of the
+# modified step will move along to the same value"), so it is honoured VERBATIM
+# and bypasses the length compensation altogether: every step to the RIGHT takes
+# the value, no step to the LEFT moves, and the track length changes by the full
+# amount. Composing the two literally is incoherent — each stamped write would
+# compensate itself out of the very steps the same gesture is writing.
+#
+# Read this file as two gestures on the same track:
+#   1. bulkedit LOW — compensation intact. Step 3 is dialled to 5 repeats with the
+#      feature off (cycle 1 + 1 + 1 + 5 = 8 clocks), the feature goes on, and step
+#      0 is dialled 1 -> 3. Steps 1 and 2 are already at the floor of 1, so the
+#      forward search reaches step 3 and takes the +2 out of it (5 -> 3). The
+#      cycle is still 8.
+#   2. bulkedit HIGH — compensation bypassed. Step 1's fader goes to 2 repeats and
+#      steps 2 and 3 take that value unchanged. Step 0 keeps its 3 repeats (a
+#      stamp never reaches leftwards) and the cycle grows to 3 + 2 + 2 + 2 = 9:
+#      the length is NOT held, which is the whole point of the reading.
+tickrate 100
+patch <<<
+[m4]
+[motoquencer]
+    clock          = I1
+    fadermode      = I2
+    constantlength = I3
+    bulkedit       = I4
+    numsteps       = 4
+    numfaders      = 4
+    quantize       = 0
+    cvbase         = 0
+    cvrange        = 1
+    defaultgate    = 1
+    cv             = O1
+>>>
+@2 move F1 0.0
+@3 move F2 0.25
+@4 move F3 0.5
+@5 move F4 0.75
+# fadermode 3 = repeats: 16 dents, notch k rests at k/15 and means k+1 repeats.
+@6 set I2 3
+# with the feature still off, dial step 3 up to 5 repeats (notch 4).
+@7 move F4 0.2666667
+@7 expect F4 0.2666667 tol 1e-4
+@8 set I3 1
+# gesture 1, bulkedit LOW: step 0 goes 1 -> 3 repeats and step 3 pays the +2.
+@9 move F1 0.1333333
+@9 expect F1 0.1333333 tol 1e-4
+@9 expect F2 0 tol 1e-4
+@9 expect F3 0 tol 1e-4
+@9 expect F4 0.1333333 tol 1e-4
+# gesture 2, bulkedit HIGH: step 1 -> 2 repeats (notch 1), stamped verbatim onto
+# steps 2 and 3. Nothing is clawed back anywhere, step 0 is untouched.
+@10 set I4 1
+@11 move F2 0.0666667
+@11 expect F1 0.1333333 tol 1e-4
+@11 expect F2 0.0666667 tol 1e-4
+@11 expect F3 0.0666667 tol 1e-4
+@11 expect F4 0.0666667 tol 1e-4
+# the stamped lanes stay put on the following ticks (they are not read back).
+@12 expect F3 0.0666667 tol 1e-4
+@12 expect F4 0.0666667 tol 1e-4
+@13 set I4 0
+@13 set I2 0
+# 9 clocks per cycle now, not 8: step 0 three times, then steps 1, 2 and 3 twice.
+@15 set I1 1
+@15 expect O1 0 tol 1e-4
+@16 set I1 0
+@17 set I1 1
+@17 expect O1 0 tol 1e-4
+@18 set I1 0
+@19 set I1 1
+@19 expect O1 0 tol 1e-4
+@20 set I1 0
+@21 set I1 1
+@21 expect O1 0.25 tol 1e-4
+@22 set I1 0
+@23 set I1 1
+@23 expect O1 0.25 tol 1e-4
+@24 set I1 0
+@25 set I1 1
+@25 expect O1 0.5 tol 1e-4
+@26 set I1 0
+@27 set I1 1
+@27 expect O1 0.5 tol 1e-4
+@28 set I1 0
+@29 set I1 1
+@29 expect O1 0.75 tol 1e-4
+@30 set I1 0
+@31 set I1 1
+@31 expect O1 0.75 tol 1e-4
+@32 set I1 0
+@33 set I1 1
+@33 expect O1 0 tol 1e-4
+@34 set I1 0

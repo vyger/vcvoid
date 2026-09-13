@@ -159,6 +159,14 @@
 //     really MOVED (a stamp copies the addressed lane and nothing else, so one
 //     held button cannot switch the whole track's gates on), and buttonmode 1
 //     (start/end) is exempt because a range gesture has no per-step value.
+//   * `bulkedit` + `constantlength` together (see the note at compensateLength):
+//     a bulk stamp BYPASSES the compensation. While bulkedit is high, a repeats
+//     or skip edit and the stamp it lays to the right are honoured verbatim —
+//     every step to the right takes the value, no step to the left moves, and the
+//     track length changes by the full amount. The manual never combines the two
+//     inputs, and composing them literally is incoherent (each stamped write
+//     would compensate itself out of the steps the same gesture is writing).
+//     Single-step edits (bulkedit low) and the machine writers are unaffected.
 //   * "I Feel Lucky" distributions: the manual describes each op's INTENT and its
 //     luckyamount meaning but never pins an exact distribution or bit-for-bit
 //     rounding. Literal, property-faithful readings (all draws from the engine RNG,
@@ -552,6 +560,19 @@ protected:
     // the whole sequence at once, and the manual frames the compensation as the
     // answer to "a change in the repeats of a step".
     //
+    // SPEC-GAP: a `bulkedit` gesture is one of those bulk operations. While
+    // bulkedit is high, a repeats or skip edit AND the stamp it lays on every step
+    // to its right bypass compensation entirely (BulkBypass below). The manual
+    // never puts the two features in the same sentence, and composing them
+    // literally is incoherent: each stamped write would compensate itself out of
+    // the steps the same gesture is writing, so a CTRL move of the repeats fader
+    // leaves a lane that is neither the value asked for nor a constant length.
+    // "All faders to the right take this value" is an explicit whole-track
+    // gesture, so it is honoured verbatim: every step to the right gets the value,
+    // no step to the LEFT moves, and the track length changes by the full amount.
+    // A single-step edit (bulkedit low) still compensates exactly as before, and
+    // so do the machine writers, which never run inside the bypass.
+    //
     // SPEC-GAPs (the manual is silent; deterministic readings):
     //   * A step's LENGTH is `skip ? 0 : repeats` at BOTH levels, so the skip a
     //     repeats edit automatically clears (motoquencer.md:183) is part of the
@@ -580,11 +601,26 @@ protected:
         return clampi((int)std::lround(o->in("constantlength").value(s)), 0, 2);
     }
 
+    // Scope guard around ONE user-edit gesture: while `bulkedit` is high it turns
+    // the compensation off for the whole gesture — the edited step's own write and
+    // every step the stamp then rewrites. Off (a plain single-step edit) it is a
+    // no-op, and it is never entered by the machine writers (lucky*, clear*,
+    // presets, doublerange), which reach setLaneValue directly.
+    struct BulkBypass {
+        SeqCore& o;
+        bool saved;
+        explicit BulkBypass(SeqCore& c) : o(c), saved(c.bulkBypass_) {
+            if (c.bulkEdit_) c.bulkBypass_ = true;
+        }
+        ~BulkBypass() { o.bulkBypass_ = saved; }
+    };
+
     // Absorb the length change an edit to `step` just made into the OTHER steps of
     // the range. `before` is that step's length before the edit; `skipEdit` says the
     // edit itself was a skip toggle (only level 2 compensates those). Returns true
     // if any other step changed.
     bool compensateLength(EngineState& s, int step, int before, bool skipEdit) {
+        if (bulkBypass_) return false;          // see the SPEC-GAP note above
         int level = constantLength(s);
         if (level == 0) return false;
         if (skipEdit && level < 2) return false;
@@ -684,6 +720,7 @@ protected:
     // entry point the skins call for a fader that moved).
     // Returns true if the stored value actually changed (drives gate auto-on).
     bool applyEdit(EngineState& s, int fm, int step, float pos, float& snapped) {
+        BulkBypass bypass(*this);            // constantlength is off under bulkedit
         bool changed = setLaneValue(s, fm, step, pos, snapped);
         if (changed) bulkStamp(s, fm, step);
         return changed;
@@ -758,6 +795,7 @@ protected:
     // release is what ends it. `lane` is the physical plate index within this
     // instance's lanes; `step` is the step it currently addresses (page-mapped).
     void plateEdge(EngineState& s, int bm, int lane, int step, bool pressed) {
+        BulkBypass bypass(*this);            // constantlength is off under bulkedit
         if (!pressed) {
             if (seAnchorLane_ == lane) seAnchorLane_ = -1;
             return;
@@ -767,7 +805,8 @@ protected:
             case 1: startEndPress(lane, step); break;
             case 2: cur_.gatepat[step] = (cur_.gatepat[step] + 1) & 3; break;
             // A skip toggled here is a length change like any other, so it is
-            // compensated at constantlength level 2 (see compensateLength).
+            // compensated at constantlength level 2 (see compensateLength) —
+            // except under bulkedit, where the whole gesture bypasses it.
             case 3: { int was = stepLength(step);
                       cur_.skip[step] = !cur_.skip[step];
                       compensateLength(s, step, was, true); break; }
@@ -1142,6 +1181,7 @@ protected:
     // The USER-edit entry point of the E4 skin, so a change bulk-stamps the steps
     // to the right (see bulkStamp) exactly like a fader move does.
     bool adjustByDetents(EngineState& s, int fm, int step, long detents) {
+        BulkBypass bypass(*this);            // constantlength is off under bulkedit
         bool changed = nudgeLaneValue(s, fm, step, detents);
         if (changed) bulkStamp(s, fm, step);
         return changed;
@@ -1638,6 +1678,10 @@ protected:
     // step values it wrote.
     bool bulkEdit_ = false;
     int  bulkStampFrom_ = -1;
+    // True while a bulkedit gesture is in flight (the user edit plus the stamp it
+    // produces): constantlength compensation is off for its whole span. See the
+    // BulkBypass block comment at compensateLength().
+    bool bulkBypass_ = false;
 
     // Interactive start/end (motoquencer.md §"Start and end"). Two INDEPENDENT
     // override slots, 0-based, -1 = not overridden (follow the startstep /

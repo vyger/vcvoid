@@ -1145,14 +1145,24 @@ circuits:
       Forge's MFPS generator wires the input on a track's main lane only), and
       bulk rewrites -- clearrepeats/clearskips/luckyrepeats/luckyskips/presets/
       doublerange -- are outside the feature, which the manual frames as the
-      answer to a change in one step. 68 goldens (incl. composemode,
+      answer to a change in one step; a `bulkedit` gesture is one of those bulk
+      rewrites, so while bulkedit is HIGH a repeats or skip edit AND the stamp it
+      lays on every step to its right BYPASS the compensation entirely -- the
+      manual never combines the two inputs, and composing them literally is
+      incoherent (each stamped write would compensate itself out of the very
+      steps the same gesture is writing, leaving a lane that is neither the value
+      asked for nor a constant length), so the explicit whole-track gesture wins:
+      every step to the right takes the value, no step to the LEFT moves, the
+      track length changes by the full amount, and single-step edits (bulkedit
+      low) plus the machine writers are unaffected. 70 goldens (incl. composemode,
       holdcv-drift, defaultcv-notches,
       gatelength-min, startend touch/two-finger/clear/setendstep/pages,
       doublerange basic/limits, linktonext transport/mirroring/holdcv/
       buttonmode/lucky-order/startend/doublerange, bulkedit faders/pages/
       buttons/startend-exempt/linktonext/off/lucky-unaffected, constantlength
       off-repeats/off-skip/repeats/wrap-floor/skip/skip-currency/range/
-      partial/linktonext). requires-human: motor
+      partial/linktonext, bulkedit-constantlength repeats/skip).
+      requires-human: motor
       haptics + auto-moving faders + LED rings need real M4 hardware."
   motorfader:
     status: done
