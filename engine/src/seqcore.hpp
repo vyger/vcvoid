@@ -555,7 +555,8 @@ protected:
             case 2: { int v = snapIdx(8); bool ch = v != cur_.gateprob[step];
                       cur_.gateprob[step] = (uint8_t)v; snapped = v / 7.0f; return ch; }
             case 3: { int v = snapIdx(16); bool ch = (v + 1) != cur_.repeats[step];
-                      cur_.repeats[step] = (uint8_t)(v + 1); cur_.skip[step] = false;
+                      cur_.repeats[step] = (uint8_t)(v + 1);
+                      if (ch) cur_.skip[step] = false;   // only on a real CHANGE
                       snapped = v / 15.0f; return ch; }
             case 4: { int v = snapIdx(4); bool ch = v != cur_.gatepat[step];
                       cur_.gatepat[step] = (uint8_t)v; snapped = v / 3.0f; return ch; }
@@ -1058,7 +1059,9 @@ protected:
             case 2: { int v = nudgeIdx(cur_.gateprob[step], 7); bool ch = v != cur_.gateprob[step];
                       cur_.gateprob[step] = (uint8_t)v; return ch; }
             case 3: { int v = nudgeIdx(cur_.repeats[step] - 1, 15); bool ch = (v + 1) != cur_.repeats[step];
-                      cur_.repeats[step] = (uint8_t)(v + 1); cur_.skip[step] = false; return ch; }
+                      cur_.repeats[step] = (uint8_t)(v + 1);
+                      if (ch) cur_.skip[step] = false;   // only on a real CHANGE
+                      return ch; }
             case 4: { int v = nudgeIdx(cur_.gatepat[step], 3); bool ch = v != cur_.gatepat[step];
                       cur_.gatepat[step] = (uint8_t)v; return ch; }
             case 5: { int v = nudgeIdx(cur_.ratchets[step] - 1, 7); bool ch = (v + 1) != cur_.ratchets[step];
