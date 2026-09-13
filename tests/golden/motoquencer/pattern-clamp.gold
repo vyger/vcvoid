@@ -1,0 +1,81 @@
+# motoquencer `pattern` outside the documented range 0..7 (issue #54). The manual
+# lists eight patterns and says nothing about anything else, so the value clamps
+# into the table at both ends. That is not academic: the MFPS patch drives this
+# input from a ten-notch fader as `pattern = <fader> * 15 - 2`, whose lowest two
+# notches deliberately land BELOW zero (the patch fakes reverse and ping pong
+# there with `ifequal`), and a fader that overshoots must not fall off the top.
+#
+# Here `pattern = I2 * 15 - 3` reads -3 while I2 is 0 and 12 while I2 is 1.
+#   * -3 clamps to 0: plain linear stepping, 0,1,2,3.
+#   * 12 clamps to 7: the random-jump walk, whose seed-1 trace is identical to
+#     pattern7-random-jump.gold -- the reset in between puts the walk back at the
+#     top with the RNG untouched (linear stepping draws nothing).
+# Step numbers do not fit on an output jack (they clamp at +/-10 V), so
+# `currentstep` rides an internal cable scaled by 1/10: step N reads N/10.
+seed 1
+tickrate 100
+patch <<<
+[m4]
+[m4]
+[motoquencer]
+    clock           = I1
+    reset           = I3
+    pattern         = I2 * 15 - 3
+    numsteps        = 8
+    numfaders       = 8
+    currentstep     = _CS
+    startofsequence = O2
+[copy]
+    input  = _CS * 0.1
+    output = O1
+>>>
+# pattern = -3 -> clamped to 0 -> linear.
+@1 set I2 0
+@2 set I1 1
+@2 expect O1 0 tol 1e-4
+@2 expect O2 1 tol 1e-4
+@3 set I1 0
+@4 set I1 1
+@4 expect O1 0.1 tol 1e-4
+@5 set I1 0
+@6 set I1 1
+@6 expect O1 0.2 tol 1e-4
+@7 set I1 0
+@8 set I1 1
+@8 expect O1 0.3 tol 1e-4
+@9 set I1 0
+# reset the transport, then move the fader to the top: pattern = 12 -> clamped to 7.
+@10 set I3 1
+@11 set I3 0
+@11 set I2 1
+@12 set I1 1
+@12 expect O1 0 tol 1e-4
+@12 expect O2 1 tol 1e-4
+@13 set I1 0
+@14 set I1 1
+@14 expect O1 0.2 tol 1e-4
+@14 expect O2 0 tol 1e-4
+@15 set I1 0
+@16 set I1 1
+@16 expect O1 0.4 tol 1e-4
+@17 set I1 0
+@18 set I1 1
+@18 expect O1 0.7 tol 1e-4
+@19 set I1 0
+@20 set I1 1
+@20 expect O1 0.4 tol 1e-4
+@21 set I1 0
+@22 set I1 1
+@22 expect O1 0.3 tol 1e-4
+@23 set I1 0
+@24 set I1 1
+@24 expect O1 0.6 tol 1e-4
+@25 set I1 0
+@26 set I1 1
+@26 expect O1 0 tol 1e-4
+@27 set I1 0
+# eighth move of the turn: the cycle ends and the sequence restarts at step 0.
+@28 set I1 1
+@28 expect O1 0 tol 1e-4
+@28 expect O2 1 tol 1e-4
+@29 set I1 0

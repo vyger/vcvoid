@@ -1384,6 +1384,7 @@ protected:
 
         if (!started_ || resetPending_) {
             playPos_ = 0; pulse_ = 0; turn_ = 1; clocksSinceReset_ = 0;
+            resetPatternWalk();
             started_ = true; resetPending_ = false; triggerSos(s);
             enterStep(s, order.steps, 0);
             enterPart(s, order, 0, true);
@@ -1393,6 +1394,7 @@ protected:
         clocksSinceReset_++;
         if (autoreset > 0 && clocksSinceReset_ >= autoreset) {
             playPos_ = 0; pulse_ = 0; turn_ = 1; clocksSinceReset_ = 0;
+            resetPatternWalk();
             advanceAccumulator(s); triggerSos(s);
             enterStep(s, order.steps, 0);
             enterPart(s, order, 0, true);
@@ -1477,15 +1479,97 @@ protected:
         return q;
     }
 
+    // ---- movement patterns (`pattern`, 0..7) -------------------------------
+    // "Selects one of a list of movement patterns. That way, the sequence steps
+    // are not played in linear order but in a more sophisticated movement."
+    //   0 →     step by step (normal)          4 ⇒→⇐→  +2, +1, -2, +1
+    //   1 →→←   two forward, one back          5 ↔      random single step fwd/back
+    //   2 ⇒←    double forward, one back       6 →x?    forward a small random number
+    //   3 ⇒⇐→   +2, -2, +1                     7 ⇕      random jump to another step
+    // "The available patterns are much the same as in the arpeggio circuit with
+    // the addition of pattern 6" — 1..4 are literally arpeggio's delta cycles,
+    // 5 is its random walk and 7 its random jump (arpeggio's 6).
+    //
+    // The pattern moves "according to `direction` and `pingpong`": one step
+    // FORWARD is the next position of the play order that direction + pingpong
+    // already built, not the next step number — so a pattern under `direction = 1`
+    // runs its figure down the sequence, and under `pingpong` it walks the there-
+    // and-back list. Within a form the arena is the current part run (runBounds),
+    // because stepping modifications are "always applied within each individual
+    // part".
+    //
+    // SPEC-GAP (the manual defines neither): a backward move that would fall off
+    // the START of the run wraps modulo the run length rather than clamping, and a
+    // CYCLE — startofsequence, the accumulator, autoreset, and moving on to the
+    // next form part — happens when the walk's forward progress crosses the END of
+    // the run. Patterns 5 and 7 never "cross" anything (they are a drunk walk and
+    // a jump), so for those a cycle is every N moves, N = the run length: as many
+    // notes per turn as a linear pass would have played.
+    int patternOf(EngineState& s) {
+        // Negative values clamp to linear (the MFPS patch feeds `fader - 2`), and
+        // anything above the table clamps to the last pattern.
+        return clampi((int)std::lround(in("pattern").value(s)), 0, 7);
+    }
+
+    // One pattern move inside a run of `len` positions, from run-relative index
+    // `r`. Sets `leave` when the move leaves the run forwards (end of a cycle).
+    int patternMove(EngineState& s, int pat, int r, int len, bool& leave) {
+        static const int kDelta[5][4] = {
+            {+1,  0,  0,  0},   // 0 unused (handled as plain forward)
+            {+1, +1, -1,  0},   // 1 →→←
+            {+2, -1,  0,  0},   // 2 ⇒←
+            {+2, -2, +1,  0},   // 3 ⇒⇐→
+            {+2, +1, -2, +1},   // 4 ⇒→⇐→
+        };
+        static const int kLen[5] = {1, 3, 2, 3, 4};
+        auto wrapBack = [&](int x) { int q = x % len; return q < 0 ? q + len : q; };
+
+        if (pat >= 1 && pat <= 4) {
+            int d = kDelta[pat][patPhase_ % kLen[pat]];
+            patPhase_ = (patPhase_ + 1) % kLen[pat];
+            if (d > 0 && r + d >= len) { leave = true; return r; }
+            return wrapBack(r + d);
+        }
+        if (pat == 6) {
+            // "go forward by a small random number of steps" — 1..3 (SPEC-GAP:
+            // the manual only says "small").
+            int d = 1 + (int)(nextRand(s.rngState) % 3u);
+            if (r + d >= len) { leave = true; return r; }
+            return r + d;
+        }
+        if (++patMoves_ >= len) { leave = true; return r; }   // 5 / 7: cycle by count
+        if (pat == 5) return wrapBack(r + (randUniform(s.rngState) < 0.5f ? -1 : +1));
+        int j = (int)(nextRand(s.rngState) % (uint32_t)(len - 1));
+        if (j >= r) j++;                     // "any allowed (OTHER) note"
+        return j;
+    }
+
+    void resetPatternWalk() { patPhase_ = 0; patMoves_ = 0; }
+
     // Advance to the next non-skipped position; sets wrapped if we passed the end
-    // of the whole order (= the end of the complete form).
+    // of the whole order (= the end of the complete form). A skipped step is not
+    // played, so the walk simply moves on — one more pattern move, which may in
+    // turn leave the part run.
     int nextPlayedPos(EngineState& s, const PlayOrder& o, int pos, bool& wrapped) {
         const std::vector<int>& order = o.steps;
         int n = (int)order.size();
-        for (int tries = 0; tries < n; tries++) {
+        int pat = patternOf(s);
+        // A pattern that steps by two or backwards needs more attempts than a
+        // linear walk to visit every position of a mostly-skipped sequence.
+        int limit = (pat == 0) ? n : 4 * n + 16;
+        for (int tries = 0; tries < limit; tries++) {
             int lo, hi; runBounds(o, pos, lo, hi);
-            pos = (pos >= lo && pos < hi) ? pos + 1 : enterNextRun(o, hi, wrapped);
-            if (!cur_.skip[physOf(s, order[pos])]) return pos;
+            int len = hi - lo + 1, next;
+            bool leave = false;
+            if (pat == 0 || len <= 1) {          // plain forward, one position
+                leave = !(pos >= lo && pos < hi);
+                next = leave ? pos : pos + 1;
+            } else {
+                next = lo + patternMove(s, pat, clampi(pos, lo, hi) - lo, len, leave);
+            }
+            if (leave) { resetPatternWalk(); next = enterNextRun(o, hi, wrapped); }
+            pos = next;
+            if (!cur_.skip[physOf(s, order[clampi(pos, 0, n - 1)])]) return pos;
         }
         return pos;   // all skipped -> hold (manual: repeats the most recent step)
     }
@@ -1895,6 +1979,10 @@ protected:
     long sosUntil_ = 0;                         // startofsequence trigger-window end
     long sopUntil_ = 0;                         // startofpart trigger-window end
     int  curPart_ = -1;                         // form part entry being played
+    // Movement `pattern` walk state, reset on reset / autoreset and whenever the
+    // walk leaves a part run: patPhase_ indexes the delta cycle of patterns 1..4,
+    // patMoves_ counts moves toward the cycle length for the random 5 and 7.
+    int  patPhase_ = 0, patMoves_ = 0;
     uint64_t stepStart_ = 0;
     std::vector<std::pair<uint64_t, uint64_t>> gateWin_;
 
