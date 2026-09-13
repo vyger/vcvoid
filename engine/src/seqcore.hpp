@@ -95,13 +95,17 @@
 //   * `constantlength` 1 / 2 — length compensation at the edit sites: a repeats
 //     (level 1) or skip (level 2) edit is paid for by the following steps of the
 //     start..end range. See the block comment at compensateLength().
+//   * song `form` (A / AAAB / AABB / ABAC / AAABAAAC / AB / AAB) with the
+//     `startofpart` trigger output: the range window is cut into parts AFTER
+//     start/end, the parts always run forward, direction/pingpong apply inside
+//     each part, and a wrap (accumulator + startofsequence) marks the end of the
+//     complete form, not of a part. A chain member follows the main's form.
 //
 // DEFERRED (documented, NOT implemented — every one is either a live-performance
 // convenience the manual frames as advanced, an interactive gesture with no
 // headless analog, or panel-only):
-//   * `form` (AAAB/ABAC/…) and the `startofpart` output — song-form step slicing.
 //   * movement `pattern` 1..7 (two-forward-one-back etc.) — pattern 0 (linear)
-//     only. The others interact with direction/pingpong/forms; deferred whole.
+//     only. It belongs inside stepThrough(), where a form part is walked.
 //   * `metricsaver` — the polymetric clock snap-back (read but inert). Unlike
 //     `constantlength` (implemented, see below) it needs a running count of the
 //     clock cycles since the last external reset plus a rule for re-entering the
@@ -133,6 +137,15 @@
 //     boundaries and cached, so mid-step cvbase/cvrange/scale changes never drift
 //     the held CV; repeatshift/ratchetshift move it per pulse/ratchet, and
 //     transpose/tuning stay live per tick (vibrato input, per minifonion/arpeggio).
+//   * song forms, three readings the manual leaves open: (a) a window that does
+//     not divide evenly gives the EXTRA steps to the EARLIER parts, so A is the
+//     longer part ("or else your parts won't have equal size (which on the other
+//     hand could be funny anyway)" is all the manual offers); (b) `startofpart`
+//     fires on the first part of a form too, coinciding with startofsequence —
+//     a part boundary is a part boundary — and never fires at form = 0; (c) the
+//     parts are INDEPENDENT WINDOWS with respect to skips, so a skipped step
+//     shortens only the part entry it sits in, and a part whose steps are all
+//     skipped is passed over without a startofpart.
 //   * DROID triggers are 10 ms, not 1 tick: startofsequence emits a 10 ms window,
 //     gatelength = 0 floors each once/all gate to a ~10 ms minimum, and the
 //     composemode audition gate opens for the same 10 ms after a CV edit. The
