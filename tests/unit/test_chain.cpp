@@ -290,6 +290,25 @@ TEST(chain_hotplug_insert_and_remove) {
     CHECK(r.chain() == std::vector<std::string>({"p2b8", "b32"}));
 }
 
+// Growing a chain onto an already-settled rack, one module at a time. The
+// newcomer publishes on the very frame it appears, so whoever it attaches to
+// must notice the new neighbour on that same frame: age the incoming buffer out
+// any later and the clear lands ON the first message instead of ahead of it,
+// and the newcomer — its gate already settled — never says it again.
+TEST(chain_hotplug_attach_to_settled_rack) {
+    SimRack r{None /*master*/};
+    r.settle();
+    CHECK(r.chain().empty());
+
+    r.insert(1, MP2B8);                      // first controller on a bare master
+    r.settle();
+    CHECK(r.chain() == std::vector<std::string>({"p2b8"}));
+
+    r.insert(2, MB32);                       // and one more on the end
+    r.settle();
+    CHECK(r.chain() == std::vector<std::string>({"p2b8", "b32"}));
+}
+
 // Deleting the module at the END of the chain, and then the one in the middle:
 // each time the master must be left with exactly what is physically there.
 TEST(chain_hotplug_remove_drops_module) {

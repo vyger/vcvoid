@@ -813,6 +813,27 @@ public:
             }
         }
 
+        // Age out an upstream buffer whose writer is gone (issue #59). Rack
+        // leaves a departed module's final message sitting in my consumer, so
+        // without this a controller deleted from the head of the chain — or
+        // replaced by another — is still reported until whoever took its place
+        // happens to publish.
+        //
+        // EVERY audio frame, not on the tick frames below where the buffer is
+        // actually read: the new neighbour publishes on the very frame it
+        // appears, and Rack flips the buffers only after all modules have
+        // stepped. Checking here means the clear always lands BEFORE that first
+        // message arrives; checking one tick later would land after it and wipe
+        // it, and the newcomer — its gate long since settled — would never say
+        // it again.
+        if (chainSource_.changed(
+                rightExpander.module && ChainModule::isChainRightNeighbor(rightExpander.module)
+                    ? rightExpander.module->id : droid::chain::kNoNeighbour)) {
+            auto* stale = (droid::chain::UpstreamMessage*) rightExpander.consumerMessage;
+            stale->count = 0;
+            stale->dirty = 0;
+        }
+
         // Saturating increment: while a tick is overdue (contended below) the
         // counter parks at `divider` instead of growing without bound, so a
         // pathological contention streak can't overflow it.
@@ -836,16 +857,6 @@ public:
         // kEmptyChain has static storage, so binding `up` to a const ref is safe.
         static const UpstreamMessage kEmptyChain;
         bool haveChain = rightExpander.module && ChainModule::isChainRightNeighbor(rightExpander.module);
-        // A replaced or removed neighbour leaves its last message sitting in my
-        // consumer buffer; drop it rather than keep reporting a chain that no
-        // longer exists (issue #59). The newcomer republishes within a frame or
-        // two because its own destination changed, and chainDebounce absorbs
-        // the momentarily shorter chain in between.
-        if (chainSource_.changed(haveChain ? rightExpander.module->id : kNoNeighbour)) {
-            auto* stale = (UpstreamMessage*) rightExpander.consumerMessage;
-            stale->count = 0;
-            stale->dirty = 0;
-        }
         const UpstreamMessage& up = haveChain
             ? *(const UpstreamMessage*) rightExpander.consumerMessage
             : kEmptyChain;
