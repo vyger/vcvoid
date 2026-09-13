@@ -301,3 +301,55 @@ TEST(state_roundtrip_encoquencer) {
     CHECK(anyNonZero);   // the dialed pitches are non-default
     CHECK(allEqual);     // survive the reload
 }
+
+// Characterisation (issue #62): a motoquencer's interactively set start/end
+// range does NOT survive a reload today. The buttonmode-1 plate gesture writes
+// manualStart0_ / manualEnd0_, which saveState() deliberately leaves out, so a
+// restore — even an exact one, into the same patch — snaps the range back to
+// the startstep / endstep inputs while the dialed steps come back fine.
+//
+// The minimal repro from the issue: one motoquencer with a 16-step sequence, an
+// `endstep = 8` default and `buttonmode = 1`; touch a plate, save, reload.
+// Step NUMBERS do not fit an O register (it clamps to +/-10 V), so the two
+// range outputs are read off internal cables, which need a reader to load.
+static const char* kRangeQuencer =
+    "[m4]\n"
+    "[motoquencer]\n"
+    "    clock = I1\n"
+    "    numsteps = 16\n"
+    "    numfaders = 4\n"
+    "    endstep = 8\n"
+    "    buttonmode = 1\n"
+    "    cv = O2\n"
+    "    startstepout = _SS\n"
+    "    endstepout = _ES\n"
+    "[copy]\n input = _SS + _ES\n output = O1\n";
+
+// Touch plate `end`, then — with that finger still down — plate `start`, which
+// is the manual's two-finger gesture for setting both ends of the range.
+static void setRange(Engine& e, int endLane, int startLane) {
+    e.touchFader(endLane, true);   e.pressFaderPlate(endLane, true);   e.tick();
+    e.touchFader(startLane, true); e.pressFaderPlate(startLane, true); e.tick();
+    e.pressFaderPlate(startLane, false); e.touchFader(startLane, false);
+    e.pressFaderPlate(endLane, false);   e.touchFader(endLane, false);
+    e.tick();
+}
+
+TEST(state_motoquencer_manual_range_lost_on_reload) {
+    Engine a; CHECK(a.load(kRangeQuencer).ok);
+    a.tick();
+    CHECK_NEAR(a.getValue("_SS"), 1.0, 1e-6);      // the startstep default
+    CHECK_NEAR(a.getValue("_ES"), 8.0, 1e-6);      // the endstep input
+    setRange(a, /*end=*/3, /*start=*/2);
+    CHECK_NEAR(a.getValue("_SS"), 2.0, 1e-6);
+    CHECK_NEAR(a.getValue("_ES"), 3.0, 1e-6);
+    // The dialed range is not in the blob at all.
+    StateSnapshot snap = a.saveState();
+    CHECK(snap.entries.size() == 1 && snap.entries[0].version == 1);
+
+    Engine b; CHECK(b.load(kRangeQuencer).ok);
+    b.restoreState(snap);
+    b.tick();
+    CHECK_NEAR(b.getValue("_SS"), 1.0, 1e-6);      // back to the input default
+    CHECK_NEAR(b.getValue("_ES"), 8.0, 1e-6);      // ...and the 3-step range is gone
+}
