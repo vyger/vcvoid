@@ -24,13 +24,26 @@ struct DroidBling : ChainModule {
     void fillUpstream(droid::chain::UpstreamBlock&) override {}
     void applyDownstream(const droid::chain::DownstreamBlock&, float) override {}
 
+    // The right neighbour that last wrote my upstream consumer buffer (issue
+    // #59). Same reasoning as UpstreamRelay::source: if it has been replaced or
+    // removed, its last message describes a chain that no longer exists and
+    // passing it leftward would report a module that is gone.
+    droid::chain::NeighbourId upSource_;
+
     void process(const ProcessArgs&) override {
         using namespace droid::chain;
+        Module* right = rightExpander.module;
+        const bool haveRight = right && isChainRightNeighbor(right);
+        if (upSource_.changed(haveRight ? right->id : kNoNeighbour)) {
+            auto* stale = (UpstreamMessage*) rightExpander.consumerMessage;
+            stale->count = 0;
+            stale->dirty = 0;
+        }
         // upstream: right -> left, gated on the LEFT (destination) neighbour only
         if (leftExpander.module && isChainLeftNeighbor(leftExpander.module)) {
             if (auto* dst = (UpstreamMessage*) leftExpander.module->rightExpander.producerMessage) {
                 UpstreamMessage incoming;   // zero-count if chain ends here (no right neighbour)
-                if (rightExpander.module && isChainRightNeighbor(rightExpander.module)) {
+                if (haveRight) {
                     // Count-bounded copy: only the live blocks move, mirroring
                     // relay()'s upstream copy (and avoiding a full-struct copy).
                     const auto* src = (const UpstreamMessage*) rightExpander.consumerMessage;
@@ -42,8 +55,8 @@ struct DroidBling : ChainModule {
             }
         }
         // downstream: left -> right, gated on the RIGHT (destination) neighbour only
-        if (rightExpander.module && isChainRightNeighbor(rightExpander.module)) {
-            if (auto* dst = (DownstreamMessage*) rightExpander.module->leftExpander.producerMessage) {
+        if (haveRight) {
+            if (auto* dst = (DownstreamMessage*) right->leftExpander.producerMessage) {
                 // Left neighbour invalid: dark/empty, don't freeze at last state
                 // (matches relay()'s downstream fallback).
                 *dst = (leftExpander.module && isChainLeftNeighbor(leftExpander.module))

@@ -287,6 +287,12 @@ struct DroidMasterBase : Module {
     // name-keyed linear scan, pure per-tick waste when the chain hasn't moved.
     const droid::ControllerModel* chainModels_[droid::chain::kMaxChainModules] = {};
     int lastChainCount = -1;
+    // The controller that last wrote my upstream consumer buffer (issue #59).
+    // Rack leaves that buffer holding the departed module's final message, so
+    // without this a module deleted from the head of the chain — or replaced by
+    // another — is still reported in `chain:` until whoever took its place
+    // happens to publish. See droid::chain::NeighbourId.
+    droid::chain::NeighbourId chainSource_;
 
     // --- UAT bridge port probe (M6) ---
     // Armed/disarmed by the HTTP thread (uat::Bridge::handleProbe) via
@@ -805,6 +811,27 @@ public:
                     ? outputs[probePort_].getVoltage()
                     : inputs[probePort_].getVoltage();
             }
+        }
+
+        // Age out an upstream buffer whose writer is gone (issue #59). Rack
+        // leaves a departed module's final message sitting in my consumer, so
+        // without this a controller deleted from the head of the chain — or
+        // replaced by another — is still reported until whoever took its place
+        // happens to publish.
+        //
+        // EVERY audio frame, not on the tick frames below where the buffer is
+        // actually read: the new neighbour publishes on the very frame it
+        // appears, and Rack flips the buffers only after all modules have
+        // stepped. Checking here means the clear always lands BEFORE that first
+        // message arrives; checking one tick later would land after it and wipe
+        // it, and the newcomer — its gate long since settled — would never say
+        // it again.
+        if (chainSource_.changed(
+                rightExpander.module && ChainModule::isChainRightNeighbor(rightExpander.module)
+                    ? rightExpander.module->id : droid::chain::kNoNeighbour)) {
+            auto* stale = (droid::chain::UpstreamMessage*) rightExpander.consumerMessage;
+            stale->count = 0;
+            stale->dirty = 0;
         }
 
         // Saturating increment: while a tick is overdue (contended below) the

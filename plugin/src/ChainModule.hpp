@@ -103,7 +103,7 @@ struct ChainModule : Module {
     // changed. See the UpstreamMessage/DownstreamMessage comments in chain.hpp
     // for the protocol side.
     droid::chain::DownstreamBlock forMe_{};   // last block the master addressed to me
-    droid::chain::UpstreamGate gate_;         // upstream publish decision (headless-tested)
+    droid::chain::UpstreamRelay up_;          // upstream hop: gate + neighbour identity (headless-tested)
     uint32_t lastTickSeq_ = 0;                // master tick behind forMe_
     bool attached_ = false;                   // a valid left neighbour last frame
 
@@ -116,35 +116,30 @@ struct ChainModule : Module {
         const bool haveRight = right && isChainRightNeighbor(right);
 
         // ---- upstream: my controls + everything from my right, to my left --
-        // Published only when something actually changed. Prepend reads STRAIGHT
-        // from my consumer into the neighbour's producer: staging through a local
-        // UpstreamMessage would value-initialize all 21 blocks (5.7 KB) every
-        // frame, and prependUpstream already copies only block[0..count-1] and
-        // clamps an untrusted count itself. `mine` and my consumer are distinct
-        // storage from the neighbour's producer, so the no-alias precondition on
-        // (in, out) holds.
-        static const UpstreamMessage kEmptyChain;   // count 0: chain ends to my right
-        const UpstreamMessage& src = haveRight
-            ? *(const UpstreamMessage*) rightExpander.consumerMessage
-            : kEmptyChain;
-
+        // Published only when something actually changed, and only into the
+        // neighbour actually there (issue #59). The decision + the incoming
+        // buffer's staleness live in droid::chain::UpstreamRelay, which the
+        // headless suite drives directly; all that is left here is handing it
+        // Rack's buffers and neighbour pointers and doing the flip it asks for.
+        // It prepends STRAIGHT from my consumer into the neighbour's producer:
+        // staging through a local UpstreamMessage would value-initialize all 21
+        // blocks (5.7 KB) every frame, and prependUpstream already copies only
+        // block[0..count-1] and clamps an untrusted count itself. `mine` and my
+        // consumer are distinct storage from the neighbour's producer, so the
+        // no-alias precondition on (in, out) holds.
         UpstreamBlock mine;
-        std::memset(&mine, 0, sizeof mine);   // padding included: compared with memcmp below
+        std::memset(&mine, 0, sizeof mine);   // padding included: compared with memcmp inside
         fillUpstream(mine);
         mine.modelId = chainModel();
 
-        const uint8_t inCount = std::min<uint8_t>(src.count, kMaxChainModules);
-        const auto d = gate_.decide(mine, src.dirty, inCount);
-        if (haveLeft && d.publish) {
-            // Participants allocate this producer in their constructors; the null
-            // guard protects against a future left neighbour that does not.
-            if (auto* dst = (UpstreamMessage*) left->rightExpander.producerMessage) {
-                prependUpstream(mine, src, *dst);      // carries src.dirty into *dst
-                if (d.dirty) dst->dirty = 1;
-                left->rightExpander.requestMessageFlip();
-                gate_.notePublished(mine, inCount, d.dirty);
-            }
-        }
+        // Participants allocate this producer in their constructors; the null
+        // `out` protects against a future left neighbour that does not.
+        auto* out = haveLeft
+            ? (UpstreamMessage*) left->rightExpander.producerMessage : nullptr;
+        if (up_.step(mine, haveRight ? right->id : kNoNeighbour,
+                     *(UpstreamMessage*) rightExpander.consumerMessage,
+                     haveLeft ? left->id : kNoNeighbour, out))
+            left->rightExpander.requestMessageFlip();
 
         // ---- downstream: my LEDs from block[0], relay the rest rightward ---
         // Skipping a write is safe only because every write is a COMPLETE
