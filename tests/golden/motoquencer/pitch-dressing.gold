@@ -1,0 +1,58 @@
+# motoquencer: characterisation of the whole pitch chain that dresses a step's
+# dialed fader position into the CV output — the behaviour per-step randomization
+# must leave untouched.
+#
+# quantize = 2 (the default) picks from the scale notes that fit in cvbase..
+# cvbase+cvrange: with cvbase 0 and cvrange 0.2 (2 V = 24 semitones) and the
+# default C lydian that is the 15-note list C D E F# G A B C' D' E' F#' G' A' B' C''
+# (0, 2, 4, 6, 7, 9, 11, 12, 14, 16, 18, 19, 21, 23, 24 semitones). A fader is
+# snapped to the nearest of those 15 notches (fader 0.3 -> notch 4 -> G -> 7
+# semitones -> 0.0583333), and `expect F<n>` shows the motor holding the snapped
+# rest position.
+#
+# transpose is added live, per tick, AFTER the step's raw pitch (it is the vibrato
+# / global-transpose input, not part of the latched step value), while noteshift
+# shifts along the scale and — like every other input to the raw pitch — only
+# takes effect at the next step entry.
+seed 1
+tickrate 100
+patch <<<
+[m4]
+[motoquencer]
+    numfaders = 4
+    numsteps  = 4
+    clock     = I1
+    quantize  = 2
+    cvbase    = 0
+    cvrange   = 0.2
+    transpose = I3
+    noteshift = I4
+    holdcv    = 0
+    cv        = O1
+>>>
+@1 move F1 0.0
+@1 move F2 0.3
+@1 move F3 0.6
+@1 move F4 1.0
+# faders snap to the scale-note notches (0.3 -> notch 4/15, 0.6 -> notch 8/15)
+@2 expect F2 0.285714 tol 1e-4
+@2 expect F3 0.571429 tol 1e-4
+@4 set I1 1
+@4 expect O1 0.0 tol 1e-4            # notch 0  -> C   (0 semitones)
+@5 set I1 0
+@6 set I1 1
+@6 expect O1 0.0583333 tol 1e-4      # notch 4  -> G   (7 semitones)
+@7 set I1 0
+@8 set I1 1
+@8 expect O1 0.116667 tol 1e-4       # notch 8  -> D'  (14 semitones)
+@9 set I1 0
+@10 set I1 1
+@10 expect O1 0.2 tol 1e-4           # notch 14 -> C'' (24 semitones)
+@11 set I1 0
+# transpose is live: +1 V lands on the held CV without a new step
+@12 set I3 0.1
+@13 expect O1 0.3 tol 1e-4
+# noteshift +1 moves the step one scale note up, from the next step entry on
+@14 set I4 1
+@16 set I1 1
+@16 expect O1 0.116667 tol 1e-4      # step 1: C -> D (2 semitones) + 1 V
