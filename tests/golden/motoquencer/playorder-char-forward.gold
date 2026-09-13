@@ -1,0 +1,60 @@
+# motoquencer play-order CHARACTERISATION (1 of 4) — pins the pre-`form` step
+# order so the song-form work (issue #53) cannot change it by accident.
+#
+# The plain case: no form, no direction, no pingpong, no start/end. The manual's
+# baseline is simply "each clock tick will advance the sequence to the next step"
+# (the `clock` row), wrapping back to step 1 after the last one. `currentstep`
+# "outputs the number of the step that is currently being played (starting from
+# 0)", so its trace IS the play order: 0,1,2,3,4,5 then 0 again.
+#
+# `startofsequence` "outputs a trigger whenever the sequencer starts playing from
+# the beginning" — so it fires on the very first step and again on each wrap, and
+# nowhere in between. DROID triggers are 10 ms, which at tickrate 100 is one tick.
+#
+# Step numbers do not fit on an output jack (they would clamp at +/-10 V), so
+# currentstep travels on an internal cable and is scaled by 1/10: step N reads N/10.
+tickrate 100
+patch <<<
+[m4]
+[m4]
+[motoquencer]
+    clock           = I1
+    numsteps        = 6
+    numfaders       = 6
+    currentstep     = _CS
+    startofsequence = O2
+[copy]
+    input  = _CS * 0.1
+    output = O1
+>>>
+# first clock edge: step 0, and startofsequence fires.
+@2 set I1 1
+@2 expect O1 0.0 tol 1e-4
+@2 expect O2 1 tol 1e-4
+@3 set I1 0
+@3 expect O2 0 tol 1e-4
+@4 set I1 1
+@4 expect O1 0.1 tol 1e-4
+@4 expect O2 0 tol 1e-4
+@5 set I1 0
+@6 set I1 1
+@6 expect O1 0.2 tol 1e-4
+@7 set I1 0
+@8 set I1 1
+@8 expect O1 0.3 tol 1e-4
+@9 set I1 0
+@10 set I1 1
+@10 expect O1 0.4 tol 1e-4
+@11 set I1 0
+@12 set I1 1
+@12 expect O1 0.5 tol 1e-4
+@12 expect O2 0 tol 1e-4
+@13 set I1 0
+# wrap: back to step 0 and startofsequence fires again.
+@14 set I1 1
+@14 expect O1 0.0 tol 1e-4
+@14 expect O2 1 tol 1e-4
+@15 set I1 0
+@15 expect O2 0 tol 1e-4
+@16 set I1 1
+@16 expect O1 0.1 tol 1e-4

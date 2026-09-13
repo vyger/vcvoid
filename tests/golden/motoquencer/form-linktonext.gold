@@ -1,0 +1,96 @@
+# motoquencer `form` across a linktonext chain (issue #53): the chain MAIN owns
+# the form and the member lanes follow it.
+#
+# A linked member is remote controlled -- "the current step number of the linked
+# sequencer will always be the same as the step number of the main sequencer" --
+# so everything that shapes the step ORDER lives on the main. `form` is exactly
+# such a setting, and the member here deliberately leaves `form` at its default 0
+# to prove it never consults its own: it still plays the main's AAAB.
+#
+# The main has four steps, so form 1 (AAAB) gives A = 0,1 and B = 2,3 and the
+# eight-clock order 0,1, 0,1, 0,1, 2,3. The member is a continuous CV lane
+# (quantize 0, cvbase 0, cvrange 1, holdcv 0) with its four steps dialled to
+# 1.0 / 0.75 / 0.5 / 0.25, so its `cv` output spells out which step the chain is
+# on: 1.0, 0.75, 1.0, 0.75, 1.0, 0.75, 0.5, 0.25.
+#
+# `startofpart` is mirrored onto the member too (O3), firing on each of the four
+# part entries, while the main's `startofsequence` (O2) fires once per form.
+tickrate 100
+patch <<<
+[m4]
+[motoquencer]
+    clock           = I1
+    fadermode       = I2
+    numsteps        = 4
+    numfaders       = 4
+    linktonext      = 1
+    form            = 1
+    quantize        = 0
+    cvbase          = 0
+    cvrange         = 1
+    cv              = O1
+    startofsequence = O2
+[motoquencer]
+    linktonext      = 0
+    quantize        = 0
+    cvbase          = 0
+    cvrange         = 1
+    holdcv          = 0
+    cv              = O4
+    startofpart     = O3
+>>>
+# address the linked lane (fadermode 10) and dial its four steps
+@1 set I2 10
+@2 move F1 1.0
+@2 expect F1 1.0 tol 1e-4
+@3 move F2 0.75
+@4 move F3 0.5
+@5 move F4 0.25
+@5 expect F4 0.25 tol 1e-4
+@6 set I2 0
+# A (first entry)
+@8 set I1 1
+@8 expect O4 1.0 tol 1e-4
+@8 expect O3 1 tol 1e-4
+@8 expect O2 1 tol 1e-4
+@9 set I1 0
+@10 set I1 1
+@10 expect O4 0.75 tol 1e-4
+@10 expect O3 0 tol 1e-4
+@10 expect O2 0 tol 1e-4
+@11 set I1 0
+# A (second entry)
+@12 set I1 1
+@12 expect O4 1.0 tol 1e-4
+@12 expect O3 1 tol 1e-4
+@12 expect O2 0 tol 1e-4
+@13 set I1 0
+@14 set I1 1
+@14 expect O4 0.75 tol 1e-4
+@14 expect O3 0 tol 1e-4
+@15 set I1 0
+# A (third entry)
+@16 set I1 1
+@16 expect O4 1.0 tol 1e-4
+@16 expect O3 1 tol 1e-4
+@17 set I1 0
+@18 set I1 1
+@18 expect O4 0.75 tol 1e-4
+@18 expect O3 0 tol 1e-4
+@19 set I1 0
+# B
+@20 set I1 1
+@20 expect O4 0.5 tol 1e-4
+@20 expect O3 1 tol 1e-4
+@20 expect O2 0 tol 1e-4
+@21 set I1 0
+@22 set I1 1
+@22 expect O4 0.25 tol 1e-4
+@22 expect O3 0 tol 1e-4
+@23 set I1 0
+# the whole form restarts
+@24 set I1 1
+@24 expect O4 1.0 tol 1e-4
+@24 expect O3 1 tol 1e-4
+@24 expect O2 1 tol 1e-4
+@25 set I1 0

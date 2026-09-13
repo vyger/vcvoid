@@ -1086,8 +1086,8 @@ circuits:
       -- fader, encoder AND button lanes; the button lanes copy the pressed
       step's RESULTING value rather than re-applying the toggle, and the M4
       re-commands the stamped lanes so the motors follow); outputs
-      cv/gate/startofsequence (10 ms
-      trigger)/currentstep/currentpage/accumulator/startstepout/endstepout;
+      cv/gate/startofsequence + startofpart (10 ms
+      triggers)/currentstep/currentpage/accumulator/startstepout/endstepout;
       all 16 lucky* randomizers with luckychance/scope/amount/cvbase;
       linktonext chains -- one chain-wide fadermode AND buttonmode off the main
       (mode/10 picks the fader resp. button+LED owner, the others release that
@@ -1112,9 +1112,16 @@ circuits:
       would be read back as an edit and undo the compensation. The
       automatic skip clear on a repeats edit now fires only on a real
       CHANGE (motoquencer.md:183), not on every pass through fadermode 3.
+      Song forms -- `form` 0..6 (A/AAAB/AABB/ABAC/AAABAAAC/AB/AAB) slices the
+      play window into parts AFTER startstep/endstep, the parts themselves
+      always run forward while direction/pingpong apply within each part (so AB
+      under direction=1 is not plain reverse), a wrap marks the end of the
+      COMPLETE form so the accumulator advances once per form, and the
+      `startofpart` trigger fires on every part entry; the chain main owns the
+      form and its members follow.
       DEFERRED (advanced live-performance conveniences, interactive gestures
-      with no headless analog, or panel-only; documented in seqcore.hpp): form
-      + startofpart, movement patterns 1..7 (pattern 0/linear only),
+      with no headless analog, or panel-only; documented in seqcore.hpp):
+      movement patterns 1..7 (pattern 0/linear only),
       metricsaver, keyboard recording, copy/paste/
       pastefaders/pastebuttons/stepcopy (the shared-button rule for
       stepcopy + doublerange on one button lands with stepcopy), pitch
@@ -1154,16 +1161,25 @@ circuits:
       asked for nor a constant length), so the explicit whole-track gesture wins:
       every step to the right takes the value, no step to the LEFT moves, the
       track length changes by the full amount, and single-step edits (bulkedit
-      low) plus the machine writers are unaffected. 70 goldens (incl. composemode,
+      low) plus the machine writers are unaffected; FORMS -- an unevenly
+      dividing window gives the extra steps to the EARLIER parts (A is the
+      longer one), startofpart fires on the first part of a form too
+      (coinciding with startofsequence) and never at form=0, and the parts are
+      independent windows for skips (a skip shortens only its own part entry;
+      an all-skipped part is passed over). 85 goldens (incl. composemode,
       holdcv-drift, defaultcv-notches,
       gatelength-min, startend touch/two-finger/clear/setendstep/pages,
       doublerange basic/limits, linktonext transport/mirroring/holdcv/
       buttonmode/lucky-order/startend/doublerange, bulkedit faders/pages/
       buttons/startend-exempt/linktonext/off/lucky-unaffected, constantlength
       off-repeats/off-skip/repeats/wrap-floor/skip/skip-currency/range/
-      partial/linktonext, bulkedit-constantlength repeats/skip).
-      requires-human: motor
-      haptics + auto-moving faders + LED rings need real M4 hardware."
+      partial/linktonext, bulkedit-constantlength repeats/skip, four
+      play-order characterisation goldens, and eleven form goldens covering
+      each form shape, the uneven split, form with reverse/pingpong/
+      start-end/skips, startofpart timing and the accumulator-once-per-form
+      rule).
+      requires-human: motor haptics + auto-moving faders + LED rings need real
+      M4 hardware."
   motorfader:
     status: done
     difficulty: hard

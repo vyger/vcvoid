@@ -1,0 +1,86 @@
+# motoquencer `form` with a step count that does not divide evenly (issue #53).
+#
+# The manual only shrugs at this -- "you better make sure that you have 6 or 12 or
+# 24 steps in that case, or else your parts won't have equal size (which on the
+# other hand could be funny anyway)" -- so the split rule is a SPEC-GAP decision:
+# the EARLIER parts take the extra steps. Five steps under AAAB therefore give
+# A = 0,1,2 (three steps) and B = 3,4 (two), for the order
+# 0,1,2, 0,1,2, 0,1,2, 3,4 -- eleven clocks.
+# Step numbers do not fit on an output jack (they clamp at +/-10 V), so
+# `currentstep` rides an internal cable scaled by 1/10: step N reads N/10.
+tickrate 100
+patch <<<
+[m4]
+[m4]
+[motoquencer]
+    clock           = I1
+    numsteps        = 5
+    numfaders       = 5
+    form            = 1
+    currentstep     = _CS
+    startofpart     = O3
+    startofsequence = O2
+[copy]
+    input  = _CS * 0.1
+    output = O1
+>>>
+@2 set I1 1
+@2 expect O1 0 tol 1e-4
+@2 expect O3 1 tol 1e-4
+@2 expect O2 1 tol 1e-4
+@3 set I1 0
+@4 set I1 1
+@4 expect O1 0.1 tol 1e-4
+@4 expect O3 0 tol 1e-4
+@4 expect O2 0 tol 1e-4
+@5 set I1 0
+@6 set I1 1
+@6 expect O1 0.2 tol 1e-4
+@6 expect O3 0 tol 1e-4
+@6 expect O2 0 tol 1e-4
+@7 set I1 0
+@8 set I1 1
+@8 expect O1 0 tol 1e-4
+@8 expect O3 1 tol 1e-4
+@8 expect O2 0 tol 1e-4
+@9 set I1 0
+@10 set I1 1
+@10 expect O1 0.1 tol 1e-4
+@10 expect O3 0 tol 1e-4
+@10 expect O2 0 tol 1e-4
+@11 set I1 0
+@12 set I1 1
+@12 expect O1 0.2 tol 1e-4
+@12 expect O3 0 tol 1e-4
+@12 expect O2 0 tol 1e-4
+@13 set I1 0
+@14 set I1 1
+@14 expect O1 0 tol 1e-4
+@14 expect O3 1 tol 1e-4
+@14 expect O2 0 tol 1e-4
+@15 set I1 0
+@16 set I1 1
+@16 expect O1 0.1 tol 1e-4
+@16 expect O3 0 tol 1e-4
+@16 expect O2 0 tol 1e-4
+@17 set I1 0
+@18 set I1 1
+@18 expect O1 0.2 tol 1e-4
+@18 expect O3 0 tol 1e-4
+@18 expect O2 0 tol 1e-4
+@19 set I1 0
+@20 set I1 1
+@20 expect O1 0.3 tol 1e-4
+@20 expect O3 1 tol 1e-4
+@20 expect O2 0 tol 1e-4
+@21 set I1 0
+@22 set I1 1
+@22 expect O1 0.4 tol 1e-4
+@22 expect O3 0 tol 1e-4
+@22 expect O2 0 tol 1e-4
+@23 set I1 0
+@24 set I1 1
+@24 expect O1 0 tol 1e-4
+@24 expect O3 1 tol 1e-4
+@24 expect O2 1 tol 1e-4
+@25 set I1 0
