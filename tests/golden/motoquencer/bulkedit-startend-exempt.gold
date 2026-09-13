@@ -1,0 +1,73 @@
+# motoquencer `bulkedit` + `buttonmode = 1`: the start/end gesture is EXEMPT.
+#
+# buttonmode 1 is not a per-step value at all — a press moves the sequence's end
+# step, and a second finger its start (motoquencer.md §"Start and end"). There is
+# no "same value" to copy to the steps at the right, so bulkedit leaves the
+# gesture completely alone: the range moves as usual and no step data changes.
+# (SPEC-GAP: the manual does not name buttonmode 1 in the bulkedit row; it talks
+# about a value that all faders/buttons to the right can take.)
+#
+# Four pitches are dialed in, CTRL is held, and plate 3 is pressed: the end step
+# becomes 3 and the four pitches — including the ones to the right of step 2 —
+# are untouched.
+tickrate 100
+patch <<<
+[m4]
+[motoquencer]
+    clock        = I1
+    bulkedit     = I2
+    numsteps     = 4
+    numfaders    = 4
+    buttonmode   = 1
+    quantize     = 0
+    cvbase       = 0
+    cvrange      = 1
+    holdcv       = 0
+    defaultgate  = 1
+    cv           = O1
+    startstepout = _SS
+    endstepout   = _ES
+[copy]
+    input  = _SS * 0.1
+    output = O3
+[copy]
+    input  = _ES * 0.1
+    output = O4
+>>>
+@0 set I2 0
+@1 move F1 0.1
+@2 move F2 0.2
+@3 move F3 0.3
+@4 move F4 0.4
+# hold CTRL and press plate 3 -> end = 3, nothing else moves.
+@5 set I2 1
+@6 touch F3 1
+@6 expect O3 0.1 tol 1e-4
+@6 expect O4 0.3 tol 1e-4
+@6 expect F1 0.1 tol 1e-4
+@6 expect F2 0.2 tol 1e-4
+@6 expect F3 0.3 tol 1e-4
+@6 expect F4 0.4 tol 1e-4
+@7 touch F3 0
+# the two-finger start gesture is equally unaffected: re-press plate 3 (the
+# anchor) and tap plate 2 -> start = 2, still no step data touched.
+@8 touch F3 1
+@9 touch F2 1
+@9 expect O3 0.2 tol 1e-4
+@9 expect O4 0.3 tol 1e-4
+@10 touch F2 0
+@11 touch F3 0
+@11 expect F1 0.1 tol 1e-4
+@11 expect F2 0.2 tol 1e-4
+@11 expect F3 0.3 tol 1e-4
+@11 expect F4 0.4 tol 1e-4
+# steps 2..3 loop with their own pitches.
+@12 set I1 1
+@12 expect O1 0.2 tol 1e-4
+@13 set I1 0
+@14 set I1 1
+@14 expect O1 0.3 tol 1e-4
+@15 set I1 0
+@16 set I1 1
+@16 expect O1 0.2 tol 1e-4
+@17 set I1 0

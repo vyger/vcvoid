@@ -1,0 +1,55 @@
+# motoquencer `bulkedit` LOW: the characterisation of a plain edit. Moving one
+# fader edits ONLY that step, and a touch-plate press toggles ONLY that step's
+# gate — the steps to the right keep their own values. This is the behaviour the
+# bulkedit feature must leave completely untouched whenever the input is not
+# held (motoquencer.md `bulkedit`: the propagation happens only "if you set this
+# to 1").
+#
+# Also pins the gate auto-on that rides along with a pitch edit ("The gate is
+# automatically switched on when you change the note value of a step"): step 1's
+# gate comes on because ITS fader moved, and no other step's does.
+tickrate 100
+patch <<<
+[m4]
+[motoquencer]
+    clock       = I1
+    bulkedit    = I2
+    numsteps    = 4
+    numfaders   = 4
+    quantize    = 0
+    cvbase      = 0
+    cvrange     = 1
+    holdcv      = 0
+    buttonmode  = 0
+    defaultgate = 0
+    cv          = O1
+    gate        = O2
+>>>
+@0 set I2 0
+# fader edit on step 1 (lane 2): only that lane moves.
+@1 move F2 0.5
+@2 expect F1 0 tol 1e-4
+@2 expect F2 0.5 tol 1e-4
+@2 expect F3 0 tol 1e-4
+@2 expect F4 0 tol 1e-4
+# plate press on step 0 (lane 1): only step 0's gate toggles on.
+@3 touch F1 1
+@4 touch F1 0
+# play the four steps: 0 (gate on, cv 0), 1 (gate on by auto-on, cv 0.5),
+# 2 and 3 untouched (gate off, cv 0).
+@5 set I1 1
+@5 expect O1 0 tol 1e-4
+@5 expect O2 1 tol 1e-4
+@6 set I1 0
+@7 set I1 1
+@7 expect O1 0.5 tol 1e-4
+@7 expect O2 1 tol 1e-4
+@8 set I1 0
+@9 set I1 1
+@9 expect O1 0 tol 1e-4
+@9 expect O2 0 tol 1e-4
+@10 set I1 0
+@11 set I1 1
+@11 expect O1 0 tol 1e-4
+@11 expect O2 0 tol 1e-4
+@12 set I1 0

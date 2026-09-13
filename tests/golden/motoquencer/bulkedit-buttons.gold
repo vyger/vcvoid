@@ -1,0 +1,64 @@
+# motoquencer `bulkedit`, button lane. motoquencer.md: the bulk edit fires "if you
+# move one fader (or encoder) or touch/press one button" — so the touch plates are
+# in scope too, each step to the right taking "the same value".
+#
+# "The same value" is read as the RESULTING value of the pressed step (gate on or
+# off), not as a toggle applied to every step: a toggle would flip the steps that
+# already agreed with the edit, which is the opposite of "the same value".
+#
+# Step 3's gate is switched off first with bulkedit LOW (gates 1 1 1 0). Then CTRL
+# is held and step 1's plate is pressed: step 1 goes off and steps 2 and 3 COPY
+# that off — step 3, already off, stays off (a toggle would have turned it back
+# on). Pressing step 1 again with CTRL still held stamps the gates back on.
+tickrate 100
+patch <<<
+[m4]
+[motoquencer]
+    clock       = I1
+    bulkedit    = I2
+    numsteps    = 4
+    numfaders   = 4
+    quantize    = 0
+    cvbase      = 0
+    cvrange     = 1
+    holdcv      = 0
+    buttonmode  = 0
+    defaultgate = 1
+    gate        = O2
+>>>
+# bulkedit low: switch step 3's gate off on its own.
+@0 set I2 0
+@1 touch F4 1
+@2 touch F4 0
+# hold bulkedit, press step 1's plate: 1 goes off, 2 and 3 copy "off".
+@3 set I2 1
+@4 touch F2 1
+@5 touch F2 0
+# play: gate on step 0 only.
+@6 set I1 1
+@6 expect O2 1 tol 1e-4
+@7 set I1 0
+@8 set I1 1
+@8 expect O2 0 tol 1e-4
+@9 set I1 0
+@10 set I1 1
+@10 expect O2 0 tol 1e-4
+@11 set I1 0
+@12 set I1 1
+@12 expect O2 0 tol 1e-4
+@13 set I1 0
+# press step 1's plate again, CTRL still held: 1 goes on and 2, 3 copy "on".
+@14 touch F2 1
+@15 touch F2 0
+@16 set I1 1
+@16 expect O2 1 tol 1e-4
+@17 set I1 0
+@18 set I1 1
+@18 expect O2 1 tol 1e-4
+@19 set I1 0
+@20 set I1 1
+@20 expect O2 1 tol 1e-4
+@21 set I1 0
+@22 set I1 1
+@22 expect O2 1 tol 1e-4
+@23 set I1 0

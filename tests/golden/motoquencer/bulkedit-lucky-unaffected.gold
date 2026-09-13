@@ -1,0 +1,33 @@
+# motoquencer: `bulkedit` held HIGH must not change what a "I Feel Lucky" trigger
+# does. bulkedit is about MANUAL edits — motoquencer.md: "if you move one fader
+# (or encoder) or touch/press one button" — while luckyfaders sets every targeted
+# step on its own ("a different random value for each step"). A lucky reroll that
+# went through the bulk stamp would collapse the whole track to one value.
+#
+# Seeded pin (seed 1, luckychance/luckyamount at their defaults of 1): the four
+# steps get four DIFFERENT xorshift32 draws, in ascending step order, exactly as
+# they do with bulkedit low (compare lucky-seeded.gold, the same draws through
+# luckycvs). Regenerate by capturing the "got" values if the RNG order changes.
+seed 1
+tickrate 100
+patch <<<
+[m4]
+[motoquencer]
+    clock       = I1
+    bulkedit    = I2
+    luckyfaders = I3
+    numfaders   = 4
+    quantize    = 0
+    cvbase      = 0
+    cvrange     = 1
+    holdcv      = 0
+    cv          = O1
+>>>
+# hold bulkedit, then fire luckyfaders on the pitch lane.
+@0 set I2 1
+@1 set I3 1
+@2 set I3 0
+@2 expect F1 0.558488 tol 1e-5
+@2 expect F2 0.173574 tol 1e-5
+@2 expect F3 0.147250 tol 1e-5
+@2 expect F4 0.101457 tol 1e-5
