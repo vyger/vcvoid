@@ -1242,17 +1242,58 @@ protected:
         return (int)p;
     }
 
-    // Build the logical play order for one full cycle (range + direction + pingpong).
-    std::vector<int> playOrder(EngineState& s) {
+    // ---- play order --------------------------------------------------------
+    // The logical play order for one full cycle is built in layers, so that each
+    // step-order feature owns exactly one of them:
+    //
+    //   1. rangeWindow()  — the steps between start and end, in range order.
+    //   2. (song forms)   — that window cut into parts, played in the form's
+    //                       order. Not yet: `form` is still deferred here.
+    //   3. stepThrough()  — ONE window walked per direction + pingpong.
+    //
+    // playOrder() stitches the layers together and hands the transport a flat
+    // list of logical step indices plus, per position, which part of the form
+    // that position belongs to.
+    struct PlayOrder {
+        std::vector<int> steps;    // logical step index at each play position
+        std::vector<int> part;     // the form part entry each position belongs to
+        bool formed = false;       // false when form = 0 — no parts, no startofpart
+    };
+
+    // Layer 1: the steps between start and end, in range order. A reversed range
+    // (startstep after endstep) is legal and "reverses the playing order", so the
+    // window itself may descend.
+    std::vector<int> rangeWindow(EngineState& s) {
         int start0 = rangeStart0(s), end0 = rangeEnd0(s);
-        std::vector<int> o;
-        if (start0 <= end0) for (int i = start0; i <= end0; i++) o.push_back(i);
-        else                for (int i = start0; i >= end0; i--) o.push_back(i);
+        std::vector<int> w;
+        if (start0 <= end0) for (int i = start0; i <= end0; i++) w.push_back(i);
+        else                for (int i = start0; i >= end0; i--) w.push_back(i);
+        return w;
+    }
+
+    // Layer 3: walk ONE window — a form part, or the whole range when there is no
+    // form — according to direction and pingpong, appending to `outSteps`.
+    //
+    // SEAM for issue #54: the movement `pattern` (1..7) belongs here and nowhere
+    // else. The manual is explicit that stepping modifications "are always
+    // applied within each individual part", and a pattern re-walks exactly the
+    // direction+pingpong sequence computed below ("always two steps forwards
+    // (according to `direction` and `pingpong`) and then one step backwards"), so
+    // it slots in as a rewrite of `part` just before it is appended.
+    void stepThrough(EngineState& s, std::vector<int> part, std::vector<int>& outSteps) {
+        if (part.empty()) return;
         if (in("direction").value(s) >= kHigh)
-            std::reverse(o.begin(), o.end());
-        if (in("pingpong").value(s) >= kHigh && o.size() > 1)
-            for (int k = (int)o.size() - 2; k >= 1; k--) o.push_back(o[k]);
-        if (o.empty()) o.push_back(0);
+            std::reverse(part.begin(), part.end());
+        if (in("pingpong").value(s) >= kHigh && part.size() > 1)
+            for (int k = (int)part.size() - 2; k >= 1; k--) part.push_back(part[k]);
+        outSteps.insert(outSteps.end(), part.begin(), part.end());
+    }
+
+    PlayOrder playOrder(EngineState& s) {
+        PlayOrder o;
+        stepThrough(s, rangeWindow(s), o.steps);
+        if (o.steps.empty()) o.steps.push_back(0);
+        o.part.assign(o.steps.size(), 0);
         return o;
     }
 
@@ -1278,13 +1319,13 @@ protected:
             lastClock_ = s.tick; haveClock_ = true;
         }
 
-        std::vector<int> order = playOrder(s);
+        PlayOrder order = playOrder(s);
         long autoreset = std::lround(in("autoreset").value(s));
 
         if (!started_ || resetPending_) {
             playPos_ = 0; pulse_ = 0; turn_ = 1; clocksSinceReset_ = 0;
             started_ = true; resetPending_ = false; triggerSos(s);
-            enterStep(s, order, 0);
+            enterStep(s, order.steps, 0);
             return;
         }
 
@@ -1292,18 +1333,18 @@ protected:
         if (autoreset > 0 && clocksSinceReset_ >= autoreset) {
             playPos_ = 0; pulse_ = 0; turn_ = 1; clocksSinceReset_ = 0;
             advanceAccumulator(s); triggerSos(s);
-            enterStep(s, order, 0);
+            enterStep(s, order.steps, 0);
             return;
         }
 
-        int reps = curRepeats(s, order);
+        int reps = curRepeats(s, order.steps);
         if (pulse_ + 1 < reps) { pulse_++; return; }   // same step, next pulse
         pulse_ = 0;
         bool wrapped = false;
-        int next = nextPlayedPos(s, order, playPos_, wrapped);
+        int next = nextPlayedPos(s, order.steps, playPos_, wrapped);
         playPos_ = next;
         if (wrapped) { turn_++; advanceAccumulator(s); triggerSos(s); }
-        enterStep(s, order, playPos_);
+        enterStep(s, order.steps, playPos_);
     }
 
     // A linktonext chain member is REMOTE CONTROLLED: it ignores its own clock /
