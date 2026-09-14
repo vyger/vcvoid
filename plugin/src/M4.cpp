@@ -119,6 +119,18 @@ static constexpr float kSlotTopMm = 25.39f;   // cap top at value 1
 static constexpr float kCapWmm = 12.6f;       // white cap width (drawn)
 static constexpr float kCapHmm = 21.73f;      // white cap height
 
+// Notch marks (issue #73): a fader configured with `notches >= 2` rests in
+// discrete dents, and we paint a tick per dent in the slot. Each mark is the
+// cap width plus an overhang on either side, so it reads as a scale poking out
+// from behind the cap while staying clear of the neighbouring column:
+//   12.6 + 2 x 1.6 = 15.8 mm  <  17.77 mm column pitch (3.498 HP)
+// i.e. a ~1.97 mm gutter between one column's marks and the next's.
+static constexpr float kNotchOverhangMm = 1.6f;
+// Below this cap-centre spacing the ticks stop being separate lines and just
+// smear the slot grey, so we draw none (reached only above ~55 notches:
+// mm2px(77.23 - 21.73) = 163.9 px of travel).
+static constexpr float kNotchMinSpacingPx = 3.0f;
+
 // One motor fader: a bounded 0..1 slider (VCVSlider is an SvgSlider, itself a
 // Knob/ParamWidget with a bound ParamQuantity — so unlike the endless encoder a
 // stock slider works). The visible element is a hand-drawn white ribbed cap
@@ -133,15 +145,27 @@ struct DroidM4Fader : VCVSlider {
     int idx = 0;
 
     DroidM4Fader() {
-        // Transparent background SVG sized to the measured slot travel box
-        // (mm2px(11.4) x mm2px(77.23)); this sets our box.size. The invisible
+        // Transparent background SVG: only its HEIGHT matters (mm2px(77.23),
+        // the measured slot travel) — the interactive WIDTH is overridden by
+        // setTrackWidth() below, from the layout column pitch. The invisible
         // SvgSlider handle is given the CAP's real size so the centred handle
         // endpoints map value 0 -> cap resting at the slot bottom and value 1
         // -> cap at the slot top. We read minHandlePos/maxHandlePos in draw()
         // to place the drawn cap; the stock handle SVG is never shown.
         setBackgroundSvg(Svg::load(asset::plugin(pluginInstance, "res/M4FaderRail.svg")));
         handle->box.size = mm2px(math::Vec(kCapWmm, kCapHmm));
-        float w = box.size.x, h = box.size.y, ch = mm2px(kCapHmm);
+        setTrackWidth(box.size.x);
+    }
+
+    // Set the fader's interactive (grab) width without touching the drawn cap.
+    // DroidM4Widget passes the layout column pitch here so a click anywhere in
+    // a fader's column drags that fader instead of the module (issue #73) —
+    // the white cap is only 12.6 mm wide and was a fiddly target. The handle
+    // endpoints are centred on box.size.x, so they MUST be re-placed after the
+    // resize or the cap ends up off-centre.
+    void setTrackWidth(float w) {
+        box.size.x = w;
+        float h = box.size.y, ch = mm2px(kCapHmm);
         setHandlePosCentered(math::Vec(w / 2.f, h - ch / 2.f),   // value 0: bottom
                              math::Vec(w / 2.f, ch / 2.f));       // value 1: top
     }
@@ -161,6 +185,31 @@ struct DroidM4Fader : VCVSlider {
         math::Vec p = minHandlePos.crossfade(maxHandlePos, v);  // cap top-left
         float w = handle->box.size.x, h = handle->box.size.y;
         float x = p.x, y = p.y;
+        // Notch marks (issue #73). A fader configured with `notches >= 2` rests
+        // in discrete dents at i/(n-1), i = 0..n-1 — bottom dent 0.0, top dent
+        // 1.0 (engine/src/fadercore.hpp) — so paint a tick at each dent's
+        // CAP-CENTRE height: the cap's black indicator line then lands exactly
+        // on a mark whenever the fader is settled. Drawn BEFORE the cap so the
+        // cap occludes the marks it covers, like a scale printed on the slot.
+        // notches 0 (continuous) and 1 (pitch-bend) draw nothing; `module` is
+        // null in the module browser.
+        int notches = module ? (int)module->notches[idx] : 0;
+        float travel = box.size.y - h;      // cap-centre travel, px
+        if (notches >= 2 && travel >= kNotchMinSpacingPx * (notches - 1)) {
+            float cx = box.size.x / 2.f;    // column centre == cap centre
+            float half = w / 2.f + mm2px(kNotchOverhangMm);
+            nvgStrokeWidth(vg, 1.0f);
+            nvgStrokeColor(vg, nvgRGBA(0x9a, 0x9a, 0x9a, 0x90));
+            for (int i = 0; i < notches; i++) {
+                float t = (float)i / (float)(notches - 1);
+                // half-pixel snap keeps the 1 px line crisp at 100% zoom
+                float my = std::round(h / 2.f + (1.f - t) * travel) + 0.5f;
+                nvgBeginPath(vg);
+                nvgMoveTo(vg, cx - half, my);
+                nvgLineTo(vg, cx + half, my);
+                nvgStroke(vg);
+            }
+        }
         float r = mm2px(1.0f);
         // body
         nvgBeginPath(vg);
@@ -255,7 +304,16 @@ struct DroidM4Widget : VcvoidModuleWidget {
                 Vec(0, 0), module, DroidM4::FADER_PARAMS + i);
             fader->module = module;
             fader->idx = i;
+            // Grab width = one full layout column pitch (3.498 HP = 17.77 mm =
+            // 52.47 px), derived from the layout itself so it can never drift
+            // from Layout.hpp. The four boxes then tile the 14 HP panel
+            // edge-to-edge — no gaps, no overlap, nothing spilling off the
+            // panel (column 1 starts at 0.001 HP, column 4 ends at 13.993 HP) —
+            // so any click in a fader's column grabs that fader. The drawn cap
+            // stays 12.6 mm; box.pos recentres off the new box.size.x.
             float colX = dw::hpVec(L->pos('P', i + 1)).x;
+            fader->setTrackWidth(dw::hpVec(L->pos('P', 2)).x -
+                                 dw::hpVec(L->pos('P', 1)).x);
             fader->box.pos = Vec(colX - fader->box.size.x / 2.f, mm2px(kSlotTopMm));
             addParam(fader);
             // Touch plate: standard momentary light-button at the layout's L
