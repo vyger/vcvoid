@@ -6,6 +6,7 @@
 #include "Layout.hpp"
 #include "RegisterLabels.hpp"   // issue #26: patch labels -> tooltips + panel chips
 #include "MasterStatus.hpp"     // issue #46: the visible error state (Rack-free model)
+#include "ChainPlan.hpp"        // issue #69: "add missing controllers" (Rack-free model)
 #include "StatusRing.hpp"       // issue #46: the module halo
 #include "uatbridge/Bridge.hpp"   // forward-declares Rack types only; safe here
 #include "AdaptiveRate.hpp"
@@ -169,6 +170,8 @@ struct DroidMasterBase : Module {
         // chainError is UI-thread-only (written by the widget's step()), so it
         // is deliberately read outside the lock, like the menu already does.
         r.chainError = chainError;
+        r.chainFix = chainFix;
+        r.chainFixBlocker = chainFixBlocker;
         return r;
     }
 
@@ -230,6 +233,14 @@ struct DroidMasterBase : Module {
     std::vector<std::string> chainPhysical;   // engineMutex
     bool chainOk = true;                      // engineMutex; process() ticks only when true
     std::string chainError;                   // UI thread only (widget step()/menu)
+    // issue #69: the "add missing controllers" offer that goes with the error
+    // above — the models the action would create ("p2b8, m4"), or why it
+    // cannot. Computed by the widget's step() alongside chainError (it needs
+    // the widget's chain walk), and read with the same discipline: UI thread
+    // writes, everyone else takes the torn-read-tolerant snapshot that
+    // statusReport() already takes of chainError.
+    std::string chainFix;                     // UI thread only
+    std::string chainFixBlocker;              // UI thread only
     std::atomic<bool> chainDirty{false};      // audio/any -> UI: revalidate request
     // ISSUE-5: chainOk demotion is debounced so a transient chain shrink during
     // Rack's expander re-enumeration (hot-plug) does not pause the engine for a
@@ -1700,6 +1711,160 @@ struct DroidMasterBaseWidget : ModuleWidget {
         }
     }
 
+    // --- "Add missing controllers" (issue #69) ----------------------------
+    // A chain error raised by controllers the patch declares and the rack does
+    // not have has exactly one fix, and it is mechanical: create them and park
+    // them on the master's right. Planned purely (ChainPlan.hpp), executed
+    // here, and pushed as ONE undoable action — a rack the user did not want
+    // is a single ctrl-Z away.
+    struct ChainFixResult {
+        std::vector<std::string> added;     // models created, in creation order
+        std::vector<int64_t> addedIds;      // ...and their Rack module ids
+        std::string blocker;                // non-empty: nothing was created
+    };
+
+    // The chain to my right as the planner wants it: one entry per chain
+    // module, nearest-master first. Pass-throughs (the bling, whose
+    // chainModel() is None) are INCLUDED: they take no controller number, but
+    // they do hold a slot in the row, so a controller appended "after the end
+    // of the chain" must land after them rather than in front of them.
+    // `widgets`, when given, collects the ModuleWidget of each slot — what the
+    // executor positions against.
+    void collectChainSlots(DroidMasterBase* m,
+                           std::vector<droid::chain::ModelId>& slots,
+                           std::vector<ModuleWidget*>* widgets) {
+        for (Module* mod = m->rightExpander.module;
+             mod && ChainModule::isChainRightNeighbor(mod);
+             mod = mod->rightExpander.module) {
+            slots.push_back(static_cast<ChainModule*>(mod)->chainModel());
+            if (widgets) widgets->push_back(APP->scene->rack->getModule(mod->id));
+        }
+    }
+
+    // What the patch asks for, snapshotted under the engine lock exactly the
+    // way appendMasterMenu does.
+    vcvoid::chainplan::Plan computeChainPlan(
+            DroidMasterBase* m, const std::vector<droid::chain::ModelId>& slots) {
+        std::vector<std::string> declared;
+        bool wantX7 = false;
+        {
+            std::lock_guard<std::mutex> lock(m->engineMutex);
+            if (m->engine) {
+                declared = m->engine->declaredControllers();
+                // "The patch wants an X7" is either explicit ([x7] in the
+                // patch) or implied by ISSUE-3's MIDI diagnostic, which says
+                // precisely "this patch uses MIDI and has no reachable MIDI
+                // hardware" — on a MASTER that means a missing X7, and on a
+                // MASTER18 (MIDI built in) it is never true.
+                wantX7 = m->engine->x7Declared() ||
+                         (m->engine->patchUsesMidi() && !m->engine->midiAvailable());
+            }
+        }
+        return vcvoid::chainplan::compute(declared, wantX7, slots);
+    }
+
+    // The same plan, walking the chain itself — for the callers that only want
+    // the words (the menu item, the tooltip line).
+    vcvoid::chainplan::Plan computeChainPlan() {
+        DroidMasterBase* m = getModule<DroidMasterBase>();
+        if (!m) return {};
+        std::vector<droid::chain::ModelId> slots;
+        collectChainSlots(m, slots, nullptr);
+        return computeChainPlan(m, slots);
+    }
+
+    // Create what the plan asks for. UI thread only (it builds widgets and
+    // walks the rack). Does nothing at all when the plan is blocked or empty,
+    // so it is safe to call unconditionally.
+    ChainFixResult addMissingControllers() {
+        ChainFixResult res;
+        DroidMasterBase* m = getModule<DroidMasterBase>();
+        if (!m) return res;
+        std::vector<droid::chain::ModelId> slots;
+        std::vector<ModuleWidget*> slotWidgets;
+        collectChainSlots(m, slots, &slotWidgets);
+        vcvoid::chainplan::Plan plan = computeChainPlan(m, slots);
+        res.blocker = plan.blocker;
+        if (!plan.blocker.empty() || plan.empty()) return res;
+
+        // Where everything sat before: setModulePosForce shoves whatever is in
+        // the way, silently, so the undo has to put those modules back too.
+        std::vector<std::pair<int64_t, math::Vec>> before;
+        for (ModuleWidget* mw : APP->scene->rack->getModules())
+            if (mw->module) before.push_back({mw->module->id, mw->box.pos});
+
+        auto* batch = new history::ComplexAction;
+        batch->name = "add missing controllers";
+        ModuleWidget* prev = nullptr;
+        int prevSlot = -2;   // no plan can carry this, so the first insert never matches
+        for (const vcvoid::chainplan::Insert& ins : plan.inserts) {
+            // The anchor the new module goes to the right of: the master for
+            // -1, the named chain slot otherwise — or the module this loop
+            // just inserted, when several inserts share an anchor and so
+            // append in order. Read live, because each force-placement can
+            // have moved the anchor that follows.
+            ModuleWidget* anchor = nullptr;
+            if (prev && ins.afterSlot == prevSlot) anchor = prev;
+            else if (ins.afterSlot < 0) anchor = this;
+            else if (ins.afterSlot < (int) slotWidgets.size()) anchor = slotWidgets[ins.afterSlot];
+            if (!anchor) continue;
+            plugin::Model* model = plugin::getModel(pluginInstance->slug, ins.model);
+            if (!model) continue;
+            // Same sequence as the bridge's POST /modules (uatbridge/Bridge.cpp):
+            // the explicit Engine::addModule is REQUIRED — RackWidget::addModule
+            // does not do it, and without an id the widget is a zombie whose
+            // destructor crashes.
+            engine::Module* mod = model->createModule();
+            if (!mod) continue;
+            APP->engine->addModule(mod);
+            ModuleWidget* w = model->createModuleWidget(mod);
+            if (!w) {
+                APP->engine->removeModule(mod);
+                delete mod;   // never adopted by a widget — ours to free
+                continue;
+            }
+            APP->scene->rack->addModule(w);
+            APP->scene->rack->setModulePosForce(
+                w, math::Vec(anchor->box.pos.x + anchor->box.size.x, anchor->box.pos.y));
+            // setModule() snapshots the model, the module json AND the position,
+            // so it runs after the placement: redo must land the module where
+            // it ended up, not where it was born.
+            auto* add = new history::ModuleAdd;
+            add->name = batch->name;
+            add->setModule(w);
+            batch->push(add);
+            res.added.push_back(ins.model);
+            res.addedIds.push_back(mod->id);
+            prev = w;
+            prevSlot = ins.afterSlot;
+        }
+        // The shoved neighbours, recorded AFTER the adds so ComplexAction's
+        // backwards undo restores positions first and removes the new modules
+        // second (and redo re-adds, then re-places).
+        for (ModuleWidget* mw : APP->scene->rack->getModules()) {
+            if (!mw->module) continue;
+            for (const auto& b : before) {
+                if (b.first != mw->module->id) continue;
+                if (!b.second.equals(mw->box.pos)) {
+                    auto* mv = new history::ModuleMove;
+                    mv->name = batch->name;
+                    mv->moduleId = b.first;
+                    mv->oldPos = b.second;
+                    mv->newPos = mw->box.pos;
+                    batch->push(mv);
+                }
+                break;
+            }
+        }
+        if (batch->isEmpty()) delete batch;
+        else APP->history->push(batch);
+        // process() rebuilds chainPhysical from the expander scan, which takes
+        // a frame or two to see the new modules; arm the revalidation so the
+        // verdict moves as soon as it can.
+        m->chainDirty.store(true);
+        return res;
+    }
+
     void step() override {
         ModuleWidget::step();
         // Widget ctors run before the module is added to APP->scene, so
@@ -1721,24 +1886,34 @@ struct DroidMasterBaseWidget : ModuleWidget {
         // advances in real time (a static wrong chain still errors within it).
         bool force = m->chainForce.exchange(false);
         if (m->chainDirty.exchange(false) || chainRevalPending || force) {
-            std::lock_guard<std::mutex> lock(m->engineMutex);
-            if (m->engine) {
-                m->chainError = droid::chain::validateChain(
-                    m->engine->declaredControllers(), m->chainPhysical);
-                // A misplaced/duplicate X7 is a chain error too (controllerModels()
-                // skips the X7, so validateChain can't see it). chainX7Error is set
-                // in process() under this same lock.
-                if (m->chainError.empty())
-                    m->chainError = m->chainX7Error;
-                auto r = m->chainDebounce.update(m->chainOk, m->chainError.empty(), force);
-                m->chainOk = r.ok;
-                chainRevalPending = r.pending;
-            } else {
-                m->chainError.clear();
-                m->chainOk = true;
-                m->chainDebounce.invalidFrames = 0;
-                chainRevalPending = false;
+            {
+                std::lock_guard<std::mutex> lock(m->engineMutex);
+                if (m->engine) {
+                    m->chainError = droid::chain::validateChain(
+                        m->engine->declaredControllers(), m->chainPhysical);
+                    // A misplaced/duplicate X7 is a chain error too
+                    // (controllerModels() skips the X7, so validateChain can't
+                    // see it). chainX7Error is set in process() under this same
+                    // lock.
+                    if (m->chainError.empty())
+                        m->chainError = m->chainX7Error;
+                    auto r = m->chainDebounce.update(m->chainOk, m->chainError.empty(), force);
+                    m->chainOk = r.ok;
+                    chainRevalPending = r.pending;
+                } else {
+                    m->chainError.clear();
+                    m->chainOk = true;
+                    m->chainDebounce.invalidFrames = 0;
+                    chainRevalPending = false;
+                }
             }
+            // issue #69: the offered FIX moves with the verdict, and on the
+            // same trigger. Outside the lock above — computeChainPlan() takes
+            // engineMutex itself — and cheap enough here because this whole
+            // block only runs when the chain or the patch actually changed.
+            vcvoid::chainplan::Plan fix = computeChainPlan();
+            m->chainFix = fix.summary();
+            m->chainFixBlocker = fix.blocker;
             m->statusDirty.store(true);   // the chain verdict just moved (#46)
         }
         // #46: republish the ring state / blink code / tooltip line whenever
@@ -1850,6 +2025,23 @@ struct DroidMasterBaseWidget : ModuleWidget {
             addWrapped(line);
         }
 
+        // issue #69: a chain error's one mechanical fix, offered where the
+        // error is explained and ahead of Reload — reloading the same patch
+        // into the same chain cannot help, adding the missing modules can.
+        if (s.state == vcvoid::status::State::ChainError) {
+            vcvoid::chainplan::Plan plan = computeChainPlan();
+            if (!plan.blocker.empty())
+                menu->addChild(createMenuItem(
+                    "Add missing controllers — blocked: " + plan.blocker,
+                    "", []() {}, true));
+            else if (plan.empty())
+                menu->addChild(createMenuItem(
+                    "Add missing controllers (nothing to add)", "", []() {}, true));
+            else
+                menu->addChild(createMenuItem(
+                    "Add missing controllers: " + plan.summary(), "",
+                    [this]() { addMissingControllers(); }));
+        }
         menu->addChild(createMenuItem("Reload patch", "", [m, patchPath]() {
             if (!patchPath.empty()) m->loadPatchFile(patchPath);
         }, patchPath.empty()));

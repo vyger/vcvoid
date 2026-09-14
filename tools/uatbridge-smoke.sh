@@ -462,6 +462,10 @@ assert_jq '.line == 0' "diagnostics warnings carries no error line"
 # --- diagnostics: chain-error ---------------------------------------------------
 # Provoked WITHOUT touching the rack: a patch that declares a controller the
 # chain does not have. (The physical row is master|p2b8.)
+#
+# This one declares ONLY an m4, so controller 1 of the chain (the p2b8)
+# contradicts the patch -- a chain no amount of ADDING can fix, which is the
+# blocked half of issue #69.
 CHAIN_PATCH="$SCRATCH/uat-chain-mismatch.ini"
 cat > "$CHAIN_PATCH" <<'EOF'
 # Smoke fixture: declares an m4 the smoke rack does not have -> CHAIN ERROR
@@ -478,6 +482,54 @@ assert_jq '.statusLine | test("ok, [0-9]+ bytes RAM")' "chain-mismatch patch loa
 poll_jq "/master/$MASTER_ID/diagnostics" '.state == "chain-error"' 6 "diagnostics state chain-error"
 assert_jq '.severity == "error"' "diagnostics chain-error severity"
 assert_jq '.message | test("m4")' "diagnostics chain-error message names the mismatch"
+
+# --- #69: "add missing controllers", blocked ------------------------------------
+# The chain's controller 1 is a p2b8 and the patch declares an m4: the action
+# refuses (409) and names the module in the way, and nothing is created.
+assert_jq '.chainFixBlocker | test("p2b8")' "diagnostics chainFixBlocker names the module in the way"
+assert_jq '.chainFix == ""' "diagnostics offers no additions when blocked"
+do_http POST "/master/$MASTER_ID/add-missing-controllers"
+assert_code 409 "POST add-missing-controllers (blocked by the p2b8)"
+assert_jq '.added == []' "blocked add creates nothing"
+assert_jq '.blocker | test("p2b8")' "blocked add names the module in the way"
+
+# --- #69: "add missing controllers", the fix ------------------------------------
+# Same idea, but the patch declares the p2b8 the rack HAS plus an m4 it does
+# not: the missing tail can simply be appended, so the action creates it and
+# the chain error clears.
+ADD_PATCH="$SCRATCH/uat-chain-addable.ini"
+cat > "$ADD_PATCH" <<'EOF'
+# Smoke fixture (#69): the chain's p2b8 plus one m4 that must be created.
+[p2b8]
+
+[m4]
+
+[lfo]
+    hz = 1
+    square = O1
+EOF
+do_http POST "/master/$MASTER_ID/patch" "{\"path\":\"$ADD_PATCH\"}"
+assert_code 200 "POST patch (p2b8 + an absent m4)"
+poll_jq "/master/$MASTER_ID/diagnostics" '.state == "chain-error"' 6 \
+    "diagnostics chain-error (missing m4)"
+assert_jq '.chainFix == "m4"' "diagnostics chainFix names the m4 to add"
+assert_jq '.chainFixBlocker == ""' "diagnostics has nothing blocking the fix"
+do_http POST "/master/$MASTER_ID/add-missing-controllers"
+assert_code 200 "POST add-missing-controllers"
+assert_jq '.added == ["m4"]' "add-missing-controllers created the m4"
+assert_jq '.blocker == ""' "add-missing-controllers reports no blocker"
+ADDED_ID=$(echo "$HTTP_BODY" | jq -r '.addedIds[0] // empty')
+[ -n "$ADDED_ID" ] || fail "add-missing-controllers: no module id in response (body: $HTTP_BODY)"
+poll_jq "/master/$MASTER_ID/status" '.chain == ["p2b8","m4"]' 6 \
+    "the created m4 joins the chain behind the p2b8"
+poll_jq "/master/$MASTER_ID/diagnostics" '.state == "running"' 6 \
+    "the chain error clears once the m4 exists"
+
+# Put the rack back the way the rest of the script (and the next run) expects:
+# master|p2b8, with no leftover m4.
+do_http DELETE "/modules/$ADDED_ID"
+assert_code 200 "DELETE the m4 this run created"
+poll_jq "/master/$MASTER_ID/status" '.chain == ["p2b8"]' 6 "chain back to master|p2b8"
 
 # --- diagnostics + #41: a patch over the 64 000-byte deployed size --------------
 # The limit is measured on the ABBREVIATED (deployed) form, so generate well

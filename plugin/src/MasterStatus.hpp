@@ -413,6 +413,12 @@ struct Report {
     int warningCount = 0;
     std::string warningMessage;    // the first warning
     std::string chainError;        // non-empty: the chain does not match the patch
+    // The "add missing controllers" offer (issue #69), as a chain error's
+    // FIX rather than its description: chainFix names the modules the action
+    // would create ("p2b8, m4"), or chainFixBlocker says why it cannot. Both
+    // empty means the chain error is not of a kind this action touches.
+    std::string chainFix;
+    std::string chainFixBlocker;
     std::string fileName;          // basename, for the card
 };
 
@@ -484,6 +490,13 @@ inline Status evaluate(const Report& r) {
         s.matrix = Matrix::Mirror;   // frozen by the pause, not by us
         s.title = "CHAIN ERROR";
         s.message = r.chainError;
+        // …and, since there is an action that fixes exactly this, point at it.
+        // The blocker wins: "it cannot be fixed by adding" is more useful than
+        // silence when the chain holds the wrong module rather than too few.
+        if (!r.chainFixBlocker.empty())
+            s.message += " · add missing controllers blocked: " + r.chainFixBlocker;
+        else if (!r.chainFix.empty())
+            s.message += " · context menu: add missing controllers (" + r.chainFix + ")";
         return s;
     }
     if (r.warningCount > 0) {

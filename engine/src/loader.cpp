@@ -182,8 +182,11 @@ LoadResult compilePatch(const std::string& text, MasterType master, CompiledPatc
     // Pass 1: controllers + circuit resolution + jack resolution.
     for (auto& sec : pr.sections) {
         if (gen::findController(sec.name)) {
-            // x7 never counts for controller numbering (matches hardware).
-            if (sec.name != "x7") out.controllers.push_back(sec.name);
+            // x7 never counts for controller numbering (matches hardware) —
+            // but the declaration is still recorded, so a caller can tell
+            // "this patch wants an X7" from "this patch wants controller 1".
+            if (sec.name == "x7") out.x7Declared = true;
+            else out.controllers.push_back(sec.name);
             continue;
         }
         const gen::CircuitDef* cdef = gen::findCircuit(sec.name);

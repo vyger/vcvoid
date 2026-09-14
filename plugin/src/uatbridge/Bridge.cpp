@@ -231,6 +231,11 @@ std::string Bridge::handleMasterDiagnostics(DroidMasterBase* m, int* code) {
     for (auto& w : warnings) json_array_append_new(warn, json_string(w.c_str()));
     json_object_set_new(o, "warnings", warn);
     json_object_set_new(o, "midiWarning", json_boolean(midiWarn));
+    // issue #69: the fix the context menu offers for a chain error — the
+    // models "Add missing controllers" would create, or why it cannot. Empty
+    // strings in every other state.
+    json_object_set_new(o, "chainFix", json_string(m->chainFix.c_str()));
+    json_object_set_new(o, "chainFixBlocker", json_string(m->chainFixBlocker.c_str()));
     json_object_set_new(o, "patchPath", json_string(patchPath.c_str()));
     json_object_set_new(o, "stateLine", json_string(stateLine.c_str()));
     // The free-text line stays available so a failure report can quote exactly
@@ -825,6 +830,36 @@ static std::string uiCall(F fn, int* code) {
     Result r = fut.get();
     *code = r.code;
     return r.body;
+}
+
+// POST /master/{id}/add-missing-controllers (issue #69) — the context-menu
+// action, over HTTP. Everything about it lives on the UI thread (it creates
+// Rack modules and walks the rack), so it goes through uiCall and reaches the
+// action the same way a right-click does: via the master's own widget.
+//
+// 200 {"added":[...],"addedIds":[...],"blocker":""} when it added something or
+// had nothing to add; 409 with the blocker text when the chain holds modules
+// that contradict the patch, which inserting cannot fix.
+std::string Bridge::handleMasterAddMissingControllers(DroidMasterBase* m, int* code) {
+    int64_t id = m->id;
+    return uiCall([id](int* c) -> json_t* {
+        auto* mw = dynamic_cast<DroidMasterBaseWidget*>(APP->scene->rack->getModule(id));
+        if (!mw) {
+            *c = 404;
+            return jerr("master widget not found");
+        }
+        DroidMasterBaseWidget::ChainFixResult r = mw->addMissingControllers();
+        json_t* o = json_object();
+        json_t* added = json_array();
+        for (auto& n : r.added) json_array_append_new(added, json_string(n.c_str()));
+        json_object_set_new(o, "added", added);
+        json_t* ids = json_array();
+        for (int64_t mid : r.addedIds) json_array_append_new(ids, json_integer(mid));
+        json_object_set_new(o, "addedIds", ids);
+        json_object_set_new(o, "blocker", json_string(r.blocker.c_str()));
+        *c = r.blocker.empty() ? 200 : 409;
+        return o;
+    }, code);
 }
 
 // Reverse of droid::chain::modelName: the chain-adapter code only exposes
@@ -1812,7 +1847,9 @@ std::string Bridge::handlePing(int* code) {
     json_t* o = json_object();
     // 1 -> 2: added GET /master/{id}/diagnostics and the un-timed
     // POST /params/hold + POST /params/release verbs (issue #49).
-    json_object_set_new(o, "bridgeVersion", json_integer(2));
+    // 2 -> 3: added POST /master/{id}/add-missing-controllers and the
+    // chainFix/chainFixBlocker fields on /diagnostics (issue #69).
+    json_object_set_new(o, "bridgeVersion", json_integer(3));
     json_object_set_new(o, "gitHash", json_string(VCVOID_GIT_HASH));
     return dumpAndFree(o);
 }
@@ -1847,6 +1884,8 @@ std::string Bridge::dispatch(const Request& req) {
             body = handleMasterReload(m, &code);
         else if (req.method == "POST" && parts[2] == "reset-state")
             body = handleMasterResetState(m, &code);
+        else if (req.method == "POST" && parts[2] == "add-missing-controllers")
+            body = handleMasterAddMissingControllers(m, &code);
         else if (req.method == "GET" && parts[2] == "midi-ports")
             body = handleMidiPorts(m, &code);
         else if (req.method == "POST" && parts[2] == "midi-port")

@@ -63,6 +63,10 @@ private:
     std::string handleMasterPatch(DroidMasterBase* m, const Request& req, int* code);
     std::string handleMasterReload(DroidMasterBase* m, int* code);
     std::string handleMasterResetState(DroidMasterBase* m, int* code);
+    // Issue #69: the context menu's "Add missing controllers", over HTTP. Runs
+    // the widget action on the UI thread (it creates Rack modules); 409 with
+    // the blocker text when the chain cannot be fixed by adding.
+    std::string handleMasterAddMissingControllers(DroidMasterBase* m, int* code);
     std::string handleParams(const Request& req, int* code);
     // Un-timed press/release (issue #49): the two halves of POST /params'
     // holdMs, so a test can order overlapping gestures itself (press A, press

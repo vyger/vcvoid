@@ -195,6 +195,8 @@ freshly loaded engine (`engine->setX7Present`) — ISSUE-1.
 | Chain protocol (POD contract) | `engine/src/chain.hpp`, `chain.cpp` |
 | Per-patch circuit state | `engine/src/patchstate.hpp`, `patchstate.cpp`, `Engine::saveState/restoreState/migrateState` |
 | Master Rack host (all masters) | `plugin/src/MasterBase.hpp` |
+| Add missing controllers (pure planner) | `plugin/src/ChainPlan.hpp` (declared list + physical chain → insert list or blocker) |
+| Add missing controllers (apply + undo) | `plugin/src/MasterBase.hpp` (`DroidMasterBaseWidget::addMissingControllers()`) |
 | Visible error state (model) | `plugin/src/MasterStatus.hpp`, `tests/unit/test_masterstatus.cpp` |
 | Visible error state (paint) | `plugin/src/StatusRing.hpp`, `DroidMaster.cpp` matrix modes |
 | Expander relay base | `plugin/src/ChainModule.hpp` |
