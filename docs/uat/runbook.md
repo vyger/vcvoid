@@ -217,6 +217,18 @@ Rack row: `master | p2b8 | b32` (adjacent, left to right).
    clears (~1 s debounce per SKILL.md's driving-knowledge notes). The
    declared-order swap → `CHAIN ERROR` (declaration/chain type mismatch,
    not a renumbering) — assert `.chainError` set until order is restored.
+5. ☐ **Add missing controllers** (issue #69): still on `uat-overlays.ini`
+   (it declares `p2b8` + `b32`), `DELETE /modules/{b32id}` → chain error,
+   red ring (hovering it mentions the fix). Right-click the master: the
+   chain-error card's item names exactly what it will add — **"Add missing
+   controllers: b32"**. Click it → a b32 appears immediately right of the
+   p2b8 with anything further right in the row shoved along, and the error
+   clears: `GET /master/{id}/status` → `.chain == ["p2b8","b32"]`,
+   `.chainError` empty. **Cmd/Ctrl-Z** once removes the b32 again *and*
+   returns the shoved modules to their old x positions (the whole batch is
+   one history action). Same thing headless:
+   `POST /master/{id}/add-missing-controllers` → 200 `{"added":["b32"],
+   "blocker":""}`.
 
 ## Phase 3 — Core registers & math (`uat-core.ini`)
 
@@ -420,6 +432,16 @@ g8-first row pins `chainError` and freezes the G8 gates).
    (`severity`, `code`/`codeColor`, `line`, the card's `title`/`message`) —
    one model, `plugin/src/MasterStatus.hpp`, so what it reports is what the
    panel paints. Use it for the assertions and keep your eyes for the pixels.
+2c. ☐ **"Add missing controllers" when it's blocked** (issue #69): load
+   `uat-overlays.ini` (declares `p2b8` + `b32`) and put the *wrong* module at
+   controller 2 — `DELETE /modules/{b32id}`, then `POST /modules` a `p4b2`
+   in its place → chain error. Right-click the master: the menu item is now
+   **greyed out** and its label says why (wrong module type at controller 2 —
+   the action only ever adds, it never replaces or reorders); clicking does
+   nothing and `GET /modules` is unchanged. Headless:
+   `POST /master/{id}/add-missing-controllers` → 409 with `added: []` and a
+   `blocker` sentence. Same story for an X7 attached but not first in the
+   chain. Fix the chain by hand → the item becomes live again.
 3. ☐ Recovery: fix the error in a scratch copy of the errored
    `.ini` on disk (e.g. `O9`→`O1`) while it's the loaded path; poll
    `GET /master/{id}/status` for `.statusLine` to flip to `^ok` within

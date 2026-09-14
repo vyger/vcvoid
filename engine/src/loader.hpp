@@ -24,6 +24,7 @@ struct CompiledCircuit {
 struct CompiledPatch {
     std::vector<CompiledCircuit> circuits;      // patch order
     std::vector<std::string> controllers;       // declaration order
+    bool x7Declared = false;                    // an [x7] section was present
     std::vector<std::string> cableNames;        // sorted, unique
     std::vector<std::string> texts;             // interned text table (slot 0 == "")
     unsigned ramUsed = 0;                       // filled by RAM accounting (Task 7)
