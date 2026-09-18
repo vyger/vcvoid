@@ -618,6 +618,12 @@ human touchpoint for the release.
      `test-m5-loopback.ini` round-trip intact, no dropped events at 2 notes/s
      under load; `test-m5-extclock.ini` log stays clean of "events lost"
      through a live tempo change and the 64 Hz stress case.
+   - **10.4** M4 fader notch marks and grab width (issue #73), on the
+     `uat-mfps.ini` row: with the track menu open (B2.15), fader 6 shows 10
+     evenly-spaced tick marks in its slot and the CLK menu's fader 8 shows
+     17; a continuous fader shows none, and a settled cap's black centre
+     line sits on a mark. Click-drag just *beside* a cap but still inside
+     its column → that fader moves, not the module.
 3. **Pass/fail the release.** If every automated step passed and the sensory
    spot-check shows no regressions, the build is good to ship. Otherwise,
    record what failed and hold the release.
