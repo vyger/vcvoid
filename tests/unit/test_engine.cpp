@@ -223,6 +223,9 @@ TEST(engine_fader_led_seams) {
 
 // motoquencer step LEDs (motoquencer.md "LED colors"): blue = enabled gate
 // (buttonmode 0), white (negative sentinel) = currently played step, always.
+// The gate colour is the `buttoncolor` input, whose firmware default is 0.1 --
+// the blue end of the colour ramp (issue #76); the golden
+// tests/golden/motoquencer/buttoncolor-*.gold drive it.
 TEST(engine_motoquencer_step_leds) {
     Engine e;
     auto r = e.load(
@@ -235,18 +238,18 @@ TEST(engine_motoquencer_step_leds) {
         "    gate = O2\n");
     CHECK(r.ok);
     e.tick();
-    // Not yet clocked: no played step; all four default gates steady blue (1.2).
+    // Not yet clocked: no played step; all four default gates steady blue (0.1).
     for (int f = 1; f <= 4; f++) {
         CHECK_NEAR(e.faderLed(f), 1.0f, 1e-6f);
-        CHECK_NEAR(e.faderLedColor(f), 1.2f, 1e-6f);
+        CHECK_NEAR(e.faderLedColor(f), 0.1f, 1e-6f);
     }
     e.setValue("I1", 1.0f); e.tick();          // first clock -> step 1 plays
     CHECK_NEAR(e.faderLed(1), 1.0f, 1e-6f);
     CHECK(e.faderLedColor(1) < 0.0f);          // white sentinel
-    CHECK_NEAR(e.faderLedColor(2), 1.2f, 1e-6f);
+    CHECK_NEAR(e.faderLedColor(2), 0.1f, 1e-6f);
     e.setValue("I1", 0.0f); e.tick();
     e.setValue("I1", 1.0f); e.tick();          // second clock -> step 2 plays
-    CHECK_NEAR(e.faderLedColor(1), 1.2f, 1e-6f);   // back to gate blue
+    CHECK_NEAR(e.faderLedColor(1), 0.1f, 1e-6f);   // back to gate blue
     CHECK(e.faderLedColor(2) < 0.0f);
 }
 
@@ -430,7 +433,42 @@ TEST(engine_encoquencer_step_leds) {
     e.setValue("I1", 1.0f); e.tick();              // first clock -> step 1 plays
     CHECK_NEAR(e.encoderStepLed(1), 1.0f, 1e-6f);
     CHECK(e.encoderStepLedColor(1) < 0.0f);        // white sentinel
-    CHECK_NEAR(e.encoderStepLedColor(2), 1.2f, 1e-6f);   // gate blue
+    CHECK_NEAR(e.encoderStepLedColor(2), 0.1f, 1e-6f);   // gate blue (buttoncolor default)
+}
+
+// The golden harness reads panel LEDs through getValue("<handle>.led" /
+// ".color"), where <handle> is a motor fader F<n> or an encoder E<n> /
+// E<ctrl>.<num> — the same handles move/touch resp. turn/push take. hasSignal
+// validates them so a typo cannot masquerade as a reading of 0.
+TEST(engine_led_handles) {
+    Engine e;
+    auto r = e.load(
+        "[m4]\n"
+        "[e4]\n"
+        "[motoquencer]\n"
+        "    numsteps = 4\n"
+        "    buttoncolor = 0.6\n"
+        "    defaultgate = 1\n"
+        "    cv = O1\n"
+        "[encoquencer]\n"
+        "    numsteps = 4\n"
+        "    buttoncolor = 0.4\n"
+        "    defaultgate = 1\n"
+        "    cv = O2\n");
+    CHECK(r.ok);
+    e.tick();
+    CHECK_NEAR(e.getValue("F1.led"), 1.0f, 1e-6f);
+    CHECK_NEAR(e.getValue("F1.color"), 0.6f, 1e-6f);
+    CHECK_NEAR(e.getValue("E2.color"), 0.4f, 1e-6f);
+    CHECK_NEAR(e.getValue("E2.2.color"), 0.4f, 1e-6f);   // dotted == global 2 on an E4
+    // The bare handle keeps its old meaning: the fader POSITION readback.
+    CHECK_NEAR(e.getValue("F1"), e.faderMotorTarget(1), 1e-6f);
+    CHECK(e.hasSignal("F1.color"));
+    CHECK(e.hasSignal("E1.led"));
+    CHECK(!e.hasSignal("F99.color"));      // no such fader in the chain
+    CHECK(!e.hasSignal("O1.color"));       // not an LED handle
+    CHECK(!e.hasSignal("F1.colour"));      // not a suffix we know
+    CHECK(e.getValue("F99.color") == 0.0f);
 }
 
 

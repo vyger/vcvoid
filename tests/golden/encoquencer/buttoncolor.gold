@@ -1,0 +1,34 @@
+# encoquencer `buttoncolor` (encoquencer.md:189 -- the same row as motoquencer's:
+# "a user defined color for the gate buttons ... only used when buttonmode = 0").
+# The E4 skin paints the same LED through the shared SeqCore, on the middle three
+# ring cells below each encoder ("the same function as the touch button's LED in
+# the M4"), so `E<n>.led` / `E<n>.color` read it back.
+tickrate 100
+patch <<<
+[e4]
+[encoquencer]
+    clock       = I1
+    numsteps    = 4
+    numfaders   = 4
+    buttonmode  = 0
+    buttoncolor = 0.6
+    defaultgate = 1
+    cv          = O1
+    gate        = O2
+>>>
+# No clock yet: every gate-on step paints 0.6 (yellow), not the default 0.1.
+@0 expect E1.led 1 tol 1e-6
+@0 expect E1.color 0.6 tol 1e-6
+@0 expect E4.color 0.6 tol 1e-6
+# The dotted encoder handle addresses the same LED (E1.2 = controller 1's
+# encoder 2, i.e. global encoder 2).
+@0 expect E1.2.color 0.6 tol 1e-6
+# Step 1 plays: white sentinel on encoder 1, the gate colour everywhere else.
+@1 set I1 1
+@1 expect E1.color -1 tol 1e-6
+@1 expect E2.color 0.6 tol 1e-6
+@2 set I1 0
+@3 set I1 1
+@3 expect E1.color 0.6 tol 1e-6
+@3 expect E2.color -1 tol 1e-6
+@4 set I1 0

@@ -22,8 +22,20 @@
 // The manual names colours but gives NO RGB triples, so the RGB values below
 // are our interpretation of the standard hues (structure the test pins: 0 =
 // dark, the named hues at their documented values, continuous interpolation
-// between stops). 0.0 -> dark; below the first named stop (0..0.2) we ramp from
-// dark up to cyan; above the last stop (>=1.2) we clamp to blue.
+// between stops). Above the last stop (>= 1.2) we clamp to blue.
+//
+// BELOW the first named stop (0 < v < 0.2) the manual's own wording settles it.
+// Only the exact value 0.0 is dark -- "Sending a value of 0.0 to such a register
+// makes the corresponding LED dark. Other values select a color at FULL
+// BRIGHTNESS" -- so that region is a hue, not a fade to black. The named stops
+// sit on a straight hue line, hue = 180 deg - 300 deg * (v - 0.2): 0.2 cyan
+// 180, 0.4 green 120, 0.6 yellow 60, 0.8 red 0, 1.0 magenta 300, 1.2 blue 240
+// (0.73 orange is the one listed deviation from the line and is kept as
+// listed). Continued backwards the line reaches 240 deg -- blue -- as v -> 0,
+// passing through azure at 0.1. That is also what the motoquencer/encoquencer
+// `buttoncolor` default of 0.1 asks for: their LED table calls the buttonmode-0
+// gate LED "blue" (motoquencer.md "LED colors"; issue #76). So the leading stop
+// is blue and 0..0.2 blends blue -> cyan, with exact 0 still dark.
 //
 // A NEGATIVE value is the WHITE sentinel (SeqCore::kLedWhite): the motoquencer/
 // encoquencer played-step marker ("white | currently played step | always",
@@ -38,11 +50,12 @@ inline RGB fromValue(float v) {
     if (v < 0.f) return {1.f, 1.f, 1.f};    // white sentinel (played step)
     if (v == 0.f) return {0.f, 0.f, 0.f};
 
-    // (value, RGB) stops, ascending by value. The leading 0.0 = dark stop makes
-    // the 0..0.2 region a dark->cyan ramp; the trailing stop clamps the top.
+    // (value, RGB) stops, ascending by value. The leading stop continues the hue
+    // line below cyan (see the header comment), so 0..0.2 blends blue -> cyan
+    // and 0.1 lands on azure; the trailing stop clamps the top.
     struct Stop { float v; RGB c; };
     static const Stop stops[] = {
-        {0.00f, {0.f, 0.f, 0.f}},   // dark
+        {0.00f, {0.f, 0.f, 1.f}},   // blue (the hue line's limit as v -> 0)
         {0.20f, {0.f, 1.f, 1.f}},   // cyan
         {0.40f, {0.f, 1.f, 0.f}},   // green
         {0.60f, {1.f, 1.f, 0.f}},   // yellow

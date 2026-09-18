@@ -9,10 +9,25 @@ static bool inUnit(const RGB& c) {
            c.b >= 0.f && c.b <= 1.f;
 }
 
-// 0.0 = dark, per manual/basics.md §5.5.
+// 0.0 = dark, per manual/basics.md §5.5 ("Sending a value of 0.0 to such a
+// register makes the corresponding LED dark"). EXACTLY 0.0 -- "other values
+// select a color at full brightness", so the neighbourhood of 0 is a hue.
 TEST(droidcolor_dark) {
     RGB dark = fromValue(0.0f);
     CHECK(dark.r == 0.f && dark.g == 0.f && dark.b == 0.f);
+}
+
+// Below the first named stop the hue line (hue = 180 deg - 300 deg * (v - 0.2))
+// runs back to blue as v -> 0, so 0..0.2 blends blue -> cyan and 0.1 is azure.
+// That is the colour the motoquencer/encoquencer `buttoncolor` default of 0.1
+// paints on the buttonmode-0 gate LEDs, which the circuits' own LED table calls
+// "blue" (issue #76).
+TEST(droidcolor_below_cyan) {
+    RGB nearZero = fromValue(0.001f);
+    CHECK(nearZero.r == 0.f && nearZero.g < 0.01f && nearZero.b == 1.f);
+    RGB azure = fromValue(0.1f);
+    CHECK(azure.r == 0.f && azure.b == 1.f);
+    CHECK(std::fabs(azure.g - 0.5f) < 1e-5f);
 }
 
 // Negative = the white sentinel (SeqCore::kLedWhite): the motoquencer/
@@ -57,13 +72,15 @@ TEST(droidcolor_in_range) {
 
 // Intermediate values interpolate: the ramp is continuous (adjacent samples
 // never jump abruptly), as the manual documents ("intermediate values give
-// intermediate colors").
+// intermediate colors"). Scanned from just above 0: the ONLY intended
+// discontinuity is at exactly 0.0, where the manual's dark overrides the hue
+// line (covered by droidcolor_dark / droidcolor_below_cyan).
 TEST(droidcolor_continuous) {
     const float dv = 0.001f;
-    RGB prev = fromValue(0.0f);
-    for (float v = dv; v <= 1.2f; v += dv) {
+    RGB prev = fromValue(dv);
+    for (float v = 2 * dv; v <= 1.2f; v += dv) {
         RGB cur = fromValue(v);
-        // Largest per-channel slope is the dark->cyan ramp over 0..0.2:
+        // Largest per-channel slope is the blue->cyan ramp over 0..0.2:
         // 1.0 unit / 0.2 = 5 per unit -> 0.005 per dv step. Allow generous
         // headroom; a discontinuity (a stop jump) would far exceed this.
         CHECK(std::fabs(cur.r - prev.r) < 0.02f);

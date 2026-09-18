@@ -1,0 +1,82 @@
+# motoquencer `buttoncolor`, driven. motoquencer.md:967 -- a user defined colour
+# for the gate buttons, "only used when buttonmode = 0". It is a plain CV input,
+# so it is live: a change shows on the next tick. 0.0 is the manual's dark
+# (basics.md 5.5: "Sending a value of 0.0 to such a register makes the
+# corresponding LED dark").
+#
+# The other three buttonmodes are unaffected and keep the documented colours of
+# the "LED colors" table (motoquencer.md:868): green start / red end (1), the
+# gate-pattern colour (2), violet skip (3). The white played-step marker beats
+# `buttoncolor` like it beats every other colour.
+tickrate 100
+patch <<<
+[m4]
+[motoquencer]
+    clock       = I1
+    buttoncolor = I2
+    buttonmode  = I3
+    numsteps    = 4
+    numfaders   = 4
+    defaultgate = 1
+    cv          = O1
+    gate        = O2
+>>>
+# buttonmode 0, buttoncolor 0.8 (red): every gate-on step paints it.
+@0 set I2 0.8
+@0 set I3 0
+@0 expect F1.led 1 tol 1e-6
+@0 expect F1.color 0.8 tol 1e-6
+@0 expect F4.color 0.8 tol 1e-6
+# Live: the colour follows its CV input.
+@1 set I2 0.4
+@1 expect F1.color 0.4 tol 1e-6
+# 0.0 = dark.
+@2 set I2 0
+@2 expect F1.color 0 tol 1e-6
+# A NEGATIVE colour value is the engine's out-of-band white sentinel, so
+# `buttoncolor` floors at the colour table's bottom (dark) rather than letting a
+# patch paint the gate LEDs with the played-step marker.
+@3 set I2 -0.5
+@3 expect F1.color 0 tol 1e-6
+@4 set I2 0.8
+@4 expect F1.color 0.8 tol 1e-6
+#
+# buttonmode 1: green start (0.4) / red end (0.8), everything else dark --
+# `buttoncolor` does not reach this mode. Nothing has been clocked yet, so no
+# white marker is in the way.
+@5 set I3 1
+@5 expect F1.led 1 tol 1e-6
+@5 expect F1.color 0.4 tol 1e-6
+@5 expect F2.led 0 tol 1e-6
+@5 expect F3.led 0 tol 1e-6
+@5 expect F4.led 1 tol 1e-6
+@5 expect F4.color 0.8 tol 1e-6
+#
+# buttonmode 2: the gate-pattern colour, cyan (0.2) for the default pattern 0
+# ("gate on the first repetition").
+@7 set I3 2
+@7 expect F1.led 1 tol 1e-6
+@7 expect F1.color 0.2 tol 1e-6
+@7 expect F3.color 0.2 tol 1e-6
+#
+# buttonmode 3: violet (1.1) skip. No step is skipped yet, so every lane is
+# dark; plate 2 sets step 2's skip and lights it violet.
+@9 set I3 3
+@9 expect F1.led 0 tol 1e-6
+@9 expect F2.led 0 tol 1e-6
+@10 touch F2 1
+@11 touch F2 0
+@11 expect F2.led 1 tol 1e-6
+@11 expect F2.color 1.1 tol 1e-6
+@11 expect F1.led 0 tol 1e-6
+#
+# back to buttonmode 0: `buttoncolor` again, on every gate-on step (the skip
+# from the last block does not change the gate LED).
+@13 set I3 0
+@13 expect F1.color 0.8 tol 1e-6
+@13 expect F2.color 0.8 tol 1e-6
+# White still wins: clock once, lane 1 becomes the played step.
+@15 set I1 1
+@15 expect F1.color -1 tol 1e-6
+@15 expect F2.color 0.8 tol 1e-6
+@16 set I1 0

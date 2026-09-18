@@ -373,6 +373,40 @@ void Engine::migrateState(const StateSnapshot& snap) {
     }
 }
 
+// Panel-LED readback handles (golden harness / UAT): "<handle>.led" is the
+// LED's brightness 0..1 and "<handle>.color" its DROID colour value, where
+// <handle> is a motor fader ("F<n>") or an encoder ("E<n>" / "E<ctrl>.<num>")
+// spelled exactly as move/touch resp. turn/push address it. Splits the suffix
+// off `name`, leaving the bare handle in `handle`.
+namespace {
+enum class LedField { None, Bright, Color };
+
+LedField ledSuffix(const std::string& name, std::string& handle) {
+    auto strip = [&](const char* suf, size_t n) {
+        if (name.size() <= n || name.compare(name.size() - n, n, suf) != 0) return false;
+        handle = name.substr(0, name.size() - n);
+        return true;
+    };
+    if (strip(".led", 4)) return LedField::Bright;
+    if (strip(".color", 6)) return LedField::Color;
+    return LedField::None;
+}
+}  // namespace
+
+char Engine::ledHandle(const std::string& handle, int& global1) const {
+    if (auto fn = parseFaderName(handle)) {
+        global1 = *fn;
+        return state_.controllers.validateFader(global1) ? 'F' : char(0);
+    }
+    auto r = parseRegisterName(handle);
+    if (!r || r->type != 'E') return 0;
+    // Same resolution as turn/push (ControllerState::resolve): E<n> is a direct
+    // global index, E<ctrl>.<num> a chain lookup.
+    global1 = r->ctrl == 0 ? state_.controllers.validateGlobal(r->num)
+                           : state_.controllers.globalIndexForReg(*r);
+    return global1 ? 'E' : char(0);
+}
+
 bool Engine::turnEncoder(const std::string& name, long detents) {
     auto r = parseRegisterName(name);
     if (!r || r->type != 'E') return false;
@@ -426,6 +460,27 @@ float Engine::getValue(const std::string& name) const {
         auto it = cableIndex_.find(name);
         return it == cableIndex_.end() ? 0.0f : state_.cables[it->second];
     }
+    // "F<n>.led"/".color", "E<n>.led"/".color" -> panel LED readback. Checked
+    // BEFORE the bare-handle forms, which would otherwise never see the suffix.
+    {
+        std::string handle;
+        int g = 0;
+        switch (ledSuffix(name, handle)) {
+            case LedField::Bright:
+                switch (ledHandle(handle, g)) {
+                    case 'F': return faderLed(g);
+                    case 'E': return encoderStepLed(g);
+                    default:  return 0.0f;
+                }
+            case LedField::Color:
+                switch (ledHandle(handle, g)) {
+                    case 'F': return faderLedColor(g);
+                    case 'E': return encoderStepLedColor(g);
+                    default:  return 0.0f;
+                }
+            case LedField::None: break;
+        }
+    }
     if (auto fn = parseFaderName(name))   // "F<n>" -> fader position readback
         return state_.controllers.faderPosition(*fn);
     auto r = parseRegisterName(name);
@@ -436,6 +491,11 @@ float Engine::getValue(const std::string& name) const {
 bool Engine::hasSignal(const std::string& name) const {
     if (!name.empty() && name[0] == '_')
         return cableIndex_.count(name) != 0;
+    {
+        std::string handle;
+        int g = 0;
+        if (ledSuffix(name, handle) != LedField::None) return ledHandle(handle, g) != 0;
+    }
     if (auto fn = parseFaderName(name))
         return state_.controllers.validateFader(*fn);
     return parseRegisterName(name).has_value();
