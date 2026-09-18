@@ -121,6 +121,11 @@ public:
     // Patch controller declarations in order (x7 never appears; the loader
     // excludes it to match hardware numbering).
     const std::vector<std::string>& declaredControllers() const { return declaredControllers_; }
+    // True iff the patch contains an [x7] section. The X7 is not a controller
+    // (it takes no controller number — the loader keeps it out of the list
+    // above), so it needs its own flag for anyone asking what hardware the
+    // patch expects.
+    bool x7Declared() const { return x7Declared_; }
     // Interned text table of the loaded patch (slot 0 == ""; manual §5.8).
     const std::vector<std::string>& texts() const { return texts_; }
     // Look up the text for a (possibly attenuated) number: floors v; returns ""
@@ -235,6 +240,7 @@ private:
     bool usesMidi_ = false;   // patch contains a midiin/midiout/midithrough circuit
     unsigned ramUsed_ = 0;
     std::vector<std::string> declaredControllers_;
+    bool x7Declared_ = false;   // patch contains an [x7] section
     std::vector<std::string> circuitSignatures_;   // parallel to circuits_ (issue #42)
     std::vector<std::string> texts_;
     std::unordered_set<uint32_t> drivenRegs_;

@@ -286,6 +286,44 @@ TEST(status_chain_error_is_red_with_the_mirror_left_alone) {
     CHECK(s.line == 0);                    // nothing to open an editor at
 }
 
+// A chain error is the one state with a one-click fix (issue #69), so the
+// words that carry the verdict carry the offer too — the tooltip and the LED
+// descriptions are built from oneLine(evaluate(...)) and would otherwise never
+// mention that the context menu can fix this.
+TEST(status_chain_error_names_the_controllers_the_menu_would_add) {
+    Report r;
+    r.havePatch = true;
+    r.loadOk = true;
+    r.chainError = "controller 2: patch declares m4, chain has nothing";
+    r.chainFix = "m4";
+    Status s = evaluate(r);
+    CHECK(s.state == State::ChainError);
+    CHECK(s.message == "controller 2: patch declares m4, chain has nothing"
+                       " · context menu: add missing controllers (m4)");
+}
+
+TEST(status_chain_error_says_when_the_fix_is_blocked) {
+    Report r;
+    r.havePatch = true;
+    r.loadOk = true;
+    r.chainError = "controller 2: patch declares m4, chain has b32";
+    r.chainFix = "m4";                 // ignored: the blocker wins
+    r.chainFixBlocker = "controller 2 is a b32, patch declares m4";
+    Status s = evaluate(r);
+    CHECK(s.message == "controller 2: patch declares m4, chain has b32"
+                       " · add missing controllers blocked: "
+                       "controller 2 is a b32, patch declares m4");
+}
+
+TEST(status_chain_error_with_no_fix_to_offer_says_nothing_extra) {
+    Report r;
+    r.havePatch = true;
+    r.loadOk = true;
+    r.chainError = "x7 must be first in the chain";
+    Status s = evaluate(r);
+    CHECK(s.message == "x7 must be first in the chain");
+}
+
 TEST(status_a_failed_load_outranks_a_chain_error) {
     Report r;
     r.havePatch = true;

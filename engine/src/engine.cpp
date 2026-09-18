@@ -152,6 +152,7 @@ LoadResult Engine::load(const std::string& patchText, const LoadOptions& opts) {
     state_.controllers.configure(cp.controllers);
 
     declaredControllers_ = cp.controllers;
+    x7Declared_ = cp.x7Declared;
     texts_ = cp.texts;
     // Publish the table to circuits (trigseq's `pattern`). texts_ is stable for
     // the life of the load and is not reassigned until the next load, which

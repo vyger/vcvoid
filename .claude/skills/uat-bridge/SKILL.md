@@ -102,10 +102,11 @@ listed here 404 with `{"error":"no such route"}`.
 ### Meta
 | Route | Request | Response 200 | Other codes |
 |---|---|---|---|
-| `GET /ping` | — | `{bridgeVersion:2, gitHash:"<short-sha>"}` | — |
+| `GET /ping` | — | `{bridgeVersion:3, gitHash:"<short-sha>"}` | — |
 
-`bridgeVersion` 2 adds `GET /master/{id}/diagnostics` and the un-timed
-`POST /params/hold` / `POST /params/release` verbs; 1 has neither.
+`bridgeVersion` 3 adds `POST /master/{id}/add-missing-controllers`. 2 adds
+`GET /master/{id}/diagnostics` and the un-timed `POST /params/hold` /
+`POST /params/release` verbs; 1 has neither.
 
 ### Master — patch & status
 | Route | Request | Response 200 | Other codes |
@@ -114,6 +115,7 @@ listed here 404 with `{"error":"no such route"}`.
 | `POST /master/{id}/patch` | `{path}` (must be absolute) | same shape as `/status` | 400 invalid JSON / missing path / non-absolute path; 404 unknown master |
 | `POST /master/{id}/reload` | — | same shape as `/status` | 400 `{"error":"no patch loaded"}`; 404 unknown master |
 | `POST /master/{id}/reset-state` | — | same shape as `/status` (fresh-boot: all stateful circuits re-seed from startvalues) | 400 no patch loaded; 404 unknown master |
+| `POST /master/{id}/add-missing-controllers` | — | `{added:["p2b8","m4",...], blocker:""}` — creates the controllers (and an X7 when the patch wants one) that the declared chain has and the rack lacks, each placed in chain order, shoving later modules right; adds only, never removes/reorders/replaces, and lands as one undoable Rack history action | 409 `{added:[], blocker:"<why>"}` when a module of the wrong type sits at a needed position or an attached X7 isn't first (nothing is added); 503 ui-not-attached; 404 unknown master |
 | `POST /master/{id}/tick-rate` | `{hz}` (one of `2000\|4000\|6000\|8000`, implies Fixed) **or** `{mode:"adaptive"}` (implies Adaptive at the master's current `adaptiveHz`) | same shape as `/status` | 400 invalid JSON, or neither a valid `hz` nor `mode:"adaptive"` (if both `mode` and `hz` are present, `mode` wins — `hz` is not even inspected); 503 ui-not-attached; 404 unknown master |
 | `GET /master/{id}/cpu` | — | `{timingMode, targetHz, effectiveRate, adaptiveHz, tick:{valid, avgUs, maxUs, estCpuShare, windowSeconds}, rack:{meterEnabled, cpuShare?}, profiling:{enabled, circuits:[{index, circuit, totalUs, ticks, avgUs}, ...]}}` — see the CPU/profiling notes below | 404 unknown master |
 | `POST /master/{id}/cpu/profiling` | `{enabled}` (bool) | same shape as `/cpu` | 400 missing/invalid `enabled`; 409 `{"error":"no patch loaded"}`; 404 unknown master |

@@ -32,6 +32,20 @@ TEST(loader_controllers) {
     CHECK(!r2.ok && hasError(r2, "controller"));
 }
 
+// The X7 is declared like a controller but is not one: it takes no controller
+// number (so P1.1 still means the FIRST controller), which is why it gets its
+// own flag rather than a place in the list (issue #69).
+TEST(loader_x7_is_declared_but_takes_no_controller_number) {
+    CompiledPatch cp;
+    auto r = compile("[x7]\n[p2b8]\n[copy]\n input = P1.1\n output = O1\n", cp);
+    CHECK(r.ok);
+    CHECK(cp.x7Declared);
+    CHECK(cp.controllers.size() == 1 && cp.controllers[0] == "p2b8");
+    CompiledPatch cp2;
+    auto r2 = compile("[p2b8]\n[copy]\n input = P1.1\n output = O1\n", cp2);
+    CHECK(r2.ok && !cp2.x7Declared);
+}
+
 // Descriptor spot checks against manual/hardware.md §6.4–6.12 (blue-7).
 TEST(controller_descriptors) {
     auto has = [](const char* name, char t, unsigned n) {

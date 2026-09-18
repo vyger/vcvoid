@@ -77,7 +77,11 @@ for the reason; the **master**'s LED matrix also flashes the hardware's own
 [error blink code](manual/basics.md#53-finding-a-problem-in-your-droid-patch),
 and its context menu quotes the offending line and offers to reload, open the
 file. "Open file" uses your system's default app for
-`.ini` files — associate that with the DROID Forge and it opens there.
+`.ini` files — associate that with the DROID Forge and it opens there. When the
+chain is merely *missing* modules, the menu also offers **"Add missing
+controllers"**, which names what it will add and places them in the right
+order (one undo removes them again); it only ever adds, so if a module of the
+wrong type is in the way the item is greyed out and says why.
 
 **Patch state:** like the hardware, a master remembers buttons, fader positions,
 sequences and presets — but per patch, so switching patches never mixes them up.
