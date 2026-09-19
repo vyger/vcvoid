@@ -1969,6 +1969,32 @@ circuits:
       0..16383 with clamping at both ends, USB port numbering incl. 10 =
       broadcast with TRS asserted silent, no-hardware no-op, no-initial-send,
       controller numbering at both range edges (the Forge-parity edge), load-error gate, exact RAM (1168)."
+  crossfader2:
+    status: done
+    experimental: true
+    difficulty: easy
+    binding: master-only
+    verification: headless
+    spec_gap: false
+    depends_on: [crossfader]
+    notes: "EXPERIMENTAL (vcvoid only, #78) — not DROID firmware, refused at
+      load unless LoadOptions.allowExperimental. Declared in
+      engine/experimental.json. crossfader plus `loop` (gate: S = N segments
+      instead of N-1, fade 1.0 back at input1) and `curve` (integer: 0 =
+      crossfader's linear lerp, same double math so bit-identical; 1 =
+      monotone cubic Hermite; 2 = Fourier; clamped to 0..2 after
+      rounding). All modes work on the RING of N inputs regardless of
+      `loop` (input1's previous neighbour is inputN). Monotone tangents are
+      Fritsch–Carlson: 0 when the two secants disagree in sign or one is
+      flat, else their harmonic mean (never overshoots). Fourier =
+      sum_k P[k]·D(t−k) with the periodic sinc D(x) = sin(πx)cos(πx/N) /
+      (N sin(πx/N)), real for even N (rings). Goldens: linear parity with
+      crossfader (morph + wraparound), loop with linear, cubic ramp / plateau
+      bump / two-input ring / symmetric midpoint / no-overshoot knots+midpoints,
+      Fourier N=4 spike lobes + N=2 cosine, clamp (-1 → linear, 1.4 →
+      cubic, 7 → Fourier), N=0/N=1/gap/
+      fade-default, refusal, RAM 964 (crossfader with the same lines 948,
+      i.e. the 16-byte base delta)."
   trigseq:
     status: done
     experimental: true

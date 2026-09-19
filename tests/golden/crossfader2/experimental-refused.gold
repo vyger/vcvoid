@@ -1,0 +1,12 @@
+# The experimental gate (ADR 0001). This golden deliberately OMITS the
+# `experimental` header line, so the patch loads with allowExperimental=false —
+# the default a user gets until they flip "Allow experimental circuits" in the
+# module's context menu. The load must fail, and the message must name the
+# circuit so it can be found in a long patch.
+expect_load_error Circuit 'crossfader2' is experimental
+patch <<<
+[crossfader2]
+    input1 = I1
+    input2 = I2
+    output = O1
+>>>

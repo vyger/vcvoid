@@ -96,9 +96,12 @@ exist *only here*, not in DROID firmware and not in the Forge. A patch using one
 **"Allow experimental circuits"** in the master's context menu (under
 *Experimental*) to load such a patch. The setting is saved with your Rack patch.
 
-Today there is one: [`trigseq`](manual/circuits/experimental/trigseq.md), a
-declarative trigger sequencer that plays a rhythm you write as text —
-`pattern = "x...x.x."`. See
+Today there are three: [`trigseq`](manual/circuits/experimental/trigseq.md), a
+declarative trigger sequencer that plays a rhythm you write as text
+(`pattern = "x...x.x."`); [`midihirescc`](manual/circuits/experimental/midihirescc.md),
+14-bit MIDI CC output; and [`crossfader2`](manual/circuits/experimental/crossfader2.md),
+a `crossfader` with a smooth cubic curve and a loop mode, for drawing an LFO
+waveform on eight motor faders. See
 [the experimental index](manual/circuits/experimental/index.md).
 
 ### Claude Code

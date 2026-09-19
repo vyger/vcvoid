@@ -1,0 +1,43 @@
+# curve=1 on a rising ramp 0.1/0.2/0.3/0.4, loop=0 (S=3, p = fade*3).
+# Tangents are computed on the RING (input4's next neighbour is input1):
+#   m1: d_prev = i1-i4 = -0.3, d_next = i2-i1 = 0.1 -> opposite signs -> 0
+#   m2: d_prev = 0.1, d_next = 0.1 -> harmonic mean 2/(10+10)           = 0.1
+#   m3: same                                                             = 0.1
+#   m4: d_prev = 0.1, d_next = i1-i4 = -0.3 -> opposite signs           -> 0
+# Hermite basis: h00=2f^3-3f^2+1  h10=f^3-2f^2+f  h01=-2f^3+3f^2  h11=f^3-f^2
+#   fade 0.25 -> p=0.75, seg 0, f=0.75: h00=.15625 h10=.046875 h01=.84375 h11=-.140625
+#      = .15625*0.1 + 0*m1 + .84375*0.2 + (-.140625)*0.1
+#      = .015625 + .16875 - .0140625                                 = 0.1703125
+#   fade 0.5  -> p=1.5, seg 1, f=0.5: h00=h01=0.5 h10=.125 h11=-.125
+#      = 0.1 + 0.15 + .125*0.1 - .125*0.1                            = 0.25
+#   fade 0.75 -> p=2.25, seg 2, f=0.25: h00=.84375 h10=.140625 h01=.15625 h11=-.046875
+#      = .84375*0.3 + .140625*0.1 + .15625*0.4 + 0*m4
+#      = .253125 + .0140625 + .0625                                  = 0.3296875
+#   fade 0 / 1.0 -> knots: input1 = 0.1, input4 = 0.4
+# tol 1e-5 on the interior values: inputs are floats (0.1f etc), so the double
+# math carries ~1e-8 of float-representation noise.
+experimental
+patch <<<
+[crossfader2]
+    input1 = I1
+    input2 = I2
+    input3 = I3
+    input4 = I4
+    fade   = I5
+    curve  = 1
+    output = O1
+>>>
+@0 set I1 0.1
+@0 set I2 0.2
+@0 set I3 0.3
+@0 set I4 0.4
+@0 set I5 0
+@0 expect O1 0.1
+@1 set I5 0.25
+@1 expect O1 0.1703125 tol 1e-5
+@2 set I5 0.5
+@2 expect O1 0.25 tol 1e-5
+@3 set I5 0.75
+@3 expect O1 0.3296875 tol 1e-5
+@4 set I5 1.0
+@4 expect O1 0.4

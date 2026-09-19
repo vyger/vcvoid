@@ -510,9 +510,12 @@ cat > "$ADD_PATCH" <<'EOF'
 EOF
 do_http POST "/master/$MASTER_ID/patch" "{\"path\":\"$ADD_PATCH\"}"
 assert_code 200 "POST patch (p2b8 + an absent m4)"
-poll_jq "/master/$MASTER_ID/diagnostics" '.state == "chain-error"' 6 \
-    "diagnostics chain-error (missing m4)"
-assert_jq '.chainFix == "m4"' "diagnostics chainFix names the m4 to add"
+# The previous fixture left the card in chain-error already, and the verdict
+# (chainError/chainFix) is recomputed one UI frame after the load lands, so a
+# GET can see the NEW load result with the OLD verdict. Poll on what only the
+# new verdict has -- an m4 offered with nothing blocking -- not on the state.
+poll_jq "/master/$MASTER_ID/diagnostics" '.state == "chain-error" and .chainFix == "m4"' 6 \
+    "diagnostics chain-error (missing m4) offers the m4 to add"
 assert_jq '.chainFixBlocker == ""' "diagnostics has nothing blocking the fix"
 do_http POST "/master/$MASTER_ID/add-missing-controllers"
 assert_code 200 "POST add-missing-controllers"

@@ -130,6 +130,64 @@
           "description": "Emits on rest steps — the exact complement of output."
         }
       ]
+    },
+    "crossfader2": {
+      "category": "mixer-cv",
+      "title": "Morph between 8 inputs, smoothly",
+      "description": "crossfader with two extra inputs: curve (0 linear = bit-identical to crossfader, 1 = monotone cubic through the inputs, 2 = Fourier) and loop (treat the inputs as a ring so fade 0..1 travels through all of them and back to the first).",
+      "ramsize": 56,
+      "inputs": [
+        {
+          "prefix": "input",
+          "name": "input1 ... input8",
+          "short": "i",
+          "count": 8,
+          "start_at": 1,
+          "type": "cv",
+          "default": "0.0",
+          "ramhint": "input",
+          "description": "The input signals that you want to crossfade between. At least input1 and input2 need to be patched. Otherwise they are treated like 0 V signals. Exactly as in crossfader.",
+          "essential": 1,
+          "essential_count": 2
+        },
+        {
+          "name": "fade",
+          "short": "f",
+          "type": "fraction",
+          "default": "0.5",
+          "ramhint": "input",
+          "description": "Position of the morph. At 0.0 the output is 100% of the first input. At 1.0 it is 100% of the last patched input, or, with loop set, back at the first input again. Values beyond 1.0 wrap around from the last input to the first, exactly as in crossfader.",
+          "essential": 1
+        },
+        {
+          "name": "curve",
+          "short": "cv",
+          "type": "integer",
+          "default": "0",
+          "ramhint": "input",
+          "description": "Interpolation between the inputs. 0 = linear, bit-identical to crossfader. 1 = cubic: a monotone cubic curve that passes exactly through every input value, has a continuous slope, and never overshoots the range between two neighbouring inputs. 2 = Fourier: the smoothest possible curve through every input (band-limited to the harmonics N inputs can carry); overshoots and rings around a lone step. Values outside 0..2 are clamped.",
+          "essential": 0
+        },
+        {
+          "name": "loop",
+          "short": "lp",
+          "type": "gate",
+          "default": "0",
+          "ramhint": "input",
+          "description": "When set, the inputs form a ring: fade 0.0 ... 1.0 travels through all N patched inputs and back to the first one in N equal segments, so a sawtooth at fade gives a seamless cyclic morph. When off, fade 0.0 ... 1.0 travels from the first to the last input in N-1 segments, exactly as in crossfader.",
+          "essential": 0
+        }
+      ],
+      "outputs": [
+        {
+          "name": "output",
+          "short": "o",
+          "type": "cv",
+          "ramhint": "output",
+          "description": "Output of the mix.",
+          "essential": 1
+        }
+      ]
     }
   }
 }

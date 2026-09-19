@@ -1,0 +1,31 @@
+# Non-zero, non-trivial harmonic-mean tangents: inputs 0.0/0.1/0.5/0.6,
+# loop=0 (S=3, p=fade*3), curve=1, fade 0.5 -> p=1.5, seg 1 (input2->input3), f=0.5.
+#   m2: d_prev = i2-i1 = 0.1, d_next = i3-i2 = 0.4 -> 2/(1/0.1 + 1/0.4) = 2/12.5 = 0.16
+#   m3: d_prev = 0.4,          d_next = i4-i3 = 0.1 -> 2/(2.5 + 10)     = 0.16
+# At f=0.5: h00=h01=0.5, h10=0.125, h11=-0.125, so the tangent terms cancel
+# because m2 == m3 (the pair is symmetric) and the midpoint is the average:
+#   = 0.5*0.1 + 0.125*0.16 + 0.5*0.5 - 0.125*0.16 = 0.05 + 0.25 = 0.3
+# A second sample off the midpoint, where the tangents do NOT cancel:
+# fade 0.25 -> p=0.75, seg 0 (input1->input2), f=0.75.
+#   m1: d_prev = i1-i4 = -0.6, d_next = 0.1 -> opposite -> 0;  m2 = 0.16
+#   h00=.15625 h10=.046875 h01=.84375 h11=-.140625
+#   = .15625*0 + 0 + .84375*0.1 + (-.140625)*0.16 = .084375 - .0225 = 0.061875
+experimental
+patch <<<
+[crossfader2]
+    input1 = I1
+    input2 = I2
+    input3 = I3
+    input4 = I4
+    fade   = I5
+    curve  = 1
+    output = O1
+>>>
+@0 set I1 0.0
+@0 set I2 0.1
+@0 set I3 0.5
+@0 set I4 0.6
+@0 set I5 0.5
+@0 expect O1 0.3 tol 1e-5
+@1 set I5 0.25
+@1 expect O1 0.061875 tol 1e-5

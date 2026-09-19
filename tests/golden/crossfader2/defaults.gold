@@ -1,0 +1,65 @@
+# Degenerate input counts and gaps, all with curve=1 (the cubic path must
+# handle them exactly like crossfader's linear path does).
+# Block A: no input patched (N=0) -> output 0 regardless of fade.
+# Block B: only input1 patched (N=1) -> output is input1 regardless of fade.
+# Block C: input1 and input3 patched, input2 not: N=3 (highest patched), the
+# gap reads 0 V. inputs 0.4/(0)/0.4, loop=0 (S=2, p=fade*2). Knots 0.4, 0, 0.4
+# are all extrema on the ring, so every tangent is 0:
+#   m1: d_prev = i1-i3 = 0,    d_next = -0.4 -> product 0 -> 0
+#   m2: d_prev = -0.4,         d_next = 0.4  -> opposite  -> 0
+#   m3: d_prev = 0.4,          d_next = 0    -> product 0 -> 0
+#   fade 0.25 -> p=0.5, f=0.5 -> .5*0.4 + .5*0 = 0.2
+#   fade 0.5  -> p=1.0        -> input2 (unpatched)      = 0
+#   fade 1.0  -> p=2.0        -> input3                  = 0.4
+# Block D: fade unpatched defaults to 0.5 -> N=2, S=1, p=0.5 -> raised-cosine
+# midpoint of 0.4/0.6 = 0.5 (tangents zero on a two-point ring).
+experimental
+patch <<<
+[crossfader2]
+    fade   = I1
+    curve  = 1
+    output = O1
+>>>
+
+patch <<<
+[crossfader2]
+    input1 = I2
+    fade   = I1
+    curve  = 1
+    output = O2
+>>>
+
+patch <<<
+[crossfader2]
+    input1 = I3
+    input3 = I4
+    fade   = I5
+    curve  = 1
+    output = O3
+>>>
+
+patch <<<
+[crossfader2]
+    input1 = I6
+    input2 = I7
+    curve  = 1
+    output = O4
+>>>
+@0 set I1 0.75
+@0 set I2 0.7
+@0 set I3 0.4
+@0 set I4 0.4
+@0 set I5 0.25
+@0 set I6 0.4
+@0 set I7 0.6
+@0 expect O1 0
+@0 expect O2 0.7
+@0 expect O3 0.2
+@0 expect O4 0.5
+@1 set I1 0.1
+@1 set I5 0.5
+@1 expect O1 0
+@1 expect O2 0.7
+@1 expect O3 0
+@2 set I5 1.0
+@2 expect O3 0.4

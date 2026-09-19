@@ -102,9 +102,10 @@ TEST(firmware_circuits_are_not_experimental) {
     // experimental circuit does not require editing this line — only the
     // firmware count is load-bearing (jackgen.py asserts the same 76).
     CHECK(gen::kNumCircuits - experimental == 76);
-    CHECK(experimental == 2);
+    CHECK(experimental == 3);
     CHECK(gen::findCircuit("euklid") != nullptr);
     CHECK(!gen::findCircuit("euklid")->experimental);
     CHECK(gen::findCircuit("trigseq")->experimental);
     CHECK(gen::findCircuit("midihirescc")->experimental);
+    CHECK(gen::findCircuit("crossfader2")->experimental);
 }

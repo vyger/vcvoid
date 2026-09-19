@@ -1,0 +1,52 @@
+# A single raised input on a flat floor: 0.2/0.2/0.8/0.2, loop=1 (S=4, p=fade*4),
+# curve=1. Every tangent is zero:
+#   m1: d_prev = i1-i4 = 0,   d_next = 0    -> product 0 -> 0
+#   m2: d_prev = 0,           d_next = 0.6  -> product 0 -> 0
+#   m3: d_prev = 0.6,         d_next = -0.6 -> opposite  -> 0
+#   m4: d_prev = -0.6,        d_next = 0    -> product 0 -> 0
+# So between equal inputs the section is genuinely flat, the peak is exactly
+# 0.8 with a horizontal tangent, and at every midpoint (f=0.5, h00=h01=0.5,
+# tangent terms vanish) the output is the plain average of the two knots.
+#   fade 0     -> p=0   -> i1                 = 0.2
+#   fade 0.125 -> p=0.5 -> .5*i1 + .5*i2      = 0.2   (flat plateau)
+#   fade 0.25  -> p=1   -> i2                 = 0.2
+#   fade 0.375 -> p=1.5 -> .5*i2 + .5*i3      = 0.5
+#   fade 0.5   -> p=2   -> i3                 = 0.8   (peak, no overshoot)
+#   fade 0.625 -> p=2.5 -> .5*i3 + .5*i4      = 0.5
+#   fade 0.75  -> p=3   -> i4                 = 0.2
+#   fade 0.875 -> p=3.5 -> .5*i4 + .5*i1      = 0.2   (flat around the seam)
+#   fade 1.0   -> p=4 mod 4 = 0 -> i1         = 0.2
+experimental
+patch <<<
+[crossfader2]
+    input1 = I1
+    input2 = I2
+    input3 = I3
+    input4 = I4
+    fade   = I5
+    curve  = 1
+    loop   = 1
+    output = O1
+>>>
+@0 set I1 0.2
+@0 set I2 0.2
+@0 set I3 0.8
+@0 set I4 0.2
+@0 set I5 0
+@0 expect O1 0.2
+@1 set I5 0.125
+@1 expect O1 0.2
+@2 set I5 0.25
+@2 expect O1 0.2
+@3 set I5 0.375
+@3 expect O1 0.5
+@4 set I5 0.5
+@4 expect O1 0.8
+@5 set I5 0.625
+@5 expect O1 0.5
+@6 set I5 0.75
+@6 expect O1 0.2
+@7 set I5 0.875
+@7 expect O1 0.2
+@8 set I5 1.0
+@8 expect O1 0.2
