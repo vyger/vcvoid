@@ -163,6 +163,15 @@ LoadResult Engine::load(const std::string& patchText, const LoadOptions& opts) {
         for (auto& p : cc.params)
             if (!p.def->isInput && p.a.kind == Atom::Kind::Register)
                 drivenRegs_.insert(pack(p.a.reg));
+    // M4 touch-plate LEDs (hardware.md §6.11, issue #80): "if you JUST use the
+    // R registers" / "if you JUST use the L register" is a property of the
+    // PATCH, not of a tick, so the per-fader answer is cached here once from
+    // the static output bindings. ControllerState::writePlateLed applies it on
+    // every register write. Must run AFTER drivenRegs_ is built.
+    for (int g = 1; g <= state_.controllers.faderCount(); g++)
+        state_.controllers.setPlateLedDriven(
+            g, registerDriven(state_.controllers.plateLedReg(g, 'L')),
+               registerDriven(state_.controllers.plateLedReg(g, 'R')));
 
     usesMidi_ = false;
     circuitSignatures_.clear();

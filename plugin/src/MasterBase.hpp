@@ -1221,14 +1221,19 @@ public:
                     int g = ++fad2;
                     b.motorTarget[f - 1] = engine->faderMotorTarget(g);
                     b.notches[f - 1]     = (uint8_t) engine->faderNotches(g);
-                    b.faderLed[f - 1]    = engine->faderLed(g);
-                    // Colour is the motorfader's `ledcolor` (FaderState.ledColor).
-                    // There is NO per-fader R-register override in the engine: R
-                    // registers are master-global R1..R56 (ctrl==0), never
-                    // R<ctrl>.<f> (validRegisterOnMaster16 rejects R with ctrl!=0,
-                    // and no circuit binds it), so registerDriven({'R',ctrl,f}) is
-                    // permanently false and the spec-§2 R override is a dead branch
-                    // — omitted. See task-2 report Step-1 finding on the R feed.
+                    // The M4 touch-plate LED. FaderState.led/ledColor is the
+                    // single place both of its drivers land, so nothing has to
+                    // be merged here: a circuit that owns the fader
+                    // (motorfader's `ledcolor`, motoquencer's step paint) and
+                    // the plate's own register pair L<ctrl>.<f> (brightness) /
+                    // R<ctrl>.<f> (colour, hardware.md §6.11) both write it —
+                    // the register pair through Output::set ->
+                    // ControllerState::writePlateLed, in patch order, so the
+                    // last writer of the cycle wins exactly as on hardware
+                    // (issue #80). In particular these two fields — NOT the
+                    // generic b.leds[] bank filled above, which M4.cpp ignores
+                    // — are what carries an L1.x write to an M4 panel.
+                    b.faderLed[f - 1]      = engine->faderLed(g);
                     b.faderLedColor[f - 1] = engine->faderLedColor(g);
                 }
                 // --- DB8E symbolic screen (1 per DB8E, chain order) ----------

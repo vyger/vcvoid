@@ -1,0 +1,73 @@
+# M4 touch-plate LED registers: L<ctrl>.<k> brightness + R<ctrl>.<k> colour
+# (manual/hardware.md §6.11 "The LEDs" / "Registers", issue #80).
+#
+#   "The LED below the touch plates can be accessed with an L register - just
+#    like in the P2B8. In addition, there is a R register that controls the
+#    color of the LED, similar to those on the master. If you just use the R
+#    registers, the LED will light in full brightness. If you just use the L
+#    register, the LED lights white in the brightness specified by the value you
+#    feed into that register. Using both R and L at the same time gives you
+#    control over brightness and color."
+#
+# The M4 is the ONLY controller with R registers (Forge numControllerRegisters:
+# only m4 declares REGISTER_RGB_LED). "Just use R" / "just use L" is a property
+# of the PATCH, not of the tick: the engine decides per fader from the static
+# bindings (Engine::registerDriven), so an L-only fader stays white even on a
+# tick where the driving circuit happens to write 0.
+#
+# Readback: `F<n>.led` is FaderState.led (brightness 0..1), `F<n>.color` is
+# FaderState.ledColor (a DROID colour value; negative == the white sentinel
+# SeqCore::kLedWhite, 0 == dark per basics.md §5.5).
+tickrate 100
+patch <<<
+[m4]
+
+# Fader 1: R only, and LIVE off an input -- full brightness, colour follows CV.
+[copy]
+    input = I1
+    output = R1.1
+
+# Fader 2: L only -> white at the given brightness.
+[copy]
+    input = 0.5
+    output = L1.2
+
+# Fader 3: both -> the R hue at the L brightness.
+[copy]
+    input = 0.5
+    output = L1.3
+[copy]
+    input = 0.4
+    output = R1.3
+
+# Fader 4: R only, value 0 -> dark (the renderer maps colour 0 to black).
+[copy]
+    input = 0
+    output = R1.4
+>>>
+# R only: brightness pinned at 1, colour = the R value.
+@0 set I1 0.8
+@0 expect F1.led 1 tol 1e-6
+@0 expect F1.color 0.8 tol 1e-6
+# L only: white sentinel, brightness = the L value.
+@0 expect F2.led 0.5 tol 1e-6
+@0 expect F2.color -1 tol 1e-6
+# Both: hue at brightness.
+@0 expect F3.led 0.5 tol 1e-6
+@0 expect F3.color 0.4 tol 1e-6
+# R = 0.0 -> dark, still at full brightness (the colour, not the level, is off).
+@0 expect F4.led 1 tol 1e-6
+@0 expect F4.color 0 tol 1e-6
+#
+# Live: the R register is an ordinary register write, so the plate follows it
+# every tick.
+@1 set I1 0.4
+@1 expect F1.color 0.4 tol 1e-6
+@1 expect F1.led 1 tol 1e-6
+# An R-only fader driven to 0 goes dark and comes back -- it never falls back to
+# white, because the patch does not drive L1.1.
+@2 set I1 0
+@2 expect F1.color 0 tol 1e-6
+@2 expect F1.led 1 tol 1e-6
+@3 set I1 1.1
+@3 expect F1.color 1.1 tol 1e-6

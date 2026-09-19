@@ -20,18 +20,23 @@ struct ControllerModel {
     uint8_t leds;      // L registers
     uint8_t switches;  // S registers
     uint8_t encoders;  // E registers
+    uint8_t rgbLeds;   // R registers (LED COLOUR) — M4 only, hardware.md §6.11:
+                       // "In addition, there is a R register that controls the
+                       // color of the LED, similar to those on the master."
+                       // Forge parity: numControllerRegisters declares
+                       // REGISTER_RGB_LED: 4 for m4 and for no other model.
     uint8_t faders;    // motor faders (not a register)
     bool permissive;
 };
 
 // Returns the descriptor for a controller model name (e.g. "p2b8"), or nullptr
 // if the name is not a known controller. x7 is intentionally absent: it carries
-// no P/B/L/S/E controls and never occupies a controller-numbering position.
+// no P/B/L/S/E/R controls and never occupies a controller-numbering position.
 const ControllerModel* findControllerModel(const std::string& name);
 
-// True if element `num` (1-based) of register kind `t` (one of P,B,L,S,E) exists
-// on model `m`. Unknown kinds return false. Permissive models return true for
-// any non-zero num of any kind.
+// True if element `num` (1-based) of register kind `t` (one of P,B,L,S,E,R)
+// exists on model `m`. Unknown kinds return false. Permissive models return true
+// for any non-zero num of any kind.
 bool controllerHasElement(const ControllerModel& m, char t, unsigned num);
 
 } // namespace droid

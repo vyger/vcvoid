@@ -56,13 +56,24 @@ bool validRegister(const RegId& r, MasterType master,
                 if (r.ctrl >= 1 && r.ctrl <= 4 && r.num >= 1 && r.num <= 8) return true;
             }
             break;
-        case 'R':
-            if (r.ctrl == 0 && r.num >= 1 && r.num <= 56 &&
-                !(m18 && r.num >= 5 && r.num <= 16)) return true;
-            break;
         case 'X':
             if (!m18 && r.ctrl == 0 && r.num == 1) return true;
             break;
+        case 'R':
+            // R lives in TWO namespaces. Undotted (ctrl == 0) it is the master's
+            // own LED-matrix colour bank R1-R56 (basics.md §5.5). DOTTED it is a
+            // controller register: the M4's four touch-plate LED colours
+            // (hardware.md §6.11 "In addition, there is a R register that
+            // controls the color of the LED, similar to those on the master"),
+            // and no other model has one. So a dotted R falls through to the
+            // shared controller branch below, which range-checks it per model
+            // and names the model in its error (issue #80).
+            if (r.ctrl == 0) {
+                if (r.num >= 1 && r.num <= 56 && !(m18 && r.num >= 5 && r.num <= 16))
+                    return true;
+                break;
+            }
+            [[fallthrough]];
         case 'P': case 'B': case 'L': case 'S': case 'E': {
             unsigned n = (unsigned)controllers.size();
             if (r.ctrl < 1 || r.ctrl > n) {

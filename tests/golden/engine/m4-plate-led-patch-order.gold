@@ -1,0 +1,38 @@
+# M4 touch-plate LED: patch order decides who owns the plate (issue #80).
+#
+# On hardware the plate LED is ONE register pair per fader, so the last write of
+# the cycle wins -- and the cycle runs the circuits in patch order
+# (manual/basics.md §5.2). A `motoquencer` paints the plates of the faders it
+# owns straight into FaderState; an `L`/`R` register write lands on the same
+# state through Output::set. Whichever runs LAST is what the LED shows.
+#
+# Here: motoquencer first, the R write second -> the R write owns fader 1 and
+# the motoquencer keeps faders 2..4. The mirrored file
+# m4-plate-led-patch-order-reversed.gold proves the other direction.
+tickrate 100
+patch <<<
+[m4]
+
+[motoquencer]
+    clock       = I1
+    numsteps    = 4
+    numfaders   = 4
+    defaultgate = 1
+    buttoncolor = 0.8
+    cv          = O1
+    gate        = O2
+
+[copy]
+    input  = 0.4
+    output = R1.1
+>>>
+# Fader 1: the later [copy] overwrites the motoquencer's gate colour.
+@0 expect F1.color 0.4 tol 1e-6
+@0 expect F1.led 1 tol 1e-6
+# Faders 2..4: untouched by the copy, still the motoquencer's buttoncolor.
+@0 expect F2.color 0.8 tol 1e-6
+@0 expect F3.color 0.8 tol 1e-6
+@0 expect F4.color 0.8 tol 1e-6
+# Every tick, not just the first.
+@5 expect F1.color 0.4 tol 1e-6
+@5 expect F2.color 0.8 tol 1e-6

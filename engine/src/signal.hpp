@@ -104,8 +104,22 @@ public:
     bool connected() const { return present_; }
     void set(EngineState& s, float v) const {
         if (!present_) return;
-        if (target_.kind == Operand::Kind::Register) s.regs.set(target_.reg, v);
-        else if (target_.kind == Operand::Kind::Cable) s.cables[target_.cableIndex] = v;
+        if (target_.kind == Operand::Kind::Register) {
+            s.regs.set(target_.reg, v);
+            // This is the ONE place a circuit's register output write passes
+            // through, so it is where the M4 touch-plate LED pair is resolved:
+            // writing L<ctrl>.<k> or R<ctrl>.<k> on an M4 paints that fader's
+            // plate LED (hardware.md §6.11; ControllerState::writePlateLed).
+            // Hooking here — inside the writing circuit's own tick, BELOW
+            // whatever select/selectat gating decided the circuit writes at all
+            // — reproduces the hardware's single register store per plate for
+            // free: the last writer in patch order owns the LED for the cycle.
+            if (target_.reg.ctrl != 0 &&
+                (target_.reg.type == 'L' || target_.reg.type == 'R'))
+                s.controllers.writePlateLed(target_.reg, s.regs);
+        } else if (target_.kind == Operand::Kind::Cable) {
+            s.cables[target_.cableIndex] = v;
+        }
     }
     void bind(Operand target) { target_ = target; present_ = true; }
 private:

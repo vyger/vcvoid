@@ -5,19 +5,66 @@ namespace droid {
 
 void ControllerState::configure(const std::vector<std::string>& controllerModels) {
     slots_.clear();
-    int faderCount = 0;
+    faderSlots_.clear();
     int displayCount = 0;
     for (size_t i = 0; i < controllerModels.size(); i++) {
         const ControllerModel* m = findControllerModel(controllerModels[i]);
         if (!m) continue;
         for (uint8_t n = 1; n <= m->encoders; n++)
             slots_.push_back(Slot{uint8_t(i + 1), n});
-        faderCount += m->faders;   // 4 per M4, in chain order
+        // 4 per M4, in chain order. The slot also records (ctrl, index on that
+        // controller), which is what addresses the fader's touch-plate LED
+        // register pair L<ctrl>.<k> / R<ctrl>.<k> (hardware.md §6.11).
+        for (uint8_t n = 1; n <= m->faders; n++)
+            faderSlots_.push_back(Slot{uint8_t(i + 1), n});
         if (controllerModels[i] == "db8e") displayCount++;
     }
     encoders_.assign(slots_.size(), EncoderState{});
-    faders_.assign(faderCount, FaderState{});
+    faders_.assign(faderSlots_.size(), FaderState{});
+    plateDriven_.assign(faderSlots_.size(), 0);
     displays_.assign(displayCount, DisplayState{});
+}
+
+int ControllerState::faderIndexForPlateLed(const RegId& r) const {
+    if ((r.type != 'L' && r.type != 'R') || r.ctrl == 0) return 0;
+    for (size_t i = 0; i < faderSlots_.size(); i++)
+        if (faderSlots_[i].ctrl == r.ctrl && faderSlots_[i].num == r.num) return int(i + 1);
+    return 0;
+}
+
+RegId ControllerState::plateLedReg(int fader1, char type) const {
+    if (fader1 < 1 || fader1 > (int)faderSlots_.size()) return RegId{};
+    if (type != 'L' && type != 'R') return RegId{};
+    return RegId{type, faderSlots_[fader1 - 1].ctrl, faderSlots_[fader1 - 1].num};
+}
+
+void ControllerState::setPlateLedDriven(int fader1, bool l, bool r) {
+    if (fader1 < 1 || fader1 > (int)plateDriven_.size()) return;
+    plateDriven_[fader1 - 1] = uint8_t((l ? 1u : 0u) | (r ? 2u : 0u));
+}
+
+bool ControllerState::writePlateLed(const RegId& r, const RegisterFile& regs) {
+    int g = faderIndexForPlateLed(r);
+    if (!g) return false;
+    FaderState* f = fader(g);
+    if (!f) return false;
+    uint8_t driven = plateDriven_[g - 1];
+    // hardware.md §6.11: R alone = full brightness in that hue; L alone = white
+    // at that brightness; both = hue at that brightness (colour 0.0 = dark).
+    // WHICH of the two the patch "just uses" is static — Engine::load records it
+    // via setPlateLedDriven — so an L-only plate stays white even on a tick
+    // where its circuit happens to write 0, and an R-only plate stays at full
+    // brightness. |L| mirrors the generic L-register rule the Rack adapter
+    // already applies to every other model (a negative brightness reads as its
+    // magnitude).
+    float bright = 1.0f;
+    if (driven & 1u) {
+        bright = regs.get(RegId{'L', r.ctrl, r.num});
+        if (bright < 0.0f) bright = -bright;
+    }
+    f->led = bright;
+    f->ledColor = (driven & 2u) ? regs.get(RegId{'R', r.ctrl, r.num}) : kPlateLedWhite;
+    return true;
 }
 
 int ControllerState::globalIndexForReg(const RegId& r) const {
