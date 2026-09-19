@@ -1,17 +1,23 @@
-# `curve` values other than 0 are treated as 1 (cubic). Same scenario as
-# cubic-two-inputs (N=2, 0.2/0.8, loop=1, all tangents zero) with curve=2 (O1)
-# and curve=-1 (O2): fade 0.25 -> p=0.5 -> 0.5,  fade 0.5 -> input2 = 0.8.
-# For contrast the linear result at fade 0.25 would also be 0.5 here, so the
-# distinguishing sample is fade 0.125 -> p=0.25, f=0.25:
-#   cubic  = h00*0.2 + h01*0.8 = .84375*0.2 + .15625*0.8 = .16875 + .125 = 0.29375
-#   linear = .75*0.2 + .25*0.8 = 0.35   (what curve=0 would give)
+# `curve` is clamped to 0..2 after rounding. N=4 spike 1/0/0/0, loop=1 (S=4,
+# p = fade*4), one circuit per value:
+#   curve = -1  -> 0 (linear):   fade 0.375 -> p=1.5 -> 0.5*i2 + 0.5*i3 = 0
+#   curve = 1.4 -> 1 (cubic):    fade 0.375 -> seg 1 (0 -> 0), both tangents 0
+#                                (i2 and i3 are extrema/flat)              = 0
+#   curve = 7   -> 2 (Fourier):  fade 0.375 -> t=1.5 -> D(1.5) with N=4:
+#                                sin(1.5pi) cos(1.5pi/4) / (4 sin(1.5pi/4))
+#                                = -1 * cos(3pi/8) / (4 sin(3pi/8))
+#                                = -1 / (4 tan(3pi/8)) = -1/(4*2.414214)  = -0.103553
+# The Fourier line is the one that distinguishes a high clamp from 1:
+# Fourier is the only mode that goes negative there.
 experimental
 patch <<<
 [crossfader2]
     input1 = I1
     input2 = I2
-    fade   = I3
-    curve  = 2
+    input3 = I3
+    input4 = I4
+    fade   = I5
+    curve  = -1
     loop   = 1
     output = O1
 >>>
@@ -20,19 +26,34 @@ patch <<<
 [crossfader2]
     input1 = I1
     input2 = I2
-    fade   = I3
-    curve  = -1
+    input3 = I3
+    input4 = I4
+    fade   = I5
+    curve  = 1.4
     loop   = 1
     output = O2
 >>>
-@0 set I1 0.2
-@0 set I2 0.8
-@0 set I3 0.125
-@0 expect O1 0.29375 tol 1e-5
-@0 expect O2 0.29375 tol 1e-5
-@1 set I3 0.25
+
+patch <<<
+[crossfader2]
+    input1 = I1
+    input2 = I2
+    input3 = I3
+    input4 = I4
+    fade   = I5
+    curve  = 7
+    loop   = 1
+    output = O3
+>>>
+@0 set I1 1
+@0 set I2 0
+@0 set I3 0
+@0 set I4 0
+@0 set I5 0.375
+@0 expect O1 0
+@0 expect O2 0
+@0 expect O3 -0.103553 tol 1e-5
+@1 set I5 0.125
 @1 expect O1 0.5
 @1 expect O2 0.5
-@2 set I3 0.5
-@2 expect O1 0.8
-@2 expect O2 0.8
+@1 expect O3 0.603553 tol 1e-5

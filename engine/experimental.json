@@ -134,7 +134,7 @@
     "crossfader2": {
       "category": "mixer-cv",
       "title": "Morph between 8 inputs, smoothly",
-      "description": "crossfader with two extra inputs: curve (0 linear = bit-identical to crossfader, 1 = monotone cubic through the inputs, smooth and never overshooting) and loop (treat the inputs as a ring so fade 0..1 travels through all of them and back to the first).",
+      "description": "crossfader with two extra inputs: curve (0 linear = bit-identical to crossfader, 1 = monotone cubic through the inputs, 2 = Fourier) and loop (treat the inputs as a ring so fade 0..1 travels through all of them and back to the first).",
       "ramsize": 56,
       "inputs": [
         {
@@ -165,7 +165,7 @@
           "type": "integer",
           "default": "0",
           "ramhint": "input",
-          "description": "Interpolation between two neighbouring inputs. 0 = linear, bit-identical to crossfader. 1 = cubic: a monotone cubic curve that passes exactly through every input value, has a continuous slope across the inputs, and never overshoots the range between two neighbouring inputs.",
+          "description": "Interpolation between the inputs. 0 = linear, bit-identical to crossfader. 1 = cubic: a monotone cubic curve that passes exactly through every input value, has a continuous slope, and never overshoots the range between two neighbouring inputs. 2 = Fourier: the smoothest possible curve through every input (band-limited to the harmonics N inputs can carry); overshoots and rings around a lone step. Values outside 0..2 are clamped.",
           "essential": 0
         },
         {

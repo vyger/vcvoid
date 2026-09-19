@@ -1,0 +1,61 @@
+# curve=2: Fourier (band-limited trigonometric) interpolation on the ring.
+# output(t) = sum_k P[k] * D(t - k), D(x) = sin(pi x) cos(pi x/N) / (N sin(pi x/N)),
+# D(0) = 1 and D(integer) = 0, so every knot is hit exactly.
+#
+# Block 1 (O1): N=4 spike 1/0/0/0, loop=1 (t = fade*4). output = D(t):
+#   t=0.5: sin(pi/2) cos(pi/8) / (4 sin(pi/8)) = 1/(4 tan(pi/8)) = 1/(4*0.414214) = 0.603553
+#   t=1.0: 0 (knot)
+#   t=1.5: sin(3pi/2) cos(3pi/8) / (4 sin(3pi/8)) = -1/(4 tan(3pi/8)) = -1/9.656854 = -0.103553
+#   t=2.0: 0 (knot);  t=2.5: -0.103553 (mirror);  t=3.5: 0.603553 (mirror)
+#   fade 1.0 -> t=4 -> back at input1 = 1.
+# The negative lobes are the ringing this mode is allowed to have.
+#
+# Block 2 (O2): N=2 0.2/0.8, loop=1 (t = fade*2): D(0.5) = sin(pi/2) cos(pi/4) / (2 sin(pi/4)) = 0.5,
+# so fade 0.25 -> 0.5*0.2 + 0.5*0.8 = 0.5; fade 0.5 -> input2 = 0.8. With two
+# points the interpolant is a plain cosine between them.
+experimental
+patch <<<
+[crossfader2]
+    input1 = I1
+    input2 = I2
+    input3 = I3
+    input4 = I4
+    fade   = I5
+    curve  = 2
+    loop   = 1
+    output = O1
+>>>
+
+patch <<<
+[crossfader2]
+    input1 = I6
+    input2 = I7
+    fade   = I5
+    curve  = 2
+    loop   = 1
+    output = O2
+>>>
+@0 set I1 1
+@0 set I2 0
+@0 set I3 0
+@0 set I4 0
+@0 set I6 0.2
+@0 set I7 0.8
+@0 set I5 0
+@0 expect O1 1
+@1 set I5 0.125
+@1 expect O1 0.603553 tol 1e-5
+@2 set I5 0.25
+@2 expect O1 0 tol 1e-6
+@3 set I5 0.375
+@3 expect O1 -0.103553 tol 1e-5
+@4 set I5 0.5
+@4 expect O1 0 tol 1e-6
+@5 set I5 0.875
+@5 expect O1 0.603553 tol 1e-5
+@6 set I5 1.0
+@6 expect O1 1 tol 1e-6
+@7 set I5 0.25
+@7 expect O2 0.5 tol 1e-6
+@8 set I5 0.5
+@8 expect O2 0.8 tol 1e-6

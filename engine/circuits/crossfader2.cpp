@@ -4,8 +4,10 @@
 // `fade` 0..1 maps to a position p = fade*S with S = N-1 segments, or S = N
 // when `loop` is on (so fade 1.0 is back at input1). p wraps with period N
 // exactly as crossfader. curve 0 = crossfader's linear lerp, bit-identical;
-// anything else = monotone cubic Hermite (Fritsch–Carlson-style tangents from
-// the two neighbouring secants on the RING of N inputs, regardless of `loop`).
+// 1 = monotone cubic Hermite (Fritsch–Carlson-style tangents from the two
+// neighbouring secants, never overshoots); 2 = Fourier (band-limited
+// trigonometric interpolation through all N inputs, may ring). Values outside
+// 0..2 clamp. Every mode works on the RING of N inputs, regardless of `loop`.
 // Standard A*B+C input math.
 #include "../src/registry.hpp"
 #include "../src/gatereader.hpp"
@@ -25,7 +27,9 @@ public:
 
         bool loop  = in("loop").value(s) >= kGateHighThreshold;
         int  segs  = loop ? n : n - 1;
-        bool cubic = std::lround(in("curve").value(s)) != 0;
+        long curve = std::lround(in("curve").value(s));
+        if (curve < 0) curve = 0;
+        if (curve > 2) curve = 2;
 
         double p = (double)in("fade").value(s) * segs;
         // p modulo n, in [0, n): wraps the last input back to the first.
@@ -37,8 +41,19 @@ public:
         float a = in("input", seg + 1).value(s);            // 1-based jacks
         float b = in("input", (seg + 1) % n + 1).value(s);
 
-        if (!cubic) {
+        if (curve == 0) {
             out("output").set(s, float(a * (1.0 - frac) + b * frac));
+            return;
+        }
+
+        if (curve == 2) {
+            // Trigonometric interpolant on the ring: sum_k P[k] * D(pm - k),
+            // D the periodic sinc for N samples (real-valued for even N: the
+            // Nyquist bin enters as a cosine, which is the cos(pi x/N) factor).
+            double acc = 0.0;
+            for (int k = 0; k < n; k++)
+                acc += (double)in("input", k + 1).value(s) * dirichlet(pm - k, n);
+            out("output").set(s, float(acc));
             return;
         }
 
@@ -63,6 +78,15 @@ private:
         double dPrev = k - prev, dNext = next - k;
         if (dPrev * dNext <= 0.0) return 0.0;
         return 2.0 / (1.0 / dPrev + 1.0 / dNext);
+    }
+
+    // Periodic sinc: 1 at x = 0 (mod n), 0 at every other integer, so the
+    // curve passes through every input. sin(pi x) cos(pi x/n) / (n sin(pi x/n)).
+    static double dirichlet(double x, int n) {
+        const double pi = 3.14159265358979323846;
+        double sn = std::sin(pi * x / n);
+        if (std::fabs(sn) < 1e-9) return 1.0;
+        return std::sin(pi * x) * std::cos(pi * x / n) / (n * sn);
     }
 };
 
