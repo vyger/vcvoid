@@ -1,0 +1,30 @@
+# crossfader2 RAM accounting (manual/circuits/experimental/crossfader2.md:
+# ram_bytes 56 — crossfader's 40 plus 16 for the curve/loop flags and the
+# four knot values + two tangents held while a segment is evaluated).
+# Hand-computed Forge accounting on a MASTER (typeOfMaster()==16 always adds
+# the X7's 864 bytes, attached or not):
+#   x7                          864
+#   crossfader2 base             56
+#   input1 = I1 (simple input)    8
+#   input2 = I2 (simple input)    8
+#   fade   = I3 (simple input)    8
+#   output = O1 (output)          4
+#   constants                    16   (seeded {0.0, 1.0} = 8 -> ALIGN_UP(8,16))
+#   --------------------------------
+#   total                       964
+# The same lines under [crossfader] cost 948 (ram-vs-crossfader.gold): the
+# two circuits differ by exactly the 16-byte base delta. Patching `curve = 1`
+# or `loop = 1` would add 4 bytes each (the 0/1 simple-input optimization).
+experimental
+expect_ram 964
+patch <<<
+[crossfader2]
+    input1 = I1
+    input2 = I2
+    fade   = I3
+    output = O1
+>>>
+@0 set I1 0.2
+@0 set I2 0.8
+@0 set I3 0.5
+@0 expect O1 0.5

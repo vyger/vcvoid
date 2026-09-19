@@ -22,6 +22,7 @@
 
 | Circuit | Function |
 |---------|----------|
+| [`crossfader2`](crossfader2.md) | `crossfader` plus `curve` (monotone cubic, no corners, no overshoot) and `loop` (seamless ring) — draw an LFO on eight faders |
 | [`midihirescc`](midihirescc.md) | 14-bit (hi-res) MIDI CC output — one jack per controller, both bytes sent together |
 | [`trigseq`](trigseq.md) | Declarative trigger sequencer — write the rhythm as text (`"x...x.x."`) |
 

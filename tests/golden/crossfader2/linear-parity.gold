@@ -1,0 +1,57 @@
+# crossfader2 with `curve` and `loop` unpatched (defaults 0/0) must be
+# bit-identical to crossfader. Block A copies crossfader/four-input-morph:
+# N=4, S=N-1=3, p = fade*3, linear lerp of input[floor(p)] and input[floor(p)+1].
+#   fade 0    -> p=0.0  -> input1                        = 0.1
+#   fade 0.25 -> p=0.75 -> 0.25*i1 + 0.75*i2 = .025+.15  = 0.175
+#   fade 0.5  -> p=1.5  -> 0.5*i2 + 0.5*i3   = .1+.15    = 0.25
+#   fade 0.75 -> p=2.25 -> 0.75*i3 + 0.25*i4 = .225+.1   = 0.325
+#   fade 1.0  -> p=3.0  -> input4                        = 0.4
+# Block B copies crossfader/wraparound: N=2, p = fade, modulo N=2, so fade
+# beyond 1.0 morphs from the last input back to the first.
+#   fade 1.0  -> p=1.0            -> input2              = 0.8
+#   fade 1.25 -> p=1.25           -> 0.75*i2 + 0.25*i1   = 0.65
+#   fade 1.5  -> p=1.5            -> 0.5*i2 + 0.5*i1     = 0.5
+#   fade 2.0  -> p=2.0 mod 2 = 0  -> input1              = 0.2
+# No tolerances: the linear path is the same double math as crossfader.cpp.
+experimental
+patch <<<
+[crossfader2]
+    input1 = I1
+    input2 = I2
+    input3 = I3
+    input4 = I4
+    fade   = I5
+    output = O1
+>>>
+
+patch <<<
+[crossfader2]
+    input1 = I6
+    input2 = I7
+    fade   = I8
+    output = O2
+>>>
+@0 set I1 0.1
+@0 set I2 0.2
+@0 set I3 0.3
+@0 set I4 0.4
+@0 set I5 0
+@0 set I6 0.2
+@0 set I7 0.8
+@0 set I8 1.0
+@0 expect O1 0.1
+@0 expect O2 0.8
+@1 set I5 0.25
+@1 set I8 1.25
+@1 expect O1 0.175
+@1 expect O2 0.65
+@2 set I5 0.5
+@2 set I8 1.5
+@2 expect O1 0.25
+@2 expect O2 0.5
+@3 set I5 0.75
+@3 set I8 2.0
+@3 expect O1 0.325
+@3 expect O2 0.2
+@4 set I5 1
+@4 expect O1 0.4

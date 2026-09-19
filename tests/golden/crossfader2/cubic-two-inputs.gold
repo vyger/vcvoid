@@ -1,0 +1,32 @@
+# The smallest ring: N=2, inputs 0.2/0.8, loop=1 (S=2, p=fade*2), curve=1.
+# On a two-point ring each knot's prev and next neighbour is the OTHER knot,
+# so the two secants are equal and opposite and both tangents are zero:
+#   m1: d_prev = i1-i2 = -0.6, d_next = i2-i1 = 0.6 -> 0;  m2 likewise -> 0.
+# The result is a smooth up-and-down between the two values (a raised cosine):
+#   fade 0    -> p=0   -> i1                = 0.2
+#   fade 0.25 -> p=0.5 -> .5*i1 + .5*i2     = 0.5
+#   fade 0.5  -> p=1   -> i2                = 0.8
+#   fade 0.75 -> p=1.5 -> .5*i2 + .5*i1     = 0.5
+#   fade 1.0  -> p=2 mod 2 = 0 -> i1        = 0.2
+experimental
+patch <<<
+[crossfader2]
+    input1 = I1
+    input2 = I2
+    fade   = I3
+    curve  = 1
+    loop   = 1
+    output = O1
+>>>
+@0 set I1 0.2
+@0 set I2 0.8
+@0 set I3 0
+@0 expect O1 0.2
+@1 set I3 0.25
+@1 expect O1 0.5
+@2 set I3 0.5
+@2 expect O1 0.8
+@3 set I3 0.75
+@3 expect O1 0.5
+@4 set I3 1.0
+@4 expect O1 0.2

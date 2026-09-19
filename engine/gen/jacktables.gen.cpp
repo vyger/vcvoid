@@ -1474,6 +1474,13 @@ static const JackDef kJacks_watch[] = {
     {"changedup", "cu", JackType::Trigger, RamHint::TriggerOutput, 1, 1, false, false, 0.0f},
     {"changeddown", "cd", JackType::Trigger, RamHint::TriggerOutput, 1, 1, false, false, 0.0f},
 };
+static const JackDef kJacks_crossfader2[] = {
+    {"input", "i", JackType::Cv, RamHint::Input, 8, 1, true, true, 0.0f},
+    {"fade", "f", JackType::Fraction, RamHint::Input, 1, 1, true, true, 0.5f},
+    {"curve", "cv", JackType::Integer, RamHint::Input, 1, 1, true, true, 0.0f},
+    {"loop", "lp", JackType::Gate, RamHint::Input, 1, 1, true, true, 0.0f},
+    {"output", "o", JackType::Cv, RamHint::Output, 1, 1, false, false, 0.0f},
+};
 static const JackDef kJacks_midihirescc[] = {
     {"usb", "u", JackType::Integer, RamHint::Input, 1, 1, true, true, 1.0f},
     {"channel", "ch", JackType::Integer, RamHint::Input, 1, 1, true, true, 1.0f},
@@ -1568,10 +1575,11 @@ const CircuitDef kCircuits[] = {
     {"unusedfaders", 32, false, false, kJacks_unusedfaders, 4},
     {"vcotuner", 0, false, false, kJacks_vcotuner, 19},
     {"watch", 72, false, false, kJacks_watch, 20},
+    {"crossfader2", 56, false, true, kJacks_crossfader2, 5},
     {"midihirescc", 264, false, true, kJacks_midihirescc, 5},
     {"trigseq", 32, false, true, kJacks_trigseq, 7},
 };
-const unsigned kNumCircuits = 78;
+const unsigned kNumCircuits = 79;
 
 const ControllerDef kControllers[] = {
     {"b32", 320},

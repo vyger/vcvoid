@@ -1,0 +1,38 @@
+# `curve` values other than 0 are treated as 1 (cubic). Same scenario as
+# cubic-two-inputs (N=2, 0.2/0.8, loop=1, all tangents zero) with curve=2 (O1)
+# and curve=-1 (O2): fade 0.25 -> p=0.5 -> 0.5,  fade 0.5 -> input2 = 0.8.
+# For contrast the linear result at fade 0.25 would also be 0.5 here, so the
+# distinguishing sample is fade 0.125 -> p=0.25, f=0.25:
+#   cubic  = h00*0.2 + h01*0.8 = .84375*0.2 + .15625*0.8 = .16875 + .125 = 0.29375
+#   linear = .75*0.2 + .25*0.8 = 0.35   (what curve=0 would give)
+experimental
+patch <<<
+[crossfader2]
+    input1 = I1
+    input2 = I2
+    fade   = I3
+    curve  = 2
+    loop   = 1
+    output = O1
+>>>
+
+patch <<<
+[crossfader2]
+    input1 = I1
+    input2 = I2
+    fade   = I3
+    curve  = -1
+    loop   = 1
+    output = O2
+>>>
+@0 set I1 0.2
+@0 set I2 0.8
+@0 set I3 0.125
+@0 expect O1 0.29375 tol 1e-5
+@0 expect O2 0.29375 tol 1e-5
+@1 set I3 0.25
+@1 expect O1 0.5
+@1 expect O2 0.5
+@2 set I3 0.5
+@2 expect O1 0.8
+@2 expect O2 0.8

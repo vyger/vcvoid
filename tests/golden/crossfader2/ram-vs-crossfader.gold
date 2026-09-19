@@ -1,0 +1,16 @@
+# Companion to ram.gold: the identical lines under the real [crossfader]
+# (base 40) must report exactly 16 bytes less than [crossfader2] (base 56).
+#   x7 864 + base 40 + 3 simple inputs 24 + output 4 + constants 16 = 948
+experimental
+expect_ram 948
+patch <<<
+[crossfader]
+    input1 = I1
+    input2 = I2
+    fade   = I3
+    output = O1
+>>>
+@0 set I1 0.2
+@0 set I2 0.8
+@0 set I3 0.5
+@0 expect O1 0.5

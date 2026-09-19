@@ -1,0 +1,52 @@
+# loop=1 closes the ring: S = N segments instead of N-1, so fade 1.0 is back at
+# input1 and the last->first journey is one more equal segment. curve=0 keeps
+# the straight-line lerp.
+# Block A: N=4, S=4, p = fade*4 (mod 4). inputs 0.1/0.2/0.3/0.4.
+#   fade 0.25  -> p=1.0 -> input2                       = 0.2
+#   fade 0.5   -> p=2.0 -> input3                       = 0.3
+#   fade 0.75  -> p=3.0 -> input4                       = 0.4
+#   fade 0.875 -> p=3.5 -> 0.5*i4 + 0.5*i1 = .2+.05     = 0.25
+#   fade 1.0   -> p=4.0 mod 4 = 0 -> input1             = 0.1
+# Block B: N=2, S=2, p = fade*2 (mod 2). inputs 0.2/0.8.
+#   fade 0.5 -> p=1.0 -> input2 = 0.8;  fade 1.0 -> p=2 mod 2 = 0 -> input1 = 0.2
+experimental
+patch <<<
+[crossfader2]
+    input1 = I1
+    input2 = I2
+    input3 = I3
+    input4 = I4
+    fade   = I5
+    loop   = 1
+    output = O1
+>>>
+
+patch <<<
+[crossfader2]
+    input1 = I6
+    input2 = I7
+    fade   = I8
+    loop   = 1
+    curve  = 0
+    output = O2
+>>>
+@0 set I1 0.1
+@0 set I2 0.2
+@0 set I3 0.3
+@0 set I4 0.4
+@0 set I5 0.25
+@0 set I6 0.2
+@0 set I7 0.8
+@0 set I8 0.5
+@0 expect O1 0.2
+@0 expect O2 0.8
+@1 set I5 0.5
+@1 set I8 1.0
+@1 expect O1 0.3
+@1 expect O2 0.2
+@2 set I5 0.75
+@2 expect O1 0.4
+@3 set I5 0.875
+@3 expect O1 0.25
+@4 set I5 1.0
+@4 expect O1 0.1
