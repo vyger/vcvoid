@@ -1,0 +1,62 @@
+# motoquencer `buttoncolor` in a linktonext chain. motoquencer.md:967: "The main
+# purpose of this option is to allow a separate color for the gate button in a
+# linked sequencer, that does something else than gates." So the colour is NOT
+# chain-wide like `buttonmode` -- whichever instance currently OWNS the step
+# buttons paints them with its OWN `buttoncolor`.
+#
+# The chain reads one buttonmode off the main and `buttonmode / 10` picks the
+# owner (see linktonext-buttonmode.gold): buttonmode 0 = the main's plates and
+# so the main's colour 0.8, buttonmode 10 = the member's plates and so the
+# member's colour 0.4. Both instances default every gate on.
+tickrate 100
+patch <<<
+[m4]
+[motoquencer]
+    clock       = I1
+    buttonmode  = I2
+    buttoncolor = 0.8
+    numsteps    = 4
+    numfaders   = 4
+    defaultgate = 1
+    linktonext  = 1
+    cv          = O1
+    gate        = O2
+[motoquencer]
+    buttoncolor = 0.4
+    defaultgate = 1
+    cv          = O3
+    gate        = O4
+>>>
+# buttonmode 0: the MAIN owns the plates -> its own 0.8 on every gate-on lane.
+@0 set I2 0
+@0 expect F1.led 1 tol 1e-6
+@0 expect F1.color 0.8 tol 1e-6
+@0 expect F4.color 0.8 tol 1e-6
+# buttonmode 10: the MEMBER owns the plates -> the MEMBER's 0.4, not the main's.
+@2 set I2 10
+@2 expect F1.led 1 tol 1e-6
+@2 expect F1.color 0.4 tol 1e-6
+@2 expect F4.color 0.4 tol 1e-6
+# The member's gate is what its lane shows: silence step 1 on the member and
+# lane 1 goes dark while the main's own gate[0] is untouched.
+@3 touch F1 1
+@4 touch F1 0
+@4 expect F1.led 0 tol 1e-6
+@4 expect F2.color 0.4 tol 1e-6
+# Back to the main's plates: lane 1 is lit again, in the MAIN's colour.
+# Asserted one tick after the handover: the outgoing owner releases the LEDs on
+# the tick it loses them (updateLeds' falling edge), and the member ticks AFTER
+# the main, so the handover tick itself is one dark engine tick. That release
+# ordering predates this test and is invisible at the 6 kHz tick rate.
+@6 set I2 0
+@7 expect F1.led 1 tol 1e-6
+@7 expect F1.color 0.8 tol 1e-6
+# The white played-step marker still beats either colour.
+@8 set I1 1
+@8 expect F1.color -1 tol 1e-6
+@8 expect F2.color 0.8 tol 1e-6
+@9 set I1 0
+# ...and it does so on the member's plates too.
+@10 set I2 10
+@10 expect F1.color -1 tol 1e-6
+@10 expect F2.color 0.4 tol 1e-6

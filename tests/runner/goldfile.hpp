@@ -12,7 +12,14 @@ struct Event {
     Kind kind;
     long tick;
     std::string target;    // register/cable; E<ctrl>.<num> (Turn/Push); F<n> (Move/Touch/Hold);
-                           // D<n> (ExpectDisplay, 1-based DB8E in chain order)
+                           // D<n> (ExpectDisplay, 1-based DB8E in chain order).
+                           // `expect` reads panel LEDs back too (Engine::getValue):
+                           // "F<n>.led" / "F<n>.color" is the step LED below motor
+                           // fader n, "E<n>.led" / "E<n>.color" (also the dotted
+                           // "E<ctrl>.<num>.led" / ".color") the encoder's step LED.
+                           // `.led` is brightness 0..1, `.color` a DROID colour
+                           // value (0 = dark, negative = the white played-step
+                           // sentinel SeqCore::kLedWhite).
     float value = 0.0f;    // Set: value; Expect: expected; Turn: ±detents; Push: 0|1;
                            // Move: fader position 0..1; Touch/Hold: 0|1
                            // (Touch = finger on the plate below the fader: plate

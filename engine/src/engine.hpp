@@ -74,9 +74,19 @@ public:
 
     // name: register ("I1", "P1.2", ...) or cable ("_X")
     bool setValue(const std::string& name, float v);   // marks I<n> patched
+    // Readable names, in the order getValue tries them:
+    //   "_CABLE"                internal cable of the loaded patch
+    //   "<handle>.led"          panel LED brightness 0..1 behind `handle`
+    //   "<handle>.color"        its DROID colour value (negative = the white
+    //                           sentinel SeqCore::kLedWhite; 0 = dark)
+    //   "F<n>"                  motor-fader position 0..1
+    //   "I1", "P1.2", ...       register
+    // An LED `handle` is a motor fader "F<n>" (the step LED below it) or an
+    // encoder "E<n>" / "E<ctrl>.<num>" (its step LED), spelled exactly as
+    // move/touch resp. turn/push address it. Unresolvable names read 0.0.
     float getValue(const std::string& name) const;
     // True iff `name` currently resolves to something readable: an internal
-    // cable of the LOADED patch, a valid fader handle, or a parseable
+    // cable of the LOADED patch, a valid fader/LED handle, or a parseable
     // register. getValue returns 0.0 for unknown names by design; callers
     // that must distinguish "reads 0" from "typo" (the UAT bridge's signal
     // watch validates names at arm time) check this first. NOTE: the
@@ -228,6 +238,9 @@ public:
     std::vector<CircuitProfile> profileSnapshot() const;
 
 private:
+    // Resolves a bare LED handle (see getValue) to its 1-based global index.
+    // Returns 'F' for a motor fader, 'E' for an encoder, 0 for neither.
+    char ledHandle(const std::string& handle, int& global1) const;
     Operand makeOperand(const Atom& a) const;
     MasterType master_;
     float tickRateHz_;

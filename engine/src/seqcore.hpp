@@ -59,6 +59,9 @@
 //     before quantization. See the SPEC-GAPs below for the exact reading.
 //   * outputs: cv, gate, startofsequence, currentstep, currentpage, accumulator,
 //     startstepout, endstepout.
+//   * step-LED colours per buttonmode, including `buttoncolor` for the bm-0 gate
+//     LEDs — per instance, so the plate owner in a chain paints its own colour
+//     (see updateLeds).
 //   * `linktonext` multi-track linking: the FADER and BUTTON/LED editing
 //     surfaces are shared across the chain, each addressed independently by the
 //     main's fadermode resp. buttonmode — `mode / 10 == chain index`, editing
@@ -127,7 +130,8 @@
 //     then fires on the RELEASE, if no step was touched meanwhile — lands with
 //     stepcopy; see the TODO at the doublerange edge detector.)
 //   * taptempo (gate-length stabiliser), DB8E display (cvname/gatename/display),
-//     dontsave/SD persistence, buttoncolor/LED feel — panel-only or no-op headless.
+//     dontsave/SD persistence, LED feel — panel-only or no-op headless.
+//     (`buttoncolor` IS implemented, at updateLeds — see the comment there.)
 //
 // SPEC-GAPs (literal readings where the manual is silent; deterministic paths):
 //   * motor speed instant (fadercore.hpp / controllerstate.hpp).
@@ -355,7 +359,15 @@ public:
         transport(s);
 
         // --- step LEDs (panel-only; after transport so playStep_ is fresh) ---
-        updateLeds(s, page, buttonmode, showButtons);
+        // `buttoncolor` is read off THIS instance, not off the chain main like
+        // the modes above: motoquencer.md:967 — "The main purpose of this option
+        // is to allow a separate color for the gate button in a linked
+        // sequencer" — so whichever instance owns the plates paints them in its
+        // own colour. Floored at 0 (the colour table's bottom, dark) because
+        // NEGATIVE colour values are our out-of-band white sentinel: a patch
+        // must not be able to paint the gate LEDs with the played-step marker.
+        updateLeds(s, page, buttonmode, showButtons,
+                   std::max(0.0f, in("buttoncolor").value(s)));
 
         // --- outputs --------------------------------------------------------
         emit(s);
@@ -1208,22 +1220,29 @@ protected:
 
     // ---- step LEDs ---------------------------------------------------------
     // motoquencer.md "LED colors": the LED below each visible step shows the
-    // buttonmode state — blue gate (bm 0), green start / red end (bm 1), the
-    // gate-pattern colour per step (bm 2; lit on gate-enabled steps, since the
-    // colours describe how that step's gate plays), violet skip (bm 3) — and the
-    // currently played step is white regardless of buttonmode. encoquencer.md
+    // buttonmode state — the gate colour (bm 0), green start / red end (bm 1),
+    // the gate-pattern colour per step (bm 2; lit on gate-enabled steps, since
+    // the colours describe how that step's gate plays), violet skip (bm 3) — and
+    // the currently played step is white regardless of buttonmode. encoquencer.md
     // defers to this ("the middle three LEDs below each encoder have the same
     // function as the touch button's LED in the M4"). Colours are DROID colour
     // values (basics.md §5.5, rendered by plugin droidcolor.hpp); white is not in
     // that table, so kLedWhite is a negative sentinel the renderer maps to white.
     // A deselected circuit releases the LEDs (cleared once on the falling edge,
     // then untouched so another overlaid circuit can drive them).
+    //
+    // The bm-0 gate colour is the `buttoncolor` input (`bc`, passed in as
+    // `btnColor`), whose firmware default 0.1 is the LED table's "blue | enabled
+    // gate | 0" — 0.1 sits on the ramp's blue side, below the first named stop
+    // (cyan 0.2). `buttoncolor` is per-INSTANCE so a linked sequencer "that does
+    // something else than gates" can mark its plates differently (#76); 0 paints
+    // them dark, exactly as the colour table defines 0.
     static constexpr float kLedWhite  = -1.0f;   // sentinel: played step
     static constexpr float kLedCyan   = 0.2f, kLedGreen = 0.4f, kLedYellow = 0.6f,
                            kLedOrange = 0.73f, kLedRed  = 0.8f, kLedPink   = 1.0f,
-                           kLedViolet = 1.1f,  kLedBlue = 1.2f;
+                           kLedViolet = 1.1f;
 
-    void updateLeds(EngineState& s, int page, int bm, bool selected) {
+    void updateLeds(EngineState& s, int page, int bm, bool selected, float btnColor) {
         if (!selected) {
             if (ledsLit_) for (int i = 0; i < numFaders_; i++) setLaneLed(s, i, 0.0f, 0.0f);
             ledsLit_ = false;
@@ -1237,7 +1256,7 @@ protected:
             float b = 0.0f, c = 0.0f;
             if (step < numsteps_) {
                 switch (bm) {
-                    case 0:  if (cur_.gate[step]) { b = 1.0f; c = kLedBlue; } break;
+                    case 0:  if (cur_.gate[step]) { b = 1.0f; c = btnColor; } break;
                     case 1:  if (step == start0)  { b = 1.0f; c = kLedGreen; }
                              else if (step == end0) { b = 1.0f; c = kLedRed; } break;
                     case 2:  if (cur_.gate[step]) { b = 1.0f; c = kPatColor[cur_.gatepat[step] & 3]; } break;
