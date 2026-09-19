@@ -6,14 +6,14 @@ experimental: true
 ram_bytes: 56
 manual_pages: []
 category: mixer-cv
-tags: [crossfader, crossfade, morph, mix, fade, blend, eight-inputs, cubic, smooth, interpolation, spline, loop, wavetable, lfo, faders, experimental]
+tags: [crossfader, crossfade, morph, mix, fade, blend, eight-inputs, cubic, fourier, band-limited, smooth, interpolation, spline, loop, wavetable, lfo, faders, experimental]
 see_also: [crossfader, lfo, faderbank, slew]
 impl_difficulty: easy
 controller_binding: master-only
 verification: headless
 spec_gap: false
-difficulty_note: "crossfader's segment mapping plus two pure functions: a loop flag that changes the segment count from N-1 to N, and a monotone cubic Hermite kernel whose tangents come from the two neighbouring secants."
-verification_note: "Headless: curve=0 must reproduce crossfader's goldens exactly; curve=1 must hit every input at the knots, stay inside [min,max] of the two neighbours between them, give a flat plateau between equal inputs and zero slope at a local extremum; loop=1 must reach input1 again at fade=1.0 with N equal segments."
+difficulty_note: "crossfader's segment mapping plus pure functions: a loop flag that changes the segment count from N-1 to N, a monotone cubic Hermite kernel and a periodic-sinc (Fourier) kernel over the ring."
+verification_note: "Headless: curve=0 must reproduce crossfader's goldens exactly; curve=1 must hit every input, stay inside the two neighbours' range, give a flat plateau between equal inputs; curve=2 must hit every input and show the periodic-sinc lobes (N=4 spike: 0.603553 / -0.103553); loop=1 must reach input1 again at fade=1.0 with N equal segments."
 ---
 
 # crossfader2 — Morph between 8 inputs, smoothly
@@ -31,9 +31,11 @@ same inputs, same `fade` mapping, same wraparound past 1.0, same output — so
 you can rename a `[crossfader]` to `[crossfader2]` and nothing changes until
 you use one of the new inputs:
 
-- **`curve`** chooses how the output moves *between* two neighbouring inputs.
+- **`curve`** chooses how the output moves *between* the inputs.
   `crossfader` draws a straight line, which leaves a corner at every input.
-  `curve = 1` draws a smooth cubic curve through the inputs instead.
+  `curve = 1` draws a smooth cubic curve through the inputs that never
+  overshoots, and `2` the smoothest possible curve through them
+  (band-limited), which overshoots and rings.
 - **`loop`** closes the ring. `crossfader` reaches the last input at
   `fade = 1.0`; with `loop = 1`, `fade = 1.0` is back at the first input, and
   the journey from the last input to the first is one more equal segment.
@@ -83,43 +85,29 @@ the `lfo`'s business. Level, offset and polarity are one line of input math
 on whatever reads the output: send it to a cable, `output = _WAVE`, and read
 it back as `_WAVE * 2 - 1` for a bipolar swing.
 
-Why not a [`slew`](../slew.md) after a plain `crossfader`? A slew only sees
-the output stream. It does not know where the faders are, so it cannot pass
-through them: it rounds the corners by lagging behind, which shrinks the peaks
-and moves the whole shape later — and by how much depends on the LFO rate.
-`curve = 1` rounds the corners *at* the faders, so the drawn shape is what
-you get at every rate.
+## The three curves
 
-## How the cubic curve is built
+All three pass through every input value exactly; they differ in what happens
+in between. The best way to see it is a lone raised fader among low ones:
 
-`curve = 1` uses a **monotone cubic** interpolation (a cubic Hermite spline
-with Fritsch–Carlson-style tangents). Between two neighbouring inputs the
-output follows a cubic whose value *and* slope match at each input, so there
-is no corner. The slope at an input is chosen from the two straight-line
-slopes on either side of it:
+| `curve` | Name | Between two faders | A lone raised fader |
+|---|---|---|---|
+| `0` | linear | straight line, corner at each fader | a triangle |
+| `1` | cubic | S-curve, no corner, stays inside the two faders' range | a rounded bump, flat beside it |
+| `2` | Fourier | one smooth wave through all faders | a bump with ripples that decay across the whole cycle |
 
-- if both slopes go the same way, the tangent is their harmonic mean
-  (`2 / (1/a + 1/b)`), which is always the smaller of the two in magnitude;
-- if they go opposite ways, or one of them is zero, the tangent is **zero**.
+`1` is the tame one: what you draw is exactly the range you get. `2` is
+allowed to **overshoot** — the output can go above the highest fader or below
+the lowest — and that is what makes it read as "curvy" on a scope. With
+eight faders the difference between `0` and `1` is small but the smoothness
+makes a difference at low rates; `2` is a little more wild and organic.
 
-Those two rules give the properties that matter for a control voltage:
+### The ring
 
-- the output passes **exactly** through every input value;
-- it **never overshoots**: between two inputs it stays within the range those
-  two inputs span, so a fader at the bottom really is the bottom;
-- two neighbouring inputs with the same value give a genuinely **flat**
-  section, not a bulge;
-- every local peak and trough sits exactly on an input, with a horizontal
-  tangent, so a single raised fader is a rounded bump with no ripple beside
-  it.
-
-The price is that peaks are a little rounder than a "natural" spline would
-draw them. For an LFO that is the shape you want.
-
-The tangents are computed on the ring of inputs — the neighbour of the last
-input is the first one — regardless of `loop`, in the same way that `fade`
-beyond 1.0 already wraps in `crossfader`. Whatever `fade` does, the curve is
-therefore one continuous periodic shape.
+Every mode works on the ring of inputs — the neighbour of the last input is
+the first one — regardless of `loop`, in the same way that `fade` beyond 1.0
+already wraps in `crossfader`. Whatever `fade` does, the curve is therefore
+one continuous periodic shape.
 
 ## Inputs
 
@@ -127,7 +115,7 @@ therefore one continuous periodic shape.
 |------|------|---------|-------------|
 | `input1 … input8` (`i`) | CV | `0.0` | The input signals that you want to crossfade between. At least `input1` and `input2` need to be patched. Otherwise they are treated like 0 V signals. Exactly as in `crossfader`: the number of inputs N is the highest patched one, and gaps read 0 V. |
 | `fade` (`f`) | `0..1` | `0.5` | Position of the morph. At 0.0 the output is 100 % of the first input. At 1.0 it is 100 % of the last patched input — or, with `loop` set, 100 % of the first input again. Values beyond 1.0 wrap around from the last input to the first, exactly as in `crossfader` (period N inputs). |
-| `curve` (`cv`) | integer | `0` | Interpolation between two neighbouring inputs. `0` = linear, bit-identical to `crossfader`. `1` = cubic, as described above. Other values are treated as `1`. |
+| `curve` (`cv`) | integer | `0` | Interpolation between the inputs. `0` = linear, bit-identical to `crossfader`. `1` = monotone cubic (never overshoots). `2` = Fourier (overshoots and rings). Values outside 0 … 2 are clamped. |
 | `loop` (`lp`) | gate | `0` | When on, the inputs form a ring: `fade` 0.0 … 1.0 travels through all N patched inputs and back to the first one in N equal segments, so a sawtooth at `fade` gives a seamless cyclic morph. When off, `fade` 0.0 … 1.0 travels from the first to the last input in N − 1 segments, exactly as in `crossfader`. |
 
 With one patched input the output is that input; with none it is 0 V.
@@ -145,4 +133,3 @@ With one patched input the output is that input; with none it is 0 V.
   of the example above is `crossfader` with `fade = _PHASE * 1.142857`.
 - [`faderbank`](../faderbank.md) — eight M4 faders as eight CVs.
 - [`lfo`](../lfo.md) — the sawtooth that sweeps `fade`.
-- [`slew`](../slew.md) — the alternative that does not work for this, and why.
