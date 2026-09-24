@@ -194,3 +194,70 @@ TEST(controllerstate_displays) {
     CHECK(cs.displayCount() == 1);
     CHECK(!cs.display(1)->active);
 }
+
+// --- M4 touch-plate LED registers (hardware.md §6.11, issue #80) ------------
+
+TEST(cs_plate_led_register_mapping) {
+    ControllerState cs;
+    cs.configure({"p2b8", "m4", "e4", "m4"});
+    // (ctrl, k) -> global fader number, over the chain's M4s only.
+    CHECK(cs.faderIndexForPlateLed(RegId{'L', 2, 1}) == 1);
+    CHECK(cs.faderIndexForPlateLed(RegId{'R', 2, 4}) == 4);
+    CHECK(cs.faderIndexForPlateLed(RegId{'L', 4, 1}) == 5);
+    CHECK(cs.faderIndexForPlateLed(RegId{'R', 4, 4}) == 8);
+    // Not a plate LED: the P2B8's own L registers, the undotted master R bank,
+    // an element past the M4's four, and non-LED register kinds.
+    CHECK(cs.faderIndexForPlateLed(RegId{'L', 1, 1}) == 0);
+    CHECK(cs.faderIndexForPlateLed(RegId{'R', 0, 17}) == 0);
+    CHECK(cs.faderIndexForPlateLed(RegId{'R', 2, 5}) == 0);
+    CHECK(cs.faderIndexForPlateLed(RegId{'B', 2, 1}) == 0);
+    // ... and the inverse.
+    CHECK(cs.plateLedReg(5, 'R') == (RegId{'R', 4, 1}));
+    CHECK(cs.plateLedReg(1, 'L') == (RegId{'L', 2, 1}));
+    CHECK(cs.plateLedReg(9, 'L').type == 0);      // out of range
+    CHECK(cs.plateLedReg(1, 'B').type == 0);      // wrong kind
+}
+
+TEST(cs_plate_led_write_semantics) {
+    ControllerState cs;
+    cs.configure({"m4"});
+    RegisterFile regs;
+    // R only -> full brightness in that hue.
+    cs.setPlateLedDriven(1, /*l=*/false, /*r=*/true);
+    regs.set(RegId{'R', 1, 1}, 0.8f);
+    CHECK(cs.writePlateLed(RegId{'R', 1, 1}, regs));
+    CHECK(cs.fader(1)->led == 1.0f);
+    CHECK(cs.fader(1)->ledColor == 0.8f);
+    // ... and colour 0 stays full brightness (the renderer makes it dark).
+    regs.set(RegId{'R', 1, 1}, 0.0f);
+    cs.writePlateLed(RegId{'R', 1, 1}, regs);
+    CHECK(cs.fader(1)->led == 1.0f);
+    CHECK(cs.fader(1)->ledColor == 0.0f);
+    // L only -> white at that brightness (negative L reads as its magnitude).
+    cs.setPlateLedDriven(2, true, false);
+    regs.set(RegId{'L', 1, 2}, 0.5f);
+    CHECK(cs.writePlateLed(RegId{'L', 1, 2}, regs));
+    CHECK(cs.fader(2)->led == 0.5f);
+    CHECK(cs.fader(2)->ledColor == kPlateLedWhite);
+    regs.set(RegId{'L', 1, 2}, -0.25f);
+    cs.writePlateLed(RegId{'L', 1, 2}, regs);
+    CHECK(cs.fader(2)->led == 0.25f);
+    CHECK(cs.fader(2)->ledColor == kPlateLedWhite);
+    // Both -> hue at brightness, whichever of the pair was written.
+    cs.setPlateLedDriven(3, true, true);
+    regs.set(RegId{'L', 1, 3}, 0.5f);
+    regs.set(RegId{'R', 1, 3}, 0.4f);
+    cs.writePlateLed(RegId{'L', 1, 3}, regs);
+    CHECK(cs.fader(3)->led == 0.5f && cs.fader(3)->ledColor == 0.4f);
+    cs.writePlateLed(RegId{'R', 1, 3}, regs);
+    CHECK(cs.fader(3)->led == 0.5f && cs.fader(3)->ledColor == 0.4f);
+    // Registers that address no plate change nothing.
+    CHECK(!cs.writePlateLed(RegId{'R', 0, 17}, regs));
+    CHECK(!cs.writePlateLed(RegId{'L', 1, 5}, regs));
+    // configure() clears the driven flags along with the fader state.
+    cs.configure({"m4"});
+    CHECK(cs.fader(1)->led == 0.0f);
+    regs.set(RegId{'L', 1, 1}, 0.5f);
+    cs.writePlateLed(RegId{'L', 1, 1}, regs);
+    CHECK(cs.fader(1)->led == 1.0f);   // nothing declared driven -> R-only rule
+}

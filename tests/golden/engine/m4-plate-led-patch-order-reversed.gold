@@ -1,0 +1,26 @@
+# M4 touch-plate LED, patch order reversed (issue #80) -- the mirror of
+# m4-plate-led-patch-order.gold: the same two circuits, swapped.
+#
+# The [copy] writing R1.1 now runs FIRST, so the motoquencer's own plate paint
+# overwrites it on the very same tick and fader 1 shows the gate colour like
+# every other lane. Nothing about the R register changed -- only its position.
+tickrate 100
+patch <<<
+[m4]
+
+[copy]
+    input  = 0.4
+    output = R1.1
+
+[motoquencer]
+    clock       = I1
+    numsteps    = 4
+    numfaders   = 4
+    defaultgate = 1
+    buttoncolor = 0.8
+    cv          = O1
+    gate        = O2
+>>>
+@0 expect F1.color 0.8 tol 1e-6
+@0 expect F2.color 0.8 tol 1e-6
+@5 expect F1.color 0.8 tol 1e-6

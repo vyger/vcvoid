@@ -1,0 +1,12 @@
+# The M4 has exactly four plate LEDs, so R1.5 does not exist on it
+# (manual/hardware.md §6.11 register table: R1.1 ... R1.4). Controller-scoped R
+# registers go through the same per-model element check as P/B/L/S/E, so the
+# error names the model and the chain position, not "this master" (issue #80).
+expect_load_error "no register R1.5 on the m4"
+patch <<<
+[m4]
+
+[copy]
+    input = 0.5
+    output = R1.5
+>>>

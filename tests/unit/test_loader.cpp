@@ -72,9 +72,18 @@ TEST(controller_descriptors) {
     // e4 §6.10: 4 encoders, 4 buttons, 4 ring LEDs.
     CHECK(has("e4", 'E', 4) && has("e4", 'B', 4) && has("e4", 'L', 4));
     CHECK(!has("e4", 'E', 5) && !has("e4", 'P', 1));
-    // m4 §6.11: 4 touch-plate buttons + 4 LEDs; no pots/switches/encoders.
+    // m4 §6.11: 4 touch-plate buttons, 4 LEDs (brightness) and 4 R registers
+    // (LED colour); no switches/encoders.
     CHECK(has("m4", 'B', 4) && has("m4", 'L', 4) && !has("m4", 'B', 5));
     CHECK(!has("m4", 'P', 1) && !has("m4", 'E', 1));
+    // The M4 is the ONLY model with R registers — hardware.md §6.11 "In
+    // addition, there is a R register that controls the color of the LED".
+    // Forge parity: numControllerRegisters declares REGISTER_RGB_LED: 4 for m4
+    // alone (issue #80).
+    CHECK(has("m4", 'R', 1) && has("m4", 'R', 4));
+    CHECK(!has("m4", 'R', 5) && !has("m4", 'R', 0));
+    for (const char* other : {"p2b8", "p4b2", "p10", "s10", "p8s8", "b32", "e4", "db8e"})
+        CHECK(!has(other, 'R', 1));
     // db8e §6.12: 9 buttons (B1.1–8 face + B1.9 encoder push), 1 encoder,
     // 9 LEDs (L1.1–8 face-button LEDs + L1.9 encoder ring). Forge parity:
     // moduledb8e.cpp numRegisters(BUTTON)=9, (LED)=9, (ENCODER)=1.
@@ -112,6 +121,36 @@ TEST(loader_controller_element_ranges) {
     CHECK(compile("[x7]\n[p2b8]\n[copy]\n input = P1.1\n output = O1\n", cp).ok);
     CHECK(hasError(compile("[x7]\n[p2b8]\n[copy]\n input = P2.1\n output = O1\n", cp),
                    "only 1 controllers are declared"));
+}
+
+// Controller-scoped R registers: the M4's touch-plate LED colours (issue #80).
+// R has two namespaces — undotted R1..R56 is the master's own LED matrix,
+// dotted R<ctrl>.<k> is a controller register that only the M4 has.
+TEST(loader_m4_r_registers) {
+    CompiledPatch cp;
+    // Accepted on an M4, R1.1 ... R1.4, alongside the L brightness registers.
+    CHECK(compile("[m4]\n[copy]\n input = 0.5\n output = R1.1\n", cp).ok);
+    CHECK(compile("[m4]\n[copy]\n input = 0.5\n output = R1.4\n", cp).ok);
+    CHECK(compile("[m4]\n[copy]\n input = 0.5\n output = L1.4\n", cp).ok);
+    // Chain-position arithmetic, as for every other controller register.
+    CHECK(compile("[p2b8]\n[m4]\n[copy]\n input = 0.5\n output = R2.1\n", cp).ok);
+    // Out of range on the model, and on a model with no R registers at all —
+    // the error names the model, not "this master".
+    CHECK(hasError(compile("[m4]\n[copy]\n input = 0.5\n output = R1.5\n", cp),
+                   "no register R1.5 on the m4"));
+    CHECK(hasError(compile("[p2b8]\n[copy]\n input = 0.5\n output = R1.1\n", cp),
+                   "no register R1.1 on the p2b8"));
+    CHECK(hasError(compile("[b32]\n[copy]\n input = 0.5\n output = R1.1\n", cp),
+                   "no register R1.1 on the b32"));
+    // A dotted R beyond the declared chain is a controller-count error.
+    CHECK(hasError(compile("[m4]\n[copy]\n input = 0.5\n output = R2.1\n", cp),
+                   "only 1 controllers are declared"));
+    // The master's own undotted R bank is untouched: R1 and R56 stay valid on a
+    // MASTER with or without an M4 in the chain, and R57 stays invalid.
+    CHECK(compile("[copy]\n input = 0.5\n output = R1\n", cp).ok);
+    CHECK(compile("[m4]\n[copy]\n input = 0.5\n output = R56\n", cp).ok);
+    CHECK(hasError(compile("[copy]\n input = 0.5\n output = R57\n", cp),
+                   "no register R57 on this master"));
 }
 
 TEST(loader_errors) {

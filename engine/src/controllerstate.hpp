@@ -84,9 +84,28 @@ struct EncoderState {
 //   * notches: the haptic config the owning circuit last applied (0 none,
 //     1 pitch-bend, 2 binary, N dents). Panel-only feel; recorded for the Rack
 //     adapter and to document the observable output quantization.
-//   * led / ledColor: LED brightness / colour below the fader (panel-only, like
-//     pot's LED gauge and the encoder ring — not golden-observable directly,
-//     but parked/darkened state is inferred from position for unusedfaders).
+//   * led / ledColor: brightness / colour of the TOUCH-PLATE LED below the
+//     fader. Two kinds of driver write these same two fields:
+//       - a circuit that owns the fader (motorfader / motoquencer / faderbank /
+//         fadermatrix / unusedfaders), through SeqCore::setLaneLed & friends;
+//       - the plate's own REGISTER PAIR on the owning M4, L<ctrl>.<k> for
+//         brightness and R<ctrl>.<k> for colour (hardware.md §6.11: "If you
+//         just use the R registers, the LED will light in full brightness. If
+//         you just use the L register, the LED lights white in the brightness
+//         specified by the value you feed into that register. Using both R and
+//         L at the same time gives you control over brightness and color").
+//         Register writes arrive through writePlateLed() below.
+//     Hardware has ONE register store per plate, so the last write of the cycle
+//     is what the LED shows; here both kinds of driver write during the writing
+//     circuit's own tick, which reproduces that as plain patch order.
+//     `expect F<n>.led` / `F<n>.color` read these back. A negative ledColor is
+//     the white sentinel (SeqCore::kLedWhite); colour 0.0 renders dark.
+// The white sentinel for a plate / step LED colour: any negative value, which
+// the renderer (plugin/src/droidcolor.hpp) maps to white instead of looking the
+// number up in the DROID colour table. SeqCore::kLedWhite is the same constant,
+// spelled there because seqcore.hpp sits above this header.
+inline constexpr float kPlateLedWhite = -1.0f;
+
 struct FaderState {
     float position = 0.0f;
     float motorTarget = 0.0f;
@@ -190,6 +209,34 @@ public:
     // Motor command: move the fader to `pos` (instant in the headless model).
     void commandFader(int fader1, float pos);
 
+    // --- M4 touch-plate LED registers (hardware.md §6.11, issue #80) --------
+    // The plate LED under motor fader `g` is addressed by a register PAIR on
+    // the owning M4: L<ctrl>.<k> (brightness) and R<ctrl>.<k> (colour), where
+    // (ctrl, k) is the M4's chain position and the fader's index on it. The M4
+    // is the only controller model with R registers.
+    //
+    // 1-based global fader number for plate-LED register `r` ('L' or 'R',
+    // dotted), or 0 when `r` does not address a motor fader's plate.
+    int faderIndexForPlateLed(const RegId& r) const;
+    // The 'L' or 'R' register addressing global fader `fader1`'s plate LED;
+    // a type-0 RegId when `fader1` or `type` is out of range.
+    RegId plateLedReg(int fader1, char type) const;
+    // Loader-set (Engine::load): does the PATCH statically bind a circuit output
+    // to this fader's L / R register? That is what decides the manual's "if you
+    // JUST use the R registers / JUST the L register" rule — it is a property of
+    // the patch, not of the value written on a given tick.
+    void setPlateLedDriven(int fader1, bool l, bool r);
+    // Apply a write to an M4 plate-LED register: recompute the fader's
+    // led/ledColor from the register file, per §6.11 —
+    //   R driven, L not -> brightness 1 ("light in full brightness"), hue = R
+    //   L driven, R not -> brightness = |L|, colour = white (kLedWhite)
+    //   both driven     -> brightness = |L|, hue = R   (R == 0 renders dark)
+    // Called from Output::set (engine/src/signal.hpp) — the single choke point
+    // every circuit register-output write passes through — so it fires inside
+    // the writing circuit's tick and a later circuit overwrites an earlier one.
+    // Returns false when `r` is not an M4 plate-LED register.
+    bool writePlateLed(const RegId& r, const RegisterFile& regs);
+
     // Per-DB8E display state. `db8e1` is 1-based, counting DB8Es only (chain
     // order; the manual's `display=N` addressing). Bounds-checked like fader().
     DisplayState* display(int db8e1);
@@ -208,6 +255,10 @@ private:
     std::vector<Slot> slots_;             // [global-1] -> (ctrl,num)
     std::vector<EncoderState> encoders_;  // parallel to slots_
     std::vector<FaderState> faders_;      // [global fader-1]
+    std::vector<Slot> faderSlots_;        // [global fader-1] -> (ctrl, index on it)
+    // [global fader-1] bitmask: bit 0 = the patch drives L<ctrl>.<k>,
+    // bit 1 = it drives R<ctrl>.<k>. See setPlateLedDriven().
+    std::vector<uint8_t> plateDriven_;
     std::vector<DisplayState> displays_;  // [global DB8E-1]
 };
 
