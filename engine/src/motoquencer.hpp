@@ -1,0 +1,110 @@
+#pragma once
+// motoquencer — Motor fader performance sequencer (M4 skin). The whole sequencer
+// engine lives in the shared core engine/src/seqcore.hpp (see it for the full
+// implemented-vs-deferred scope and the SPEC-GAP notes); this file provides only
+// the M4 editing surface: each lane is an absolute-position motor fader with
+// motorized recall on page/mode change and per-notch feel, and the touch plate
+// below it edits the buttonmode parameter (gate / skip / gate-pattern). Editing a
+// step's pitch to a new notch auto-switches its gate on.
+//
+// It is a HEADER rather than the circuit's own .cpp only so that the experimental
+// motoquencer2 (engine/circuits/motoquencer2.cpp, issue #85) can inherit this
+// surface verbatim instead of copying it — `[motoquencer]` itself is registered in
+// engine/circuits/motoquencer.cpp and is unchanged. It lives in engine/src/ rather
+// than beside that registration because the Makefile's rebuild dependencies list
+// engine/src/*.hpp; a header under engine/circuits/ would not trigger a rebuild.
+#include "registry.hpp"
+#include "seqcore.hpp"
+
+namespace droid {
+
+class Motoquencer : public SeqCore {
+public:
+    int availableLanes(EngineState& s) override {
+        int n = s.controllers.faderCount();
+        return n > 0 ? n : 4;
+    }
+
+    void editSurface(EngineState& s, int page, int fm, int bm, bool recall,
+                     bool faders, bool buttons) override {
+        int Nfeel = notchesFor(s, fm);
+        ownsFaders_ = faders;                          // gate for refreshLane()
+        if ((int)hold_.size() < numFaders_) hold_.resize(numFaders_);
+        for (int i = 0; i < numFaders_; i++) {
+            int step = page * numFaders_ + i;
+            if (step >= numsteps_) continue;
+            int fdr = firstFader_ + i;
+            FaderState* f = s.controllers.fader(fdr);
+            if (!f) continue;
+
+            // touch plate editing (independent of fadermode). The plate BELOW the
+            // fader is the step button — grabbing/moving the fader itself
+            // (f->touched) is a different sensor and must never press the step.
+            // Both edges are reported: buttonmode 1's two-finger gesture ends on
+            // the release of the held anchor plate (seqcore.hpp plateEdge).
+            if (buttons) {
+                bool pressed = f->plate;
+                bool wasPressed = (i < (int)prevTouch_.size()) ? prevTouch_[i] : false;
+                if (pressed != wasPressed) plateEdge(s, bm, i, step, pressed);
+                if (i < (int)prevTouch_.size()) prevTouch_[i] = pressed;
+            }
+
+            if (!faders) continue;                         // another chain member's faders
+            // A lane `bulkedit` just stamped is re-commanded rather than read
+            // back: its fader has not moved, so reading it would undo the stamp
+            // in this very tick (seqcore.hpp markStamped).
+            if (recall || !wasSelected_ || bulkStamped(step)) {   // motorized recall
+                float stored = storedPos(s, fm, step);
+                fc::source(hold_[i], true, stored, f->position, f->touched);   // arm (#45)
+                s.controllers.commandFader(fdr, stored);
+                f->notches = Nfeel <= 25 ? Nfeel : 0;
+            } else {                                       // read user movement
+                float snapped;
+                // A recall on a HELD fader stays authoritative until the fader
+                // physically moves: the motor is off under a finger, so the
+                // unchanged position must not be read back as an edit (#45,
+                // fadercore.hpp RecallHold).
+                float pos = fc::source(hold_[i], false, storedPos(s, fm, step),
+                                       f->position, f->touched);
+                bool changed = applyEdit(s, fm, step, pos, snapped);
+                s.controllers.commandFader(fdr, snapped);
+                f->notches = Nfeel <= 25 ? Nfeel : 0;
+                if (changed && fm == 0) { cur_.gate[step] = true; onCvEdited(s, step); }  // auto-on + compose audition
+            }
+        }
+        wasSelected_ = true;
+    }
+
+    // `constantlength` rewrote another step's repeats / skip behind the user's
+    // back (seqcore.hpp compensateLength). The motor has to be re-commanded right
+    // away: the lane loop above reads each fader's PHYSICAL position back as an
+    // edit, so a compensated step whose fader still sits at the old dent would
+    // undo the compensation on the very next pass. Only the instance that owns
+    // the faders this tick may drive them (a chain addresses one lane at a time),
+    // and only the visible page has a lane at all.
+    void refreshLane(EngineState& s, int step) override {
+        if (!ownsFaders_ || shownPage_ < 0) return;
+        int lane = step - shownPage_ * numFaders_;
+        if (lane < 0 || lane >= numFaders_ || lane >= (int)hold_.size()) return;
+        int fdr = firstFader_ + lane;
+        FaderState* f = s.controllers.fader(fdr);
+        if (!f) return;
+        float stored = storedPos(s, shownMode_, step);
+        fc::source(hold_[lane], true, stored, f->position, f->touched);   // re-arm
+        s.controllers.commandFader(fdr, stored);
+    }
+
+    // One recall hold per LANE (fader), not per step: it guards the physical
+    // fader, so a page change re-arms it through the recall branch above.
+    std::vector<fc::RecallHold> hold_;
+    bool ownsFaders_ = false;
+
+    void setLaneLed(EngineState& s, int lane, float bright, float color) override {
+        if (FaderState* f = s.controllers.fader(firstFader_ + lane)) {
+            f->led = bright;
+            f->ledColor = color;
+        }
+    }
+};
+
+} // namespace droid

@@ -188,6 +188,23 @@
           "essential": 1
         }
       ]
+    },
+    "motoquencer2": {
+      "extends": "motoquencer",
+      "title": "Motor fader sequencer with a narrowed probability lane",
+      "description": "motoquencer with one extra input: probabilitymode, which restricts the notches the gate-probability fader lane (fadermode 2) offers to just the random chances or just the trig conditions. Every inherited jack is derived from the firmware's own motoquencer definition (see tools/jackgen/overlay.py), so the two cannot drift apart.",
+      "ramsize": 1188,
+      "extra_inputs": [
+        {
+          "name": "probabilitymode",
+          "short": "pm",
+          "type": "integer",
+          "default": "0",
+          "ramhint": "input",
+          "description": "Which notches the gate-probability lane (fadermode 2) offers. 0 (the default) offers all eight, exactly as in motoquencer. 1 offers the five random chances only: always, 50%, 25%, 12% and conditional. 2 offers the four trig conditions only: always, every even turn, every odd turn and every 4th turn. This narrows the editing surface only: a step's stored probability is never rewritten, so a value outside the selected set keeps playing as before until that step's fader is moved. Read from the main circuit of a linktonext chain, like fadermode.",
+          "essential": 0
+        }
+      ]
     }
   }
 }

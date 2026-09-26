@@ -1,0 +1,25 @@
+# motoquencer2 RAM accounting (manual/circuits/experimental/motoquencer2.md:
+# ram_bytes 1188 — motoquencer's 1184 plus 4 for the resolved probability mode; the
+# notch tables themselves are constant data, not per-circuit RAM).
+# Hand-computed Forge accounting on a MASTER (typeOfMaster()==16 always adds the
+# X7's 864 bytes, attached or not):
+#   x7                            864
+#   m4                            312
+#   motoquencer2 base            1188
+#   clock = I1 (taptempo input)    40
+#   cv    = O1 (output)             4
+#   constants                      16   (seeded {0.0, 1.0} = 8 -> ALIGN_UP(8,16))
+#   ----------------------------------
+#   total                        2424
+# The same lines under [motoquencer] cost 2420 (ram-vs-motoquencer.gold): the two
+# circuits differ by exactly the 4-byte base delta. Patching `probabilitymode = 2`
+# would add 8 bytes (a simple input that is not 0 or 1).
+experimental
+expect_ram 2424
+patch <<<
+[m4]
+[motoquencer2]
+    clock = I1
+    cv    = O1
+>>>
+@0 expect O1 0 tol 1e-4
