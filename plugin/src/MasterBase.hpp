@@ -115,6 +115,12 @@ struct DroidMasterBase : Module {
     // it from any thread.
     std::atomic<uint64_t> processHeartbeat{0};
     std::atomic<bool> engineStalled{false};
+    // Who SHOULD be stepping us, sampled by the widget's step() from
+    // APP->engine->getMasterModule(): true when an audio module holds Rack's
+    // engine clock, false when Rack's CPU-clocked fallback thread owns it
+    // (Engine.hpp). Only meaningful alongside engineStalled, where it decides
+    // which of the two the card tells the reader to go and look at.
+    std::atomic<bool> engineClockHeldByModule{false};
     // Experimental (#13): load patches over the hardware limits (RAM budget,
     // 64 000-byte size cap — the latter measured the way the master measures
     // it, with abbreviated parameter names, see droid::deployedPatchSize and
@@ -188,6 +194,8 @@ struct DroidMasterBase : Module {
         // chainError is UI-thread-only (written by the widget's step()), so it
         // is deliberately read outside the lock, like the menu already does.
         r.engineStalled = engineStalled.load(std::memory_order_relaxed);
+        r.engineClockHeldByModule =
+            engineClockHeldByModule.load(std::memory_order_relaxed);
         r.chainError = chainError;
         r.chainFix = chainFix;
         r.chainFixBlocker = chainFixBlocker;
@@ -1933,6 +1941,15 @@ struct DroidMasterBaseWidget : ModuleWidget {
                 system::getTime());
         }
         if (stalled != m->engineStalled.load(std::memory_order_relaxed)) {
+            // Who owns Rack's engine clock, sampled on the edge (UI thread —
+            // getMasterModule() carries no documented off-thread contract, and
+            // this is the one frame the answer is needed on). It decides the
+            // card's sentence: a module holding the clock and not running it
+            // is a dead audio device, no module holding it means Rack's own
+            // fallback thread is the one that stopped.
+            m->engineClockHeldByModule.store(
+                APP->engine->getMasterModule() != nullptr,
+                std::memory_order_relaxed);
             m->engineStalled.store(stalled, std::memory_order_relaxed);
             // Note what is deliberately NOT done here: the stale chain verdict
             // is not cleared. chainError/chainFix are written under the

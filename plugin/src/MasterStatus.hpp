@@ -415,12 +415,27 @@ inline BlinkCode blinkCode(droid::ErrorCode code, int line) {
 }
 
 // --- "is anything stepping the engine at all?" (issue #83) ----------------
-// Rack only runs its CPU-clocked fallback thread when the rack holds NO primary
-// Audio module. An Audio module that is present but has no device selected
-// therefore steps nothing: no module's process() is ever called, the expander
-// relay never runs, chainPhysical stays empty — and the master used to read
-// that empty chain as a chain error ("patch declares db8e, chain has nothing")
-// and send the user hunting a chain bug that does not exist.
+// Rack steps every module from one of exactly two clocks (Engine.hpp, on
+// startFallbackThread: "If no master module is set, the fallback Engine thread
+// will step blocks, using the CPU clock for timing"):
+//
+//   * an audio module that has claimed the engine clock — the MASTER MODULE in
+//     Rack's vocabulary — stepping the engine from its device callback, or
+//   * Rack's own CPU-clocked fallback thread, which runs ONLY while no module
+//     holds the clock.
+//
+// So nothing steps when a module holds the clock and then stops running it:
+// its device was unplugged, changed under it, or opened and never called back.
+// "No device selected" is NOT that case — an audio module with no device never
+// claims the clock, so the fallback thread covers it and the rack keeps
+// running (verified on Rack 2.6.6). The field reports behind issue #83 are the
+// first case: /cpu reported tick.valid false and /probe sampleRateHz 0, i.e.
+// process() genuinely never ran.
+//
+// When that happens no module's process() is called, the expander relay never
+// runs, chainPhysical stays empty — and the master used to read that empty
+// chain as a chain error ("patch declares db8e, chain has nothing") and send
+// the user hunting a chain bug that does not exist.
 //
 // The master can tell the difference itself, because it knows whether its own
 // process() has been called lately. The audio side publishes a monotonic
@@ -499,12 +514,21 @@ inline std::string chainErrorToReport(bool engineStalled,
     return engineStalled ? std::string() : chainError;
 }
 
-// What the card says when it happens. One cause accounts for every sighting of
-// this in practice, so the message names it rather than describing the symptom.
+// What the card says when it happens. Which of the two clocks SHOULD be
+// running decides the sentence, because the fix is different for each and
+// naming the wrong one sends the reader to the wrong place — the whole failure
+// mode issue #83 is about.
 constexpr const char* kEngineStalledTitle = "ENGINE NOT RUNNING";
-constexpr const char* kEngineStalledMessage =
-    "Rack's Audio module has no device selected. Pick a device (or remove the "
-    "Audio module) to start it.";
+
+inline std::string engineStalledMessage(bool clockHeldByModule) {
+    if (clockHeldByModule)
+        return "A module holds Rack's engine clock and has stopped running "
+               "it — usually an audio device that went away or never "
+               "started. Reselect the device on Rack's Audio module, or "
+               "remove the module to hand the clock back to Rack's CPU timer.";
+    return "Nothing is stepping Rack's engine. No module holds the engine "
+           "clock, so Rack's own CPU timer should be running it.";
+}
 
 // Everything the master knows about its own health, flattened into plain data
 // so the verdict below is a pure function of it.
@@ -522,6 +546,11 @@ struct Report {
     // process() lately, so nothing below this line can be trusted to be
     // current — least of all the chain scan, which process() is what fills in.
     bool engineStalled = false;
+    // Which of Rack's two clocks should be stepping us: true when a module
+    // holds the engine clock (APP->engine->getMasterModule()), false when the
+    // CPU-clocked fallback thread owns it. Only consulted while stalled, to
+    // say which one stopped.
+    bool engineClockHeldByModule = false;
     std::string chainError;        // non-empty: the chain does not match the patch
     // The "add missing controllers" offer (issue #69), as a chain error's
     // FIX rather than its description: chainFix names the modules the action
@@ -602,7 +631,7 @@ inline Status evaluate(const Report& r) {
         s.ringVisible = ringColor(s.state, s.ring);
         s.matrix = Matrix::Mirror;   // frozen where the last tick left it
         s.title = kEngineStalledTitle;
-        s.message = kEngineStalledMessage;
+        s.message = engineStalledMessage(r.engineClockHeldByModule);
         return s;
     }
     if (!r.chainError.empty()) {

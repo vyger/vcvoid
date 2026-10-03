@@ -193,6 +193,14 @@ std::string Bridge::handleMasterStatus(DroidMasterBase* m, int* code) {
     // ask before it loads anything (tools/uatbridge-smoke.sh does, as a
     // precondition).
     json_object_set_new(o, "engineStalled", json_boolean(stalled));
+    // Which clock should be stepping the rack (issue #83): "module" = an audio
+    // module holds Rack's engine clock, "fallback" = Rack's own CPU timer owns
+    // it. Alongside engineStalled this says WHICH clock stopped, which is the
+    // difference between "your audio device died" and "Rack itself is not
+    // stepping". Sampled by the widget, same as engineStalled.
+    json_object_set_new(o, "engineClock",
+        json_string(m->engineClockHeldByModule.load(std::memory_order_relaxed)
+                        ? "module" : "fallback"));
     json_object_set_new(o, "midiWarning", json_boolean(midiWarn));
     json_object_set_new(o, "timingMode",
         json_string(timingMode == DroidMasterBase::TimingMode::Adaptive
@@ -1475,6 +1483,92 @@ std::string Bridge::handleRackQuit(int* code) {
     }, code);
 }
 
+// GET  /rack/engine-clock -- who is stepping the engine right now.
+// POST /rack/engine-clock {"freeze": true|false} -- UAT ONLY: stop/restart it.
+//
+// Rack steps every module from one of two clocks (Engine.hpp, on
+// startFallbackThread: "If no master module is set, the fallback Engine thread
+// will step blocks, using the CPU clock for timing"): an audio module that has
+// claimed the clock, or Rack's CPU-clocked fallback thread when no module has.
+// Issue #83's failure is a module holding the clock and never running it, and
+// that is otherwise only reproducible with an audio device that dies on cue --
+// which is why this verb exists.
+//
+// Freezing hands the clock to the vcvoid master itself. A master never calls
+// stepBlock(), so the engine stops exactly as it does when an audio device
+// stops calling back: no module's process() runs, and nothing else about the
+// rack changes. Unfreezing restores the module that held the clock before
+// (NULL included, which is what re-starts the fallback thread), so a rack with
+// working audio comes back to its own audio module rather than to the CPU
+// timer. setMasterModule() "Exclusively locks", so both go through uiCall.
+std::string Bridge::handleRackEngineClock(const Request& req, int* code) {
+    if (req.method == "GET") {
+        return uiCall([](int* c) -> json_t* {
+            rack::engine::Module* holder = APP->engine->getMasterModule();
+            json_t* o = json_object();
+            json_object_set_new(o, "clock",
+                json_string(holder ? "module" : "fallback"));
+            json_object_set_new(o, "moduleId",
+                json_integer(holder ? (json_int_t) holder->id : -1));
+            *c = 200;
+            return o;
+        }, code);
+    }
+    json_t* root = parseJsonBody(req.body, code);
+    if (!root) return "{\"error\":\"invalid JSON body\"}";
+    json_t* jf = json_object_get(root, "freeze");
+    if (!jf || !json_is_boolean(jf)) {
+        json_decref(root);
+        *code = 400;
+        return "{\"error\":\"missing boolean 'freeze'\"}";
+    }
+    bool freeze = json_is_true(jf);
+    json_decref(root);
+    // The module to park the clock on: any registered master will do, since
+    // none of them step the engine. 503 rather than a silent no-op when the
+    // rack has none -- there is nothing to freeze the engine WITH.
+    int64_t victimId = -1;
+    {
+        std::lock_guard<std::mutex> lk(mastersMutex_);
+        if (!masters_.empty()) victimId = masters_.front()->id;
+    }
+    if (freeze && victimId < 0) {
+        *code = 503;
+        return "{\"error\":\"no vcvoid master in the rack to park the engine clock on\"}";
+    }
+    // The victim is re-resolved by id on the UI thread rather than captured as
+    // a pointer: the module can be deleted between this HTTP thread and the
+    // drain, and handing a dangling Module* to setMasterModule() would be a
+    // use-after-free rather than a 404.
+    return uiCall([this, freeze, victimId](int* c) -> json_t* {
+        if (freeze) {
+            rack::engine::Module* victim = APP->engine->getModule(victimId);
+            if (!victim) {
+                *c = 404;
+                return json_pack("{s:s}", "error", "master vanished before the freeze ran");
+            }
+            if (!clockFrozen_) {
+                frozenClockPrev_ = APP->engine->getMasterModule();
+                clockFrozen_ = true;
+            }
+            APP->engine->setMasterModule(victim);
+        } else if (clockFrozen_) {
+            APP->engine->setMasterModule(frozenClockPrev_);
+            frozenClockPrev_ = nullptr;
+            clockFrozen_ = false;
+        }
+        rack::engine::Module* holder = APP->engine->getMasterModule();
+        json_t* o = json_object();
+        json_object_set_new(o, "frozen", json_boolean(clockFrozen_));
+        json_object_set_new(o, "clock",
+            json_string(holder ? "module" : "fallback"));
+        json_object_set_new(o, "moduleId",
+            json_integer(holder ? (json_int_t) holder->id : -1));
+        *c = 200;
+        return o;
+    }, code);
+}
+
 // POST /rack/sample-rate {hz} -- mirrors Rack's Engine menu "Sample rate"
 // picker. rack::engine::Engine::setSampleRate() (Engine.hpp) is PRIVATE
 // (rack.hpp: `#define PRIVATE __attribute__((deprecated(...)))` on clang,
@@ -1941,6 +2035,9 @@ std::string Bridge::dispatch(const Request& req) {
         body = handleRackQuit(&code);
     else if (req.method == "POST" && req.path == "/rack/sample-rate")
         body = handleRackSampleRate(req, &code);
+    else if ((req.method == "POST" || req.method == "GET") &&
+             req.path == "/rack/engine-clock")
+        body = handleRackEngineClock(req, &code);
     else if (req.method == "GET" && req.path == "/modules")
         body = handleModulesList(&code);
     else if (req.method == "POST" && req.path == "/modules")

@@ -420,24 +420,50 @@ TEST(stall_monitor_reset_restores_the_startup_grace) {
 }
 
 TEST(status_a_stalled_engine_says_so_instead_of_a_chain_error) {
-    // The exact shape of the bug: a correctly wired rack whose Audio module
-    // has no device. The chain scan has nothing to look at, so it reports a
-    // mismatch — which must never reach the card.
+    // The exact shape of the bug: a rack nothing is stepping. The chain scan
+    // has nothing to look at, so it reports a mismatch — which must never
+    // reach the card.
     Report r;
     r.havePatch = true;
     r.loadOk = true;
     r.engineStalled = true;
+    r.engineClockHeldByModule = true;
     r.chainError = "controller 1: patch declares db8e, chain has nothing";
     r.chainFix = "db8e";
     Status s = evaluate(r);
     CHECK(s.state == State::EngineStalled);
     CHECK(s.message.find("chain") == std::string::npos);
-    CHECK(s.message.find("Audio module") != std::string::npos);
     CHECK(s.title == std::string(kEngineStalledTitle));
     CHECK(s.ringVisible && sameColor(s.ring, kRingAmber));
     CHECK(s.matrix == Matrix::Mirror);     // frozen where the last tick left it
     CHECK(!s.blink.active);
     CHECK(s.line == 0);
+}
+
+TEST(stall_message_names_the_clock_that_stopped) {
+    // Rack steps the rack from an audio module that has claimed the engine
+    // clock, or — only when no module has — from its own CPU-clocked fallback
+    // thread (Engine.hpp). The fix differs, so the sentence must too: naming
+    // the wrong one is the failure mode issue #83 is about. In particular
+    // "the Audio module has no device" is NOT the message for a stall, since
+    // a device-less audio module never claims the clock and the fallback
+    // thread keeps the rack running (checked live on Rack 2.6.6).
+    std::string held = engineStalledMessage(true);
+    std::string fallback = engineStalledMessage(false);
+    CHECK(held != fallback);
+    CHECK(held.find("audio device") != std::string::npos);
+    CHECK(held.find("Audio module") != std::string::npos);
+    CHECK(held.find("clock") != std::string::npos);
+    CHECK(fallback.find("No module holds the engine clock") != std::string::npos);
+    // And the verdict carries whichever one applies.
+    Report r;
+    r.havePatch = true;
+    r.loadOk = true;
+    r.engineStalled = true;
+    r.engineClockHeldByModule = true;
+    CHECK(evaluate(r).message == held);
+    r.engineClockHeldByModule = false;
+    CHECK(evaluate(r).message == fallback);
 }
 
 TEST(status_a_stalled_engine_outranks_warnings_too) {
