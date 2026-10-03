@@ -484,6 +484,21 @@ private:
     double lastMoved_ = 0.0;
 };
 
+// The chain verdict as it should be REPORTED while this is going on. The chain
+// scan's inputs are assembled by process(), so a verdict computed while nothing
+// is stepping describes a chain nobody looked at — on a cold start with no
+// audio device that is exactly the bogus "chain has nothing" of issue #83. It
+// is SUPPRESSED rather than cleared: the field it suppresses is written by the
+// widget under the master's engineMutex and read by the UAT bridge's HTTP
+// thread under the same lock, so having the stall reach in and blank it would
+// mean a second writer — a data race on a std::string — for a value the reader
+// can just as easily ignore. One rule, used by evaluate() below for the card
+// and by the bridge for /status and /diagnostics.
+inline std::string chainErrorToReport(bool engineStalled,
+                                      const std::string& chainError) {
+    return engineStalled ? std::string() : chainError;
+}
+
 // What the card says when it happens. One cause accounts for every sighting of
 // this in practice, so the message names it rather than describing the symptom.
 constexpr const char* kEngineStalledTitle = "ENGINE NOT RUNNING";

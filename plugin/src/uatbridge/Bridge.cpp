@@ -133,6 +133,10 @@ std::string Bridge::handleMasterStatus(DroidMasterBase* m, int* code) {
     std::vector<std::string> chain;
     bool x7 = false;
     bool midiWarn = false;
+    // issue #83: read it once, up front, so every field below describes the
+    // same instant — a stall that begins mid-serialisation must not produce a
+    // body that is half "stalled" and half "chain error".
+    bool stalled = m->engineStalled.load(std::memory_order_relaxed);
     {
         std::lock_guard<std::mutex> lk(m->engineMutex);
         patchPath = m->patchPath;
@@ -140,7 +144,8 @@ std::string Bridge::handleMasterStatus(DroidMasterBase* m, int* code) {
         stateStatus = m->stateStatus;   // issue #42: restored / migrated / fresh
         chain = m->chainPhysical;
         x7 = m->x7Present;
-        chainError = m->chainError;
+        // Suppressed while stalled: the scan that produced it never ran.
+        chainError = vcvoid::status::chainErrorToReport(stalled, m->chainError);
         // Same diagnostic the context menu computes (MasterBase.hpp
         // appendContextMenu / ISSUE-3): a MIDI patch with no reachable MIDI
         // hardware runs silently. Reuse the engine's own predicates under the
@@ -187,8 +192,7 @@ std::string Bridge::handleMasterStatus(DroidMasterBase* m, int* code) {
     // "is this Rack running at all" is a question a harness has to be able to
     // ask before it loads anything (tools/uatbridge-smoke.sh does, as a
     // precondition).
-    json_object_set_new(o, "engineStalled",
-        json_boolean(m->engineStalled.load(std::memory_order_relaxed)));
+    json_object_set_new(o, "engineStalled", json_boolean(stalled));
     json_object_set_new(o, "midiWarning", json_boolean(midiWarn));
     json_object_set_new(o, "timingMode",
         json_string(timingMode == DroidMasterBase::TimingMode::Adaptive
@@ -247,8 +251,14 @@ std::string Bridge::handleMasterDiagnostics(DroidMasterBase* m, int* code) {
     // issue #69: the fix the context menu offers for a chain error — the
     // models "Add missing controllers" would create, or why it cannot. Empty
     // strings in every other state.
-    json_object_set_new(o, "chainFix", json_string(m->chainFix.c_str()));
-    json_object_set_new(o, "chainFixBlocker", json_string(m->chainFixBlocker.c_str()));
+    // Suppressed with the error they explain while the engine is stalled
+    // (issue #83): an offer to add the controllers of a chain nobody scanned
+    // is the same wrong answer in a different field.
+    bool stalled = m->engineStalled.load(std::memory_order_relaxed);
+    json_object_set_new(o, "chainFix",
+        json_string(vcvoid::status::chainErrorToReport(stalled, m->chainFix).c_str()));
+    json_object_set_new(o, "chainFixBlocker",
+        json_string(vcvoid::status::chainErrorToReport(stalled, m->chainFixBlocker).c_str()));
     json_object_set_new(o, "patchPath", json_string(patchPath.c_str()));
     json_object_set_new(o, "stateLine", json_string(stateLine.c_str()));
     // The free-text line stays available so a failure report can quote exactly

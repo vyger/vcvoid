@@ -1934,22 +1934,23 @@ struct DroidMasterBaseWidget : ModuleWidget {
         }
         if (stalled != m->engineStalled.load(std::memory_order_relaxed)) {
             m->engineStalled.store(stalled, std::memory_order_relaxed);
+            // Note what is deliberately NOT done here: the stale chain verdict
+            // is not cleared. chainError/chainFix are written under the
+            // master's engineMutex and read by the bridge's HTTP thread under
+            // the same lock, so blanking them from this edge would add a
+            // second, unsynchronised writer to a std::string the other thread
+            // may be copying. The verdict is suppressed where it is REPORTED
+            // instead (status::chainErrorToReport), which needs no writer at
+            // all. The only state this edge touches is its own.
             if (stalled) {
-                // Entering the stall: drop the chain verdict rather than leave
-                // a stale (and, on a cold start, outright wrong) chain error
-                // standing in /status and in the context menu. chainOk is left
-                // alone — it is the pre-stall truth, and the debounce below
-                // wants it when the engine comes back.
-                m->chainError.clear();
-                m->chainFix.clear();
-                m->chainFixBlocker.clear();
-                chainRevalPending = false;
+                chainRevalPending = false;   // widget-local
             } else {
-                // Leaving it: the chain signature process() tracks may not have
-                // changed across the stall, so nothing else would ask for a
+                // Leaving the stall: the chain signature process() tracks may
+                // not have changed across it, so nothing else would ask for a
                 // revalidation. Ask for one — unforced, so the ISSUE-5
                 // tolerance window absorbs the frames the relay needs to
-                // republish the chain.
+                // republish the chain. chainDebounce is UI-thread-only, like
+                // chainRevalPending.
                 m->chainDebounce.invalidFrames = 0;
                 m->chainDirty.store(true);
             }

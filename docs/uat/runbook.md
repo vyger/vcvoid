@@ -438,7 +438,9 @@ g8-first row pins `chainError` and freezes the G8 gates).
    (`severity` `warning`) and `.engineStalled == true` — the raw flag, which
    `state` can outrank (a master with no patch still reports `"no-patch"`),
    and what `make smoke` checks as a precondition before it loads anything.
-   `.chainError` is **empty** while it holds — the context-menu card is titled
+   `.chainError` reads **empty** while it holds (suppressed at report time,
+   not cleared — the widget never writes that field off-lock) — the
+   context-menu card is titled
    **ENGINE NOT RUNNING** over "Rack's Audio module has no device selected…",
    and it must NOT read "chain has nothing" even on a master whose patch
    declares controllers. Pick the device again: the state returns to

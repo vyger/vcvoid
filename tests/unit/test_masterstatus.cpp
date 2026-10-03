@@ -468,6 +468,20 @@ TEST(status_a_load_failure_outranks_a_stalled_engine) {
     CHECK(evaluate(empty).state == State::NoPatch);
 }
 
+TEST(stall_suppresses_the_chain_verdict_where_it_is_reported) {
+    // The rule the bridge's /status and /diagnostics apply to chainError (and
+    // to the chainFix that explains it). SUPPRESSED, not cleared: those fields
+    // belong to the widget, which writes them under the master's engineMutex
+    // while the bridge's HTTP thread copies them under the same lock — a
+    // stall that reached in and blanked them would be a second, unlocked
+    // writer racing that copy. So the reader drops the value instead.
+    const std::string err = "controller 1: patch declares db8e, chain has nothing";
+    CHECK(chainErrorToReport(true, err).empty());
+    CHECK(chainErrorToReport(false, err) == err);
+    CHECK(chainErrorToReport(true, "").empty());
+    CHECK(chainErrorToReport(false, "").empty());
+}
+
 TEST(status_a_live_engine_still_reports_its_chain_error) {
     // The guard above must not swallow the real thing.
     Report r;
