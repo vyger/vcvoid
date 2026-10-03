@@ -141,21 +141,39 @@ inline int firstChangedElement(DisplayBaseline* base, const float* values, int c
 // circuit's own derived one for a plain-value circuit, or the moved element's
 // for a bank (issue #22) — see showCircuitValue just below, which supplies the
 // scalar case.
-inline bool showValueWithHeader(Circuit& c, EngineState& s, float value,
-                                int autoHeaderText, uint8_t numbermode = 0) {
+//
+// THIS function is everything a circuit-tier write shares no matter which
+// LAYOUT it is sending (issue #22, Group C): target resolution, arbitration,
+// the header, and the owner/tier/tick stamp. The per-layout writers below only
+// add their own payload. Returns the claimed DisplayState, or nullptr when the
+// write was suppressed (`display = 0`, no such DB8E) or refused — in which case
+// the caller must leave its baseline untouched so the write re-attempts.
+inline DisplayState* claimCircuitScreen(Circuit& c, EngineState& s,
+                                        int autoHeaderText) {
     DisplayState* d = targetDisplay(c, s);
-    if (!d) return false;
+    if (!d) return nullptr;
     bool accepted = (d->owner == &c) ||
                     (s.tick >= d->lingerUntilTick) ||
                     (d->active && d->lastWriteTick == s.tick &&
                      kTierCircuit >= d->ownerTier);
-    if (!accepted) return false;
+    if (!accepted) return nullptr;
     d->active = true;
     // An explicit `header` wins; otherwise the title the Engine derived from the
     // `output` target at load (0 = none).
     d->headerText = c.in("header").connected() ? floorText(c.in("header").value(s))
                                                : autoHeaderText;
-    d->isText = false;
+    d->owner = &c;
+    d->ownerTier = kTierCircuit;
+    d->lingerUntilTick = s.tick;   // no hold of its own
+    d->lastWriteTick = s.tick;
+    return d;
+}
+
+inline bool showValueWithHeader(Circuit& c, EngineState& s, float value,
+                                int autoHeaderText, uint8_t numbermode = 0) {
+    DisplayState* d = claimCircuitScreen(c, s, autoHeaderText);
+    if (!d) return false;
+    d->layout = DisplayLayout::Value;
     d->value = value;
     // These circuits have no numbermode/fontsize jacks. The default 0 leaves the
     // DB8E's own user-selected format alone ("use the buttons on the DB8E"); a
@@ -163,10 +181,6 @@ inline bool showValueWithHeader(Circuit& c, EngineState& s, float value,
     // display, display.md's numbermode table).
     d->numbermode = numbermode;
     d->fontsize = 0;
-    d->owner = &c;
-    d->ownerTier = kTierCircuit;
-    d->lingerUntilTick = s.tick;   // no hold of its own
-    d->lastWriteTick = s.tick;
     return true;
 }
 
@@ -175,6 +189,37 @@ inline bool showValueWithHeader(Circuit& c, EngineState& s, float value,
 inline bool showCircuitValue(Circuit& c, EngineState& s, float value,
                              uint8_t numbermode = 0) {
     return showValueWithHeader(c, s, value, c.autoHeaderText, numbermode);
+}
+
+// Text layout (issue #22, Group C): one interned text as the body, under the
+// usual header. `textNumber` is normally a CIRCUIT-provided string interned at
+// load through Circuit::internTexts — recorder's Recording/Playback/Bypass —
+// since the point of this variant is words that are not in the patch.
+inline bool showCircuitText(Circuit& c, EngineState& s, int textNumber) {
+    DisplayState* d = claimCircuitScreen(c, s, c.autoHeaderText);
+    if (!d) return false;
+    d->layout = DisplayLayout::Text;
+    d->bodyText = textNumber;
+    return true;
+}
+
+// Bubbles layout (issue #22, Group C): the `button` circuit's state chain —
+// `count` bubbles joined by short horizontal segments with the one at `index`
+// filled solid (measured on hardware, issue #19), under the ordinary derived
+// header. The payload is the two numbers; circles and spacing are the screen's
+// business. `index` is clamped into the chain so a payload can never point past
+// its own bubbles.
+inline bool showStateBubbles(Circuit& c, EngineState& s, int count, int index) {
+    if (count < 1) return false;
+    if (count > 255) count = 255;
+    if (index < 0) index = 0;
+    if (index > count - 1) index = count - 1;
+    DisplayState* d = claimCircuitScreen(c, s, c.autoHeaderText);
+    if (!d) return false;
+    d->layout = DisplayLayout::Bubbles;
+    d->bubbles.count = (uint8_t)count;
+    d->bubbles.index = (uint8_t)index;
+    return true;
 }
 
 } // namespace ui

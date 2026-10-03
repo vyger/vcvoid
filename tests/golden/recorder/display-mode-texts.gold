@@ -1,0 +1,60 @@
+# recorder: the DB8E shows the transport mode as a word (issue #22, Group C).
+#
+# recorder.md "Display": "the display will show **Recording**, **Playback** or
+# **Bypass** whenever you change the recording mode." STOP maps to "Bypass" —
+# the manual's own name for idle: "The circuit starts in idle / stopped mode
+# and `L1.3` is lit. In that mode the input is bypassed to the output."
+#
+# Those three words never appear in the patch, so they are not in the text
+# table the parser builds. They are interned at load through
+# Circuit::internTexts and sent as the Text layout — the load-time seam for
+# circuit-provided strings (docs/adr/0003-db8e-custom-display-layouts.md).
+#
+# The circuit has no scalar `output` jack, so there is no automatic title to
+# derive (issue #19's "no `output` jack -> no header at all, just the value")
+# and the header is empty unless the patch sets one.
+#
+# Transport timing mirrors recorder/buttons-and-leds.gold.
+patch <<<
+[db8e]
+
+[recorder]
+    recordbutton = I1
+    playbutton   = I2
+    stopbutton   = I3
+    cvin         = I4
+    cvout        = O1
+>>>
+# Merely loading the patch leaves the screen dark, even though the circuit is
+# already in its idle/bypass mode: the screen wakes on a mode CHANGE.
+@0 set I4 0.50
+@0 expectdisplay D1 off
+# record button -> RECORD
+@1 set I1 1
+@1 set I4 0.51
+@1 expectdisplay D1 text "Recording"
+@1 expectdisplay D1 header ""
+@2 set I1 0
+@2 set I4 0.52
+# Still recording, nothing changed: the screen holds the same word.
+@2 expectdisplay D1 text "Recording"
+@3 set I4 0.53
+# stop button -> idle, which is "Bypass"
+@4 set I3 1
+@4 set I4 0.53
+@4 expectdisplay D1 text "Bypass"
+# play button -> PLAY
+@5 set I3 0
+@5 set I2 1
+@5 expectdisplay D1 text "Playback"
+@6 set I2 0
+@6 expectdisplay D1 text "Playback"
+@7 expectdisplay D1 text "Playback"
+# The tape runs out. With the buttons (not `mode`) that auto-stops back to
+# idle, which is a mode change like any other -> "Bypass" again. The screen
+# follows the mode that drove the tick's OUTPUT, so it changes in lockstep
+# with the stop LED rather than a tick ahead of it.
+@8 set I4 0.77
+@8 expect O1 0.77 tol 1e-5
+@8 expectdisplay D1 text "Bypass"
+@9 expectdisplay D1 text "Bypass"

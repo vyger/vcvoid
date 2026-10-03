@@ -130,20 +130,46 @@ enum : uint8_t {
     kTierLibrary = 4,   // library mode (Rack-side, reserved)
 };
 
-// Per-DB8E symbolic screen content. NOT pixels: header + (text | value+format).
-// Content arbitration covers the [display] tier and the circuit tier (see the
-// tier enum above; control/library are Rack-side). Owner + linger give the
-// manual's semantics: a write is accepted iff it comes from the current owner
-// OR the linger window has expired OR it is a same-tick overwrite by an equal
-// or higher tier. `useasdefault` content re-asserts after expiry.
+// Which SCREEN LAYOUT the master is sending to the DB8E (issue #22, Group C;
+// see docs/adr/0003-db8e-custom-display-layouts.md). hardware.md §6.12:
+// "Some circuits like `motoquencer`, `calibrator` or `vcotuner` even have a
+// more fancy custom display layout. They do not simply display a *value* but
+// something more complex." The real master->DB8E protocol is already tagged —
+// §6.13: a DB8E whose firmware predates a layout "shows a screen like `update
+// firmware`" — so the model is a tag plus that layout's PARAMETERS. Payloads
+// stay symbolic (counts, indices, numbers, interned text numbers), never
+// pixels: goldens assert WHAT is on screen, the Rack renderer decides HOW.
+//
+// A reader that meets an unknown tag must draw the hardware's "update
+// firmware" fallback rather than guess at another layout's payload.
+enum class DisplayLayout : uint8_t {
+    Value   = 0,   // header + a number (+ numbermode/fontsize): [display], Groups A/B
+    Text    = 1,   // header + one interned text: [display], recorder
+    Bubbles = 2,   // header + a chain of `count` bubbles, `index` filled: button
+};
+
+// Per-DB8E symbolic screen content. NOT pixels: a header plus one tagged layout
+// payload (see DisplayLayout above). Content arbitration covers the [display]
+// tier and the circuit tier (see the tier enum above; control/library are
+// Rack-side). Owner + linger give the manual's semantics: a write is accepted
+// iff it comes from the current owner OR the linger window has expired OR it is
+// a same-tick overwrite by an equal or higher tier. `useasdefault` content
+// re-asserts after expiry.
 struct DisplayState {
     bool active = false;          // false until first accepted write
+    // The header rides OUTSIDE the variant: every documented layout, the custom
+    // ones included, sits under the ordinary derived-or-explicit title, so the
+    // auto-header machinery (issues #19/#22 Group B) is shared by all of them.
     int headerText = 0;           // text number, 0 = none
-    bool isText = false;
-    int bodyText = 0;             // when isText
-    float value = 0.0f;           // when !isText
-    uint8_t numbermode = 0;
-    uint8_t fontsize = 0;
+    DisplayLayout layout = DisplayLayout::Value;
+    // --- payloads: each field is meaningful only under its own tag ----------
+    int bodyText = 0;             // Text
+    float value = 0.0f;           // Value
+    uint8_t numbermode = 0;       // Value
+    uint8_t fontsize = 0;         // Value
+    // Bubbles (button.md: a chain of `count` bubbles joined by short segments,
+    // the one at `index` filled solid). Parameters, not geometry.
+    struct { uint8_t count = 0, index = 0; } bubbles;
     const void* owner = nullptr;  // opaque circuit identity for linger arbitration
     uint8_t ownerTier = 0;        // tier of the last accepted write (see enum above)
     uint64_t lingerUntilTick = 0;

@@ -1,0 +1,47 @@
+# button: the DB8E state-bubble chain (issue #22, Group C).
+#
+# button.md "Display": the circuit "automatically displays it's state, whenever
+# `states = 3` or `states = 4`". That is NOT a value — hardware draws a chain
+# of `states` bubbles joined by short horizontal segments with the current
+# state's bubble filled solid (measured, issue #19). The engine sends it as the
+# Bubbles layout, whose whole payload is (count, index); the circles are the
+# screen's business. See docs/adr/0003-db8e-custom-display-layouts.md.
+#
+# Header: the ordinary derived title (issue #19) — this circuit's `output` goes
+# to `_MODE`, so the title is "MODE" with the leading underscore dropped.
+tickrate 100
+patch <<<
+[p2b8]
+[db8e]
+
+[button]
+    button = B1.1
+    output = _MODE
+    states = 4
+
+# Cables need a reader or the patch will not load.
+[copy]
+    input  = _MODE
+    output = O1
+>>>
+# Merely loading the patch leaves the screen dark: the screen only wakes when
+# you operate something.
+@0 expectdisplay D1 off
+# First press -> state 1 of 4: four bubbles, the second one filled.
+@1 set B1.1 1
+@1 expectdisplay D1 bubbles 4 1
+@1 expectdisplay D1 header "MODE"
+@2 set B1.1 0
+# Nothing pressed: the screen holds the same chain.
+@3 expectdisplay D1 bubbles 4 1
+# Each further press advances the filled bubble...
+@4 set B1.1 1
+@4 expectdisplay D1 bubbles 4 2
+@5 set B1.1 0
+@6 set B1.1 1
+@6 expectdisplay D1 bubbles 4 3
+@7 set B1.1 0
+# ... and wraps back to the first.
+@8 set B1.1 1
+@8 expectdisplay D1 bubbles 4 0
+@9 set B1.1 0

@@ -1238,7 +1238,7 @@ public:
                 }
                 // --- DB8E symbolic screen (1 per DB8E, chain order) ----------
                 // Mirrors tests/runner/main.cpp evalExpectDisplay: header/body via
-                // textForNumber; value+numbermode when !isText. An inactive display
+                // textForNumber; the payload named by the layout tag. An inactive display
                 // has headerText/bodyText 0 -> "" and value 0 (block was zeroed).
                 if (id == MDB8E) {
                     if (const droid::DisplayState* ds = engine->displayState(++db8e)) {
@@ -1252,13 +1252,21 @@ public:
                         copyDisplayText(b.dispHeader,
                             engine->textForNumber(float(ds->headerText)).substr(
                                 0, droid::chain::kDb8eHeaderChars));
-                        b.dispIsText = ds->isText ? 1 : 0;
-                        if (ds->isText)
+                        // The layout TAG plus that layout's payload (issue
+                        // #22, Group C): the relay copies every payload field
+                        // regardless, which is cheaper than branching and keeps
+                        // the block a plain POD; DB8E.cpp reads only the one the
+                        // tag names, and draws "update firmware" for a tag it
+                        // does not know.
+                        b.dispLayout = (uint8_t)ds->layout;
+                        if (ds->layout == droid::DisplayLayout::Text)
                             copyDisplayText(b.dispText, engine->textForNumber(float(ds->bodyText)));
-                        b.dispActive     = ds->active ? 1 : 0;
-                        b.dispValue      = ds->value;
-                        b.dispNumbermode = ds->numbermode;
-                        b.dispFontsize   = ds->fontsize;
+                        b.dispActive      = ds->active ? 1 : 0;
+                        b.dispValue       = ds->value;
+                        b.dispNumbermode  = ds->numbermode;
+                        b.dispFontsize    = ds->fontsize;
+                        b.dispBubbleCount = ds->bubbles.count;
+                        b.dispBubbleIndex = ds->bubbles.index;
                     }
                 }
             }

@@ -1,6 +1,7 @@
 // display — show texts or values on a DB8E's OLED, or fix its number mode / font.
 // Spec: manual/circuits/display.md. This is the ENGINE-SIDE symbolic screen model
-// only: it writes DisplayState (header + text|value + numbermode/fontsize) for one
+// only: it writes DisplayState (header + the Text or Value layout + numbermode/
+// fontsize — the custom layouts in DisplayLayout belong to other circuits) for one
 // DB8E via ControllerState. What those fields actually RENDER (font sizing, gauges,
 // sparklines, note names, screensaver animation) is the Wave-3b Rack half and is
 // verified-by-human; goldens here assert WHAT should be on screen, never HOW it
@@ -139,7 +140,9 @@ public:
             if (accepted) {
                 d->active = true;
                 d->headerText = header;
-                d->isText = textMode;
+                // The layout TAG (issue #22, Group C) replaces the old isText
+                // boolean: [display] sends the two plain layouts, Text or Value.
+                d->layout = textMode ? DisplayLayout::Text : DisplayLayout::Value;
                 if (textMode) d->bodyText = body;
                 else          d->value = val;
                 // floorClamp guards the float before the cast (finite-out-of-range

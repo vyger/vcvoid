@@ -47,7 +47,10 @@
 //     then savepreset, then loadpreset, non-exclusively — so a same-tick
 //     loadpreset overrides a clear's state (clearall still wins: it wipes
 //     the presets first, so the load reads the cleared value).
-//   * display/header (DB8E) not modelled headless.
+//   * DB8E display (issue #22, Group C): for `states` 3 or 4 the circuit sends
+//     the Bubbles layout — (count, index) under the derived header — on a state
+//     change while selected. states 1/2 send nothing (the manual scopes the
+//     feature to 3 and 4).
 #include "../src/registry.hpp"
 #include "../src/uihelpers.hpp"
 #include <cmath>
@@ -170,13 +173,27 @@ public:
             out("led").set(s, led);
         }
 
-        // NOTE (issue #19): `button` does drive the DB8E for `states = 3`/`4`,
-        // but NOT as a value — hardware draws a custom layout: a chain of
-        // `states` bubbles joined by short segments, the current one filled
-        // solid, under the usual header. That needs the tagged layout variant in
-        // DisplayState that issue #22 covers, so the circuit stays silent here
-        // rather than putting a bare integer on screen where hardware draws a
-        // diagram. Confirmed on hardware; see #22.
+        // --- DB8E screen: the state bubbles (issue #22, Group C) -------------
+        // button.md "Display": the circuit "automatically displays it's state,
+        // whenever `states = 3` or `states = 4`". That is NOT a value — hardware
+        // draws a chain of `states` bubbles joined by short horizontal segments
+        // with the current one filled solid (measured, issue #19), under the
+        // ordinary derived header. It goes out as the Bubbles layout: the
+        // payload is (count, index) and the circles are the screen's business
+        // (docs/adr/0003-db8e-custom-display-layouts.md).
+        //
+        // states 1 and 2 write nothing: the manual restricts the feature to 3
+        // and 4, and a 2-bubble chain would say less than the button's own LED.
+        // Select-gated like `led` (an unselected overlay must not own the
+        // screen), and `display = 0` suppresses, both via the shared helper.
+        // The baseline swallows the first tick, so a patch that is merely loaded
+        // (or has its state restored) leaves the screen dark; on a refused write
+        // we leave it untouched so the change re-attempts (delay-not-discard).
+        if (st >= 3) {
+            bool moved = disp_.changed((float)E);
+            if (selected && moved && ui::showStateBubbles(*this, s, st, E))
+                disp_.accept((float)E);
+        }
 
         bool longGate = longUsed && selected && nowHigh && heldTicks_ >= thrTicks;
         out("longpress").set(s, longGate ? 1.0f : 0.0f);
@@ -248,6 +265,7 @@ private:
     bool recentPress_ = false;
     long sincePress_ = 0;
     bool caPrev_ = false, clPrev_ = false, spPrev_ = false, lpPrev_ = false;
+    ui::DisplayBaseline disp_;   // last state shown on the DB8E (issue #22)
 };
 
 DROID_REGISTER_CIRCUIT(button, Button)

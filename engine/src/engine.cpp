@@ -227,6 +227,12 @@ LoadResult Engine::load(const std::string& patchText, const LoadOptions& opts) {
         auto c = makeCircuit(cc.def->name);
         c->allocateSlots(cc.def);
         deriveAutoHeaders(cc, *c, texts_);
+        // Circuit-provided strings (issue #22, Group C): the third and last
+        // source of texts, after the patch's own quoted strings and the derived
+        // auto-headers just above. A circuit that shows words of its own
+        // (`recorder`'s Recording/Playback/Bypass) interns them here and keeps
+        // the text numbers; everything downstream treats them as ordinary texts.
+        c->internTexts([this](const std::string& t) { return internText(t, texts_); });
         for (auto& p : cc.params) {
             int slot = c->slotIndex(p.def, p.arrayIndex);
             if (p.def->isInput)

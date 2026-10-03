@@ -2,9 +2,19 @@
 #include "signal.hpp"
 #include "../gen/jacktables.gen.hpp"
 #include <cmath>
+#include <functional>
+#include <string>
 #include <vector>
 
 namespace droid {
+
+// Load-time interner for strings the CIRCUIT provides, as opposed to the patch
+// (issue #22, Group C; docs/adr/0003-db8e-custom-display-layouts.md). Returns
+// the text number the string landed on in the engine's one text table; the
+// table deduplicates, so N recorders intern "Recording" once. Load-time only —
+// a circuit caches the numbers it got and never interns during a tick, because
+// circuits only ever see the text table const.
+using TextInterner = std::function<int(const std::string&)>;
 
 // --- persistent-state serialization (DROIDSTA.BIN contract) ---------------
 // A stateful circuit serializes the RESULT OF MANUAL INTERACTION (button
@@ -49,6 +59,15 @@ public:
     // circuit with dontsave high is skipped for BOTH save and load (manual:
     // "prevent the state from being saved (and loaded)").
     bool dontsaveActive(const EngineState& s) const;
+
+    // --- circuit-provided strings (issue #22, Group C) ---------------------
+    // Called ONCE at load (Engine::load, after allocateSlots and the
+    // auto-header derivation) for circuits that show text of their own rather
+    // than text from the patch — `recorder`'s "Recording"/"Playback"/"Bypass",
+    // later `encoquencer`'s "silent"/"play". Cache the returned text numbers in
+    // members; they resolve through Engine::textForNumber like any other text.
+    // Default: no-op, which is the overwhelming majority of circuits.
+    virtual void internTexts(const TextInterner&) {}
 
     // Jack access by base name + 1-based array index (index 1 for scalars).
     Input& in(const char* name, int index = 1);

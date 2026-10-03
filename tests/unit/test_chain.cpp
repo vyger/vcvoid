@@ -454,7 +454,8 @@ TEST(chain_extended_blocks_are_pod) {
     CHECK(u.detentCount[0] == 0u);
     CHECK(u.faderTouch == 0);
     DownstreamBlock d;
-    CHECK(d.dispIsText == 0);
+    CHECK(d.dispLayout == 0);        // droid::DisplayLayout::Value
+    CHECK(d.dispBubbleCount == 0);
     CHECK(d.dispHeader[0] == '\0');
 }
 

@@ -1,0 +1,69 @@
+# button: WHICH buttons drive the DB8E, and how to switch it off (issue #22).
+#
+# button.md scopes the feature to three and four states: "automatically
+# displays it's state, whenever `states = 3` or `states = 4`". So:
+#
+#   * states = 3 shows a three-bubble chain (the companion golden covers 4);
+#   * states = 2 shows NOTHING at all — not a two-bubble chain, not a bare
+#     integer. The manual restricts the feature, and the button's own LED
+#     already says on/off;
+#   * `display = 0` suppresses the output of a circuit that would otherwise
+#     show (the standard display-tier escape hatch, hardware.md §6.12).
+#
+# Three buttons on one DB8E would fight over the screen, so each case is on its
+# own screen: this patch has two DB8Es and the suppressed button targets the
+# (nonexistent, but irrelevant) screen it is told not to use.
+tickrate 100
+patch <<<
+[p2b8]
+[db8e]
+[db8e]
+
+# D1: three states -> a three-bubble chain under the derived header.
+[button]
+    button  = B1.1
+    output  = O1
+    states  = 3
+    display = 1
+
+# D2: two states -> silent. The screen stays dark however often it is pressed.
+[button]
+    button  = B1.2
+    output  = O2
+    states  = 2
+    display = 2
+
+# Also on D2: four states but `display = 0`, so it never writes either. If
+# suppression were broken this would light D2 up and the `off` checks fail.
+[button]
+    button  = B1.3
+    output  = O3
+    states  = 4
+    display = 0
+>>>
+@0 expectdisplay D1 off
+@0 expectdisplay D2 off
+# Press all three on the same tick.
+@1 set B1.1 1
+@1 set B1.2 1
+@1 set B1.3 1
+# Three states: the chain, titled from the `output` register (issue #19).
+@1 expectdisplay D1 bubbles 3 1
+@1 expectdisplay D1 header "Output O1"
+# Two states, and the suppressed four-state button: D2 never wakes.
+@1 expectdisplay D2 off
+@2 set B1.1 0
+@2 set B1.2 0
+@2 set B1.3 0
+@3 set B1.1 1
+@3 set B1.2 1
+@3 set B1.3 1
+@3 expectdisplay D1 bubbles 3 2
+@3 expectdisplay D2 off
+@4 set B1.1 0
+@4 set B1.2 0
+@4 set B1.3 0
+# Wrap: state 2 -> 0 on a three-state button.
+@5 set B1.1 1
+@5 expectdisplay D1 bubbles 3 0
+@5 expectdisplay D2 off
