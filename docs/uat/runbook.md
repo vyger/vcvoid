@@ -138,6 +138,36 @@ write the results file, and stop.
 - At the end of a session: `POST /rack/quit` for a graceful shutdown
   (flushes autosave/settings); only kill the process as a failure fallback.
 
+### Bridge "hangs" for minutes: TIME_WAIT port exhaustion (issue #97)
+
+Symptom: *every* endpoint, `/ping` included, stops answering for minutes
+while Rack itself is plainly fine (UI at ~28 fps, engine stepping, nothing
+logged) — then it recovers on its own. The client sits in `SYN_SENT`; the
+bridge thread is idle in `accept()`. That is not a crash and not a stuck
+handler: the connection never reaches the server.
+
+Detect it:
+
+```sh
+netstat -an -p tcp | grep 2601 | grep -c TIME_WAIT
+```
+
+A few hundred is normal churn; several thousand (of the 16 384 ephemeral
+ports between `net.inet.ip.portrange.first` and `.last`) means most
+`(clientPort, 2601)` tuples are blocked and new connects are being dropped.
+
+Since the keep-alive fix the bridge no longer closes first, so a client that
+reuses one connection (`tools/uat_run.py` does — one socket per run) costs
+one port for the whole session, and a curl-per-request client at least
+leaves the TIME_WAIT on its own socket. If the count still climbs:
+
+- Workaround for the session — shorten TIME_WAIT from 30 s to 2 s:
+  `sudo sysctl -w net.inet.tcp.msl=1000` (default `15000`; restore with
+  `sudo sysctl -w net.inet.tcp.msl=15000`). The entries are kernel-side, so
+  restarting Rack does **not** clear them — this does.
+- Check nothing in the client path forces `Connection: close` or HTTP/1.0;
+  that re-arms the old behaviour.
+
 ### paramId lookup tables (no label-resolver endpoint exists)
 
 `POST /params` (and `POST /params/hold` / `POST /params/release`, the un-timed

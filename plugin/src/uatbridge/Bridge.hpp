@@ -45,7 +45,8 @@ public:
     void noteContext(rack::Context* c) { rackCtx_.store(c); }
     rack::Context* rackContext() const { return rackCtx_.load(); }
 
-    std::string dispatch(const Request& req);
+    // keepAlive decides this response's Connection header (issue #97).
+    std::string dispatch(const Request& req, bool keepAlive = false);
 
 private:
     Bridge() = default;
