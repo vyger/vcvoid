@@ -72,6 +72,31 @@ public:
     // engine's text table, which circuits only ever see const.
     int autoHeaderText = 0;
 
+    // Per-ELEMENT automatic DB8E headers for the bank circuits (issue #22):
+    // text numbers indexed by OUTPUT SLOT, so one entry per `output1..N` /
+    // `output{r}{c}` jack. Empty when nothing was derived (the common case:
+    // almost no circuit has an array `output` and a `header` jack). The bank
+    // circuits show the value of the element you just moved, so the title has
+    // to name THAT element — fadermatrix.md: "The title in the display is
+    // derived from the target of the `outputN` parameter. If that goes into a
+    // cable, the name of that cable is used as the title." An explicit
+    // `header` still wins and covers the whole bank (same doc: "there is just
+    // one `header` input. If that is always the same, it's probably not very
+    // helpful"), which is why the Engine derives nothing at all when `header`
+    // is set.
+    std::vector<int> autoHeaderTexts;
+
+    // Automatic header of one array output element, by jack name + 1-based
+    // index (e.g. ("output", 3) or fadermatrix's ("output2", 4)). 0 = none.
+    // Goes through the same memoized slot resolution as in()/out(), so the
+    // name pointer must be stable tick to tick like every other jack access.
+    int autoHeaderForOutput(const char* name, int index = 1) {
+        if (autoHeaderTexts.empty()) return 0;
+        int slot = memoSlot(name, index, /*wantInput=*/false);
+        return (slot >= 0 && slot < (int)autoHeaderTexts.size())
+            ? autoHeaderTexts[size_t(slot)] : 0;
+    }
+
 private:
     // Memoized name->slot resolution. in()/out() are called with the same
     // (name, index) pairs every tick; resolving through gen::findJack each

@@ -13,8 +13,9 @@
 //
 // Conventions / SPEC-GAPs: identical to `encoder` for everything shared — see
 // encoder.cpp / encodercore.hpp (value-engine mappings, discrete = raw integers,
-// panel-only LED ring / led input / color / display / header, snapto/smooth/
-// autozoom curves). encoderbank-specific:
+// panel-only LED ring / led input / color, snapto/smooth/autozoom curves) —
+// plus the DB8E display tier (hardware.md §6.12), here per LANE (issue #22,
+// see the write at the end of tick()). encoderbank-specific:
 //   * count: the max connected index among output/led/button (>=1..8). An
 //     out-of-range firstencoder+i leaves that lane inert (output frozen at
 //     startvalue, button 0).
@@ -81,9 +82,35 @@ public:
                 enc->ring.overlay = ec::clampf(in("led", i + 1).value(s), 0.0f, 1.0f);
             }
 
-            out("output", i + 1).set(s, state_[i].output(p, emitted));
+            outValue_[i] = state_[i].output(p, emitted);
+            out("output", i + 1).set(s, outValue_[i]);
             out("button", i + 1).set(s, (selected && pushed) ? 1.0f : 0.0f);
         }
+
+        // --- DB8E screen (issue #22) -----------------------------------------
+        // encoderbank.md: the circuit "updates the display whenever you turn
+        // one of the encoders. It then shows the updated value of `outputX` of
+        // that encoder" — so the screen follows ONE lane, the one that moved,
+        // and its title names that lane's own output target (the per-element
+        // automatic header, Circuit::autoHeaderForOutput). An explicit `header`
+        // still covers the whole bank; showValueWithHeader prefers it.
+        //
+        // Activation is driven by the lane's OUTPUT changing, the same idiom
+        // `encoder` uses: it covers the turn plus everything a turn sets in
+        // motion (the `smooth` tail, `snapto` pulling home) with no separate
+        // "was this tick a detent" rule. The baselines swallow the first tick,
+        // so a patch that is merely loaded leaves the screen off.
+        //
+        // Select-gated like the rings and buttons, and (like `encoder`) only
+        // the WRITE is gated: changed() runs for every lane every tick, so a
+        // move made while deselected is still pending and catches up when the
+        // bank is selected again. A rejected write leaves the baseline alone
+        // so it re-attempts until it lands (delay-not-discard).
+        int lane = ui::firstChangedElement(disp_, outValue_, count_);
+        if (selected && lane >= 0 &&
+            ui::showValueWithHeader(*this, s, outValue_[lane],
+                                    autoHeaderForOutput("output", lane + 1)))
+            disp_[lane].accept(outValue_[lane]);
     }
 
     // Persisted: every lane's virtual position + all 8 preset banks + slot.
@@ -205,6 +232,8 @@ private:
     int  count_ = 0;
     int  firstGlobal_ = 0;
     ec::State state_[kMaxEnc];
+    float outValue_[kMaxEnc] = {};      // this tick's emitted output per lane
+    ui::DisplayBaseline disp_[kMaxEnc]; // last value each lane put on the DB8E
     float preset_[kPresets][kMaxEnc] = {};
     int  prevPreset_ = 0;
     bool caPrev_ = false, clPrev_ = false, spPrev_ = false, lpPrev_ = false;

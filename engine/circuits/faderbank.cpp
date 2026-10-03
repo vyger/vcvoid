@@ -22,6 +22,9 @@
 //     tracks the internal value, button 0).
 //   * select gates the WHOLE bank together; on the tick the bank becomes
 //     selected each lane's motor drives its fader to that lane's stored value.
+//   * the DB8E display tier (hardware.md §6.12) is per LANE (issue #22): the
+//     screen shows the lane that moved, titled from that lane's own `outputN`
+//     target. See the write at the end of tick().
 #include "../src/registry.hpp"
 #include "../src/uihelpers.hpp"
 #include "../src/fadercore.hpp"
@@ -59,9 +62,27 @@ public:
                 f->led = ledBrightness(s, i, notches);   // panel-only
                 f->ledColor = ledColor;                  // panel-only
             }
-            out("output", i + 1).set(s, fc::outputOf(value_[i], notches));
+            outValue_[i] = fc::outputOf(value_[i], notches);
+            out("output", i + 1).set(s, outValue_[i]);
             out("button", i + 1).set(s, (selected && f && f->plate) ? 1.0f : 0.0f);
         }
+
+        // --- DB8E screen (issue #22) -----------------------------------------
+        // faderbank.md: it "automatically updates the display whenever you move
+        // one of the faders" — one screen, the lane that moved, titled from
+        // that lane's own `outputN` target (fadermatrix.md spells the rule out
+        // for the bank family; an explicit `header` overrides for the whole
+        // bank). Plain value-changed on the emitted output, as motorfader's
+        // hardware measurement established for the scalar case: a preset
+        // recall drives the motor rather than the hand and is still shown.
+        // Select-gated write, unconditional change detection — see
+        // encoderbank.cpp for the full rationale, which is identical.
+        int lane = ui::firstChangedElement(disp_, outValue_, count_);
+        if (selected && lane >= 0 &&
+            ui::showValueWithHeader(*this, s, outValue_[lane],
+                                    autoHeaderForOutput("output", lane + 1)))
+            disp_[lane].accept(outValue_[lane]);
+
         wasSelected_ = selected;
     }
 
@@ -173,6 +194,8 @@ private:
     int   count_ = 0;
     int   firstFader_ = 1;
     float value_[kMaxFaders] = {};
+    float outValue_[kMaxFaders] = {};        // this tick's emitted output per lane
+    ui::DisplayBaseline disp_[kMaxFaders];   // last value each lane put on the DB8E
     float preset_[kPresets][kMaxFaders] = {};
     int   prevPreset_ = 0;
     bool  wasSelected_ = false;

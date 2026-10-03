@@ -91,6 +91,31 @@ struct DisplayBaseline {
     void accept(float value) { sent = value; }
 };
 
+// Per-ELEMENT change detection for the bank circuits (issue #22). encoderbank,
+// faderbank and fadermatrix each hold 8/16/16 elements but share ONE screen,
+// and the manual says the screen follows the element you touched —
+// encoderbank.md: "updates the display whenever you turn one of the encoders.
+// It then shows the updated value of `outputX` of that encoder".
+//
+// So every element gets its own DisplayBaseline (same first-tick-swallow and
+// delay-not-discard contract as the scalar case) and this picks which one gets
+// the screen when several moved on the same tick: the LOWEST element index,
+// with the rest left pending so they land on following ticks. A hand moves one
+// fader at a time, so a tie only arises from a preset recall or a scripted
+// input; the manual says nothing about it, and leaving the losers pending is
+// the rule already used for a rejected write rather than a new one.
+//
+// changed() runs for EVERY element, not just the winner, so the first tick
+// seeds them all and a patch that is merely loaded leaves the screen dark.
+// `values[0..count-1]` are the elements' current values; `base` must have at
+// least `count` entries. Returns the element to show, or -1 for none.
+inline int firstChangedElement(DisplayBaseline* base, const float* values, int count) {
+    int first = -1;
+    for (int i = 0; i < count; i++)
+        if (base[i].changed(values[i]) && first < 0) first = i;
+    return first;
+}
+
 // Circuit-tier screen write (hardware.md §6.12 "Circuits with user interaction":
 // "When you operate a control that changes a circuit's state, you rather want to
 // see that state and not the raw value of the control"). Used by the circuits the
@@ -111,8 +136,13 @@ struct DisplayBaseline {
 // on a rejected write the caller must leave its baseline untouched so the write
 // keeps re-attempting until it lands, exactly as [display] does.
 // Returns true iff the write was accepted.
-inline bool showCircuitValue(Circuit& c, EngineState& s, float value,
-                             uint8_t numbermode = 0) {
+//
+// `autoHeaderText` is the title to use when `header` is NOT patched: the
+// circuit's own derived one for a plain-value circuit, or the moved element's
+// for a bank (issue #22) — see showCircuitValue just below, which supplies the
+// scalar case.
+inline bool showValueWithHeader(Circuit& c, EngineState& s, float value,
+                                int autoHeaderText, uint8_t numbermode = 0) {
     DisplayState* d = targetDisplay(c, s);
     if (!d) return false;
     bool accepted = (d->owner == &c) ||
@@ -122,9 +152,9 @@ inline bool showCircuitValue(Circuit& c, EngineState& s, float value,
     if (!accepted) return false;
     d->active = true;
     // An explicit `header` wins; otherwise the title the Engine derived from the
-    // `output` target at load (Circuit::autoHeaderText, 0 = none).
+    // `output` target at load (0 = none).
     d->headerText = c.in("header").connected() ? floorText(c.in("header").value(s))
-                                               : c.autoHeaderText;
+                                               : autoHeaderText;
     d->isText = false;
     d->value = value;
     // These circuits have no numbermode/fontsize jacks. The default 0 leaves the
@@ -138,6 +168,13 @@ inline bool showCircuitValue(Circuit& c, EngineState& s, float value,
     d->lingerUntilTick = s.tick;   // no hold of its own
     d->lastWriteTick = s.tick;
     return true;
+}
+
+// The plain-value circuits' form: the title is the one the Engine derived from
+// this circuit's scalar `output` target.
+inline bool showCircuitValue(Circuit& c, EngineState& s, float value,
+                             uint8_t numbermode = 0) {
+    return showValueWithHeader(c, s, value, c.autoHeaderText, numbermode);
 }
 
 } // namespace ui

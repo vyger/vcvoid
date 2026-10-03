@@ -552,7 +552,18 @@ circuits:
       firstencoder resolved once at load (register or global number); each
       lane consumes its own physical encoder's per-tick detents. 8 presets
       store all lanes at once; select/selectat gate the button<N> outputs and
-      movement consumption. SPEC-GAPs inherited from encoder. 3 goldens."
+      movement consumption. SPEC-GAPs inherited from encoder. DB8E display
+      tier per LANE (issue #22, Group B): turning an encoder shows that lane's
+      outputX value, titled by that lane's OWN automatic header. DECISION (one
+      header jack vs. per-element values): the automatic title is per element,
+      an explicit `header` overrides for the whole bank -- fadermatrix.md
+      states both halves for the bank family ('The title in the display is
+      derived from the target of the `outputN` parameter' / 'You can use
+      `header` to override this. But there is just one `header` input'), and
+      encoderbank.md/faderbank.md carry the identical `header` jack text.
+      Several lanes changing on one tick (a preset recall) is a SPEC-GAP: the
+      lowest lane lands and the rest stay pending for later ticks
+      (delay-not-discard), since the manual never covers the tie. 5 goldens."
   encoquencer:
     status: done
     difficulty: hard
@@ -643,8 +654,12 @@ circuits:
       outputscale/offset. select gates the whole bank (motorized takeover per
       lane on becoming selected); 6 presets store all lanes at once. SPEC-GAPs
       inherited from motorfader/fadercore (instant motor, per-lane recall hold
-      on a held fader, haptics + LEDs panel-only). 3 goldens (bank across two M4s, immediate presets with
-      motor recall, shared binary notches)."
+      on a held fader, haptics + LEDs panel-only). DB8E display tier per LANE
+      (issue #22, Group B), same decision as encoderbank: moving a fader shows
+      that lane's output under that lane's own automatic title; an explicit
+      `header` covers the whole bank. 4 goldens (bank across two M4s,
+      immediate presets with motor recall, shared binary notches, per-lane
+      display incl. the same-tick tie-break)."
   fadermatrix:
     status: done
     difficulty: hard
@@ -665,9 +680,14 @@ circuits:
       per cell by last fader. 6 presets store all 16 cells. SPEC-GAPs: instant
       motor, per-cell recall hold on a held fader + haptics/LED panel-only
       (all inherited); the column offset for
-      sub-4x4 matrices generalised to N (manual only documents 4x4). 3
-      goldens (2x2 row/col swap w/ takeover, full 4x4 rowcolumn table,
-      per-column notches)."
+      sub-4x4 matrices generalised to N (manual only documents 4x4). DB8E
+      display tier per CELL (issue #22, Group B): this circuit's manual page is
+      where the bank-family rule is stated outright -- the title 'is derived
+      from the target of the `outputN` parameter', and the single `header`
+      input overrides it for the whole matrix -- so the automatic title names
+      the moved cell and an explicit header does not. 4 goldens (2x2 row/col
+      swap w/ takeover, full 4x4 rowcolumn table, per-column notches, per-cell
+      display)."
   firefacecontrol:
     status: not-feasible
     difficulty: not-feasible
