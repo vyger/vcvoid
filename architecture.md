@@ -198,6 +198,17 @@ applied to — the Forge abbreviates parameter names on its way to the SD card
 text can be 48 kB as deployed. `make sizecheck` keeps our C++ measurement equal
 to `tools/inicompress.py`, which performs the same abbreviation in Python.
 
+The RAM figure likewise depends on how the Forge deploys. Its preference
+**"Detect and share duplicate values for inputs"** (`compression/deduplicate_jacks`)
+makes every input whose value already occurred earlier in the patch a reference
+to the first occurrence, costing no RAM and charging no texts — on the MFPS UAT
+patch that is 89 124 bytes down to 76 220. `LoadOptions.shareInputValues`
+(issue #88) models both modes; it is **off by default**, matching the Forge's own
+default, and the master's context menu exposes it as *Share duplicate input
+values* next to the budget it changes. `make ramcheck` holds BOTH modes equal to
+the Forge's own `Patch::usedRAM` (`droidcheck --ram`) over every patch in
+`patches/`, the way `make sizecheck` does for the deployed size.
+
 Two documented escapes from fidelity exist, both per-module, both off by
 default, both in the master's *Experimental* context-menu section:
 `LoadOptions.ignoreMemoryLimits` (#13) downgrades the RAM/patch-size limits to

@@ -238,7 +238,7 @@ LoadResult compilePatch(const std::string& text, MasterType master, CompiledPatc
                                       ErrorCode::UnknownParameter});
                 continue;
             }
-            CompiledParam cp{jd, idx, p.a, p.b, p.c, p.simple, p.line};
+            CompiledParam cp{jd, idx, p.a, p.b, p.c, p.simple, p.subtractForm, p.line};
             // canonicalize register atoms
             for (Atom* a : {&cp.a, &cp.b, &cp.c})
                 if (a->kind == Atom::Kind::Register) a->reg = canonicalize(a->reg, master);
@@ -325,7 +325,7 @@ LoadResult compilePatch(const std::string& text, MasterType master, CompiledPatc
     std::sort(out.cableNames.begin(), out.cableNames.end());
 
     std::vector<LoadError> ramErrors;
-    out.ramUsed = computeRam(out, master, ramErrors);
+    out.ramUsed = computeRam(out, master, opts.shareInputValues, ramErrors);
     res.ramUsed = out.ramUsed;
     // Same policy as the size cap: with the limits ignored, overflows are
     // silently accepted rather than downgraded to warnings.

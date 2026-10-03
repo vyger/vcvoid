@@ -7,7 +7,7 @@ UNIT_SRC   := $(wildcard tests/unit/*.cpp)
 RUNNER_SRC := $(wildcard tests/runner/*.cpp)
 GOLDENS    := $(shell find tests/golden -name '*.gold' 2>/dev/null | sort)
 
-.PHONY: all test unittests goldens gen clean crosscheck layoutcheck artcheck labelcheck sizecheck smoke
+.PHONY: all test unittests goldens gen clean crosscheck layoutcheck artcheck labelcheck sizecheck ramcheck smoke
 
 VENDOR := tools/droidcheck/vendor/droidforge/droidforge
 # The Forge's main/tuning.h gates a few constants behind Qt's platform macros
@@ -42,7 +42,7 @@ unittests: $(BUILD)/unittests
 goldens: $(BUILD)/droidtest
 	@if [ -n "$(GOLDENS)" ]; then $(BUILD)/droidtest $(GOLDENS); else echo "no goldens yet"; fi
 
-test: unittests goldens layoutcheck labelcheck sizecheck artcheck
+test: unittests goldens layoutcheck labelcheck sizecheck ramcheck artcheck
 
 gen:
 	python3 tools/jackgen/jackgen.py
@@ -84,6 +84,17 @@ $(BUILD)/patchsize: $(ENGINE_SRC) tests/tools/patchsize.cpp $(wildcard engine/sr
 
 sizecheck: $(BUILD)/patchsize
 	@tools/sizecheck.sh
+
+# RAM-accounting parity (issue #88): engine/src/ram.cpp vs the Forge's own
+# Patch::usedRAM (droidcheck --ram), over every patch in patches/, in BOTH
+# deploy modes — "Detect and share duplicate values for inputs" off and on.
+# Skips itself when droidcheck is unbuilt, like labelcheck.
+$(BUILD)/ramdump: $(ENGINE_SRC) tests/tools/ramdump.cpp $(wildcard engine/src/*.hpp) $(wildcard engine/gen/*.hpp)
+	@mkdir -p $(BUILD)
+	$(CXX) $(CXXFLAGS) $(ENGINE_SRC) tests/tools/ramdump.cpp -o $@
+
+ramcheck: $(BUILD)/ramdump
+	@tools/ramcheck.sh
 
 layoutcheck:
 	@if [ -d "$(VENDOR)/modules" ]; then \

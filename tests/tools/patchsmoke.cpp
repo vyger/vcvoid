@@ -33,8 +33,9 @@ static bool smoke(const std::string& path, const droid::LoadOptions& lopts) {
         return false;
     }
     for (int i = 0; i < 6000; i++) e.tick();   // one simulated second
-    std::printf("PASS %s (%u bytes RAM, %zu warnings)\n", path.c_str(),
-                r.ramUsed, r.warnings.size());
+    std::printf("PASS %s (%u bytes RAM%s, %zu warnings)\n", path.c_str(),
+                r.ramUsed, lopts.shareInputValues ? ", shared inputs" : "",
+                r.warnings.size());
     return true;
 }
 
@@ -53,6 +54,13 @@ int main(int argc, char** argv) {
         // flag of the same name. Applies to the patches that follow it.
         if (std::string(argv[i]) == "--experimental") {
             lopts.allowExperimental = true;
+            continue;
+        }
+        // --share-inputs: the Forge deploy preference "Detect and share
+        // duplicate values for inputs" (#88), matching the module's menu item
+        // of the same name. Applies to the patches that follow it.
+        if (std::string(argv[i]) == "--share-inputs") {
+            lopts.shareInputValues = true;
             continue;
         }
         if (!smoke(argv[i], lopts)) failed++;
