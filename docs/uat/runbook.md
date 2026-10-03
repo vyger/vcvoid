@@ -31,8 +31,8 @@ locators.
 **Two executors, two jobs.** `make smoke` (`tools/uatbridge-smoke.sh`) is the
 **contract gate**: one pass over every endpoint's status codes and response
 shapes, the `GET /master/{id}/diagnostics` classes (`no-patch`, `running`,
-`load-failed` with the right line, `warnings`, `chain-error`), the state-store
-lines from #42, the 64 000-byte size gate from #41 and the `POST /params/hold`
+`load-failed` with the right line, `warnings`, `chain-error`, `engine-stalled`),
+the state-store lines from #42, the 64 000-byte size gate from #41 and the `POST /params/hold`
 / `/params/release` contract. It is fail-fast and takes seconds; run it first,
 and treat a failure there as "stop, this build is broken" rather than as one
 red row. Everything timing- or state-dependent — gestures, persistence,
@@ -432,6 +432,21 @@ g8-first row pins `chainError` and freezes the G8 gates).
    (`severity`, `code`/`codeColor`, `line`, the card's `title`/`message`) —
    one model, `plugin/src/MasterStatus.hpp`, so what it reports is what the
    panel paints. Use it for the assertions and keep your eyes for the pixels.
+2b-ii. ☐ **A stalled engine** (issue #83): with a patch running, set Rack's
+   Audio module device to **(No device)**. Within ~0.5 s every master goes
+   **amber** and `GET /master/{id}/status` → `.state == "engine-stalled"`
+   (`severity` `warning`) and `.engineStalled == true` — the raw flag, which
+   `state` can outrank (a master with no patch still reports `"no-patch"`),
+   and what `make smoke` checks as a precondition before it loads anything.
+   `.chainError` is **empty** while it holds — the context-menu card is titled
+   **ENGINE NOT RUNNING** over "Rack's Audio module has no device selected…",
+   and it must NOT read "chain has nothing" even on a master whose patch
+   declares controllers. Pick the device again: the state returns to
+   `"running"` (or to the chain verdict it genuinely has) on its own, with no
+   reload.
+   Rationale: Rack's CPU-clocked fallback runs only when there is no primary
+   Audio module at all, so an Audio module with no device steps nothing and
+   the chain scan — which `process()` feeds — has nothing to see.
 2c. ☐ **"Add missing controllers" when it's blocked** (issue #69): load
    `uat-overlays.ini` (declares `p2b8` + `b32`) and put the *wrong* module at
    controller 2 — `DELETE /modules/{b32id}`, then `POST /modules` a `p4b2`

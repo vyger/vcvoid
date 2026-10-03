@@ -97,6 +97,24 @@ struct DroidMasterBase : Module {
     // Set on the engine thread by onSampleRateChange; consumed by the widget's
     // step() on the UI thread, which is the only thread allowed to reload.
     std::atomic<bool> timingDirty{false};
+    // --- engine heartbeat (issue #83) ---------------------------------------
+    // Incremented once per process() call, at the very top, before every
+    // early-out: the question it answers is "is anything stepping this module
+    // at all", not "is the engine ticking". Written only by the audio thread,
+    // read by the widget's step() (and nobody else), so relaxed ordering is
+    // all it needs — a heartbeat that is one frame stale is indistinguishable
+    // from one sampled a frame earlier.
+    //
+    // Rack runs its CPU-clocked fallback thread ONLY when the rack holds no
+    // primary Audio module; an Audio module with no device selected steps
+    // nothing at all, and then chainPhysical (which process() fills) stays
+    // empty and the chain check reports a controller mismatch that is not
+    // there. engineStalled is the UI thread's verdict on this counter
+    // (vcvoid::status::StallMonitor), published here so statusReport() — and
+    // through it the context-menu card, the ring and the UAT bridge - can read
+    // it from any thread.
+    std::atomic<uint64_t> processHeartbeat{0};
+    std::atomic<bool> engineStalled{false};
     // Experimental (#13): load patches over the hardware limits (RAM budget,
     // 64 000-byte size cap — the latter measured the way the master measures
     // it, with abbreviated parameter names, see droid::deployedPatchSize and
@@ -169,6 +187,7 @@ struct DroidMasterBase : Module {
         }
         // chainError is UI-thread-only (written by the widget's step()), so it
         // is deliberately read outside the lock, like the menu already does.
+        r.engineStalled = engineStalled.load(std::memory_order_relaxed);
         r.chainError = chainError;
         r.chainFix = chainFix;
         r.chainFixBlocker = chainFixBlocker;
@@ -809,6 +828,11 @@ public:
     }
 
     void process(const ProcessArgs& args) override {
+        // Engine heartbeat (issue #83): first thing, ahead of every early-out
+        // below, so "Rack is stepping me" is reported even on frames that do
+        // no engine work.
+        processHeartbeat.fetch_add(1, std::memory_order_relaxed);
+
         // UAT probe sample: every audio frame, ahead of the tick-divider gate
         // below, so a probe's timing resolution is the audio rate, not the
         // (divided-down) engine tick rate. outputs[]/inputs[] hold their last
@@ -1573,6 +1597,10 @@ struct DroidMasterBaseWidget : ModuleWidget {
     // ISSUE-5: while the chainOk debounce is holding a still-invalid chain, keep
     // revalidating every frame so the tolerance window advances in real time.
     bool chainRevalPending = false;
+    // issue #83: watches the module's process() heartbeat against wall-clock
+    // time, so a rack nothing is stepping says so instead of reporting the
+    // empty chain that a stopped process() leaves behind. UI thread only.
+    vcvoid::status::StallMonitor stallMonitor;
     // Register-label distribution (issue #26): what we last published, so the
     // string work only runs when the patch or the physical chain changed.
     uint32_t lastLabelGen = 0;
@@ -1884,13 +1912,62 @@ struct DroidMasterBaseWidget : ModuleWidget {
         // engine keeps its previous rate until a frame runs — acceptable.
         if (m->timingDirty.exchange(false))
             m->applyTiming(APP->engine->getSampleRate());
+        // Is anything stepping the engine (issue #83)? The UI thread keeps
+        // running when the audio engine does not, so this is the one place
+        // that can tell. Do it BEFORE the chain revalidation below, which it
+        // gates: chainPhysical is assembled by process(), so a chain scanned
+        // while nothing is stepping reports "chain has nothing" no matter what
+        // is plugged in.
+        //
+        // A bypassed module is not stepped either, and is not stalled — Rack
+        // calls processBypass() instead, on purpose. Reset rather than
+        // suppress, so unbypassing starts the startup grace afresh instead of
+        // reporting a stall accumulated while bypassed.
+        bool stalled;
+        if (m->isBypassed()) {
+            stallMonitor.reset();
+            stalled = false;
+        } else {
+            stalled = stallMonitor.update(
+                m->processHeartbeat.load(std::memory_order_relaxed),
+                system::getTime());
+        }
+        if (stalled != m->engineStalled.load(std::memory_order_relaxed)) {
+            m->engineStalled.store(stalled, std::memory_order_relaxed);
+            if (stalled) {
+                // Entering the stall: drop the chain verdict rather than leave
+                // a stale (and, on a cold start, outright wrong) chain error
+                // standing in /status and in the context menu. chainOk is left
+                // alone — it is the pre-stall truth, and the debounce below
+                // wants it when the engine comes back.
+                m->chainError.clear();
+                m->chainFix.clear();
+                m->chainFixBlocker.clear();
+                chainRevalPending = false;
+            } else {
+                // Leaving it: the chain signature process() tracks may not have
+                // changed across the stall, so nothing else would ask for a
+                // revalidation. Ask for one — unforced, so the ISSUE-5
+                // tolerance window absorbs the frames the relay needs to
+                // republish the chain.
+                m->chainDebounce.invalidFrames = 0;
+                m->chainDirty.store(true);
+            }
+            m->statusDirty.store(true);
+        }
+
         // UI-thread chain revalidation: recompute chainError/chainOk against the
         // current patch's declared controllers whenever the chain or patch changed.
         // chainRevalPending keeps us revalidating every frame while the ISSUE-5
         // debounce is holding a still-invalid chain, so the tolerance window
         // advances in real time (a static wrong chain still errors within it).
-        bool force = m->chainForce.exchange(false);
-        if (m->chainDirty.exchange(false) || chainRevalPending || force) {
+        // `stalled` short-circuits the whole block, and the request flags are
+        // left SET so they are consumed on the frame the engine comes back
+        // (a patch loaded during a stall keeps its chainForce): the inputs the
+        // check reads are produced by process(), so while it is not running
+        // there is nothing to revalidate against.
+        bool force = !stalled && m->chainForce.exchange(false);
+        if (!stalled && (m->chainDirty.exchange(false) || chainRevalPending || force)) {
             {
                 std::lock_guard<std::mutex> lock(m->engineMutex);
                 if (m->engine) {

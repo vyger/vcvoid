@@ -167,7 +167,13 @@ std::string Bridge::handleMasterStatus(DroidMasterBase* m, int* code) {
     json_object_set_new(o, "x7Present", json_boolean(x7));
     json_object_set_new(o, "chainError", json_string(chainError.c_str()));
     // issue #46: the one word the panel is showing — no-patch / load-failed /
-    // warnings / chain-error / running. Recomputed here (currentState(), which
+    // engine-stalled / warnings / chain-error / running. "engine-stalled"
+    // (issue #83) means nothing has called process() for ~0.5 s, i.e. Rack
+    // itself is not stepping the rack (an Audio module with no device
+    // selected): while it holds, `chain` and `chainError` below are stale by
+    // construction and are reported empty rather than wrong.
+    //
+    // Recomputed here (currentState(), which
     // takes engineMutex itself, hence outside the block above) rather than read
     // from the widget's last publish: POST /master/{id}/patch, /reload and
     // /reset-state all answer with this body immediately after loading on the
@@ -176,6 +182,13 @@ std::string Bridge::handleMasterStatus(DroidMasterBase* m, int* code) {
     // (a failing patch over a running one replied "running").
     json_object_set_new(o, "state",
         json_string(vcvoid::status::stateName(m->currentState())));
+    // …and the raw fact behind it, which `state` can outrank: a master with no
+    // patch reports "no-patch" whether or not anything is stepping it, but
+    // "is this Rack running at all" is a question a harness has to be able to
+    // ask before it loads anything (tools/uatbridge-smoke.sh does, as a
+    // precondition).
+    json_object_set_new(o, "engineStalled",
+        json_boolean(m->engineStalled.load(std::memory_order_relaxed)));
     json_object_set_new(o, "midiWarning", json_boolean(midiWarn));
     json_object_set_new(o, "timingMode",
         json_string(timingMode == DroidMasterBase::TimingMode::Adaptive
