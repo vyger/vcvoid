@@ -61,7 +61,9 @@
 //     startstepout, endstepout.
 //   * step-LED colours per buttonmode, including `buttoncolor` for the bm-0 gate
 //     LEDs — per instance, so the plate owner in a chain paints its own colour
-//     (see updateLeds).
+//     (see updateLeds) — and, on the M4 skin only, the fader-mode-2 gate-
+//     probability colour/blink codes, which replace the buttonmode colours
+//     while that lane is on the faders (#84, see updateLeds).
 //   * `linktonext` multi-track linking: the FADER and BUTTON/LED editing
 //     surfaces are shared across the chain, each addressed independently by the
 //     main's fadermode resp. buttonmode — `mode / 10 == chain index`, editing
@@ -366,7 +368,15 @@ public:
         // own colour. Floored at 0 (the colour table's bottom, dark) because
         // NEGATIVE colour values are our out-of-band white sentinel: a patch
         // must not be able to paint the gate LEDs with the played-step marker.
-        updateLeds(s, page, buttonmode, showButtons,
+        // #84: while THIS instance shows the gate-probability lane on the faders
+        // (fadermode 2, or a linked 12/22/... that resolves to 2 here), its
+        // plates carry the manual's gate-probability codes instead of the
+        // buttonmode colours. Gated on faderOwner so the codes always describe
+        // the lane the faders really show; an instance that owns the plates but
+        // not the faders keeps painting its buttonmode, which is the only thing
+        // it can honestly report.
+        bool gateProbPlates = plateFollowsFaderLane() && faderOwner && fadermode == 2;
+        updateLeds(s, page, buttonmode, showButtons, gateProbPlates,
                    std::max(0.0f, in("buttoncolor").value(s)));
 
         // --- outputs --------------------------------------------------------
@@ -386,6 +396,14 @@ public:
     virtual void editSurface(EngineState& s, int page, int fm, int bm, bool recall,
                              bool faders, bool buttons) = 0;
     virtual void setLaneLed(EngineState& s, int lane, float bright, float color) = 0;
+    // Does this skin's step LED also report the FADER lane, not just the
+    // buttonmode? True on the M4, whose plate LED sits directly below the fader
+    // and carries the gate-probability codes of motoquencer.md "Repeats,
+    // ratchets and randomize" (#84). False on the E4: encoquencer.md "LED
+    // visualization" gives its middle-three step LEDs the buttonmode only, and
+    // puts the eight gate-probability settings in the 25-cell RING instead
+    // (blue / light green / magenta by position, a different scheme entirely).
+    virtual bool plateFollowsFaderLane() const { return false; }
 
     // --- persistent state (DROIDSTA.BIN contract) ---------------------------
     // The dialed sequence (all per-step parameters) + the 4 presets + slot + the
@@ -1240,9 +1258,82 @@ protected:
     static constexpr float kLedWhite  = -1.0f;   // sentinel: played step
     static constexpr float kLedCyan   = 0.2f, kLedGreen = 0.4f, kLedYellow = 0.6f,
                            kLedOrange = 0.73f, kLedRed  = 0.8f, kLedPink   = 1.0f,
-                           kLedViolet = 1.1f;
+                           kLedViolet = 1.1f, kLedBlue = 1.2f;
 
-    void updateLeds(EngineState& s, int page, int bm, bool selected, float btnColor) {
+    // --- fader-mode-2 gate-probability codes (#84) --------------------------
+    // motoquencer.md, "Repeats, ratchets and randomize", right under the
+    // gate-probability table: while the faders show the gate-probability lane,
+    // the plate below each fader says WHICH KIND of notch its step sits on —
+    //
+    //   "Gates that are played always are blue with a constant light."
+    //   "Random gates for 50%, 25% and 12% are in the same blue but blink in
+    //    various speeds."
+    //   "Gates of setting 1 (conditional random) are blinking fast."
+    //   "Gates depending on the turn (3, 5 and 6) are in cyan color and light
+    //    steadily in the bars (turns) where they are on and blink in the other
+    //    bars."
+    //
+    // The table's positions are 1-based from the BOTTOM, so they map onto the
+    // stored 0..7 gateprob index as 8 (top) -> 7, 7 -> 6, ..., 1 -> 0.
+    //
+    // SPEC-GAP (literal reading, deterministic): "various speeds" and "fast"
+    // are not numbers. vcvoid blinks at half duty on a ladder that reads as
+    // "faster = less likely" — 2 Hz at 50%, 4 Hz at 25%, 6 Hz at 12% — and
+    // reserves the fastest code, 8 Hz, for the conditional notch 1, which the
+    // manual singles out as "blinking fast". The cyan off-turn blink is the
+    // slowest of all (2 Hz): its colour already tells it apart from the random
+    // notches, so the blink only has to say "not this bar". The phase is
+    // free-running off engine time (s.tick / s.tickRateHz), not off the clock,
+    // so every lane blinks together and the code is reproducible in goldens.
+    // A blinked-off plate drops its BRIGHTNESS to 0 and keeps its colour, so a
+    // renderer that wanted to dim rather than extinguish still knows the hue.
+    static constexpr float kBlinkHz50   = 2.0f;   // notch 7: random 50%
+    static constexpr float kBlinkHz25   = 4.0f;   // notch 4: random 25%
+    static constexpr float kBlinkHz12   = 6.0f;   // notch 2: random 12%
+    static constexpr float kBlinkHzCond = 8.0f;   // notch 1: conditional random
+    static constexpr float kBlinkHzTurn = 2.0f;   // notches 3/5/6, off their turn
+    static bool blinkOn(const EngineState& s, float hz) {
+        double cycles = (double)s.tick * (double)hz / (double)s.tickRateHz;
+        return (cycles - std::floor(cycles)) < 0.5;
+    }
+
+    // Does a turn-based gateprob notch play on the CURRENT turn? Shared by the
+    // gate decision (probabilityPlays) and the plate code, so the LED and the
+    // audible result can never disagree.
+    static bool isTurnNotch(int idx) { return idx == 5 || idx == 4 || idx == 2; }
+    bool turnNotchPlays(int idx) const {
+        switch (idx) {
+            case 5:  return (turn_ % 2) == 0;    // notch 6: every even turn
+            case 4:  return (turn_ % 2) == 1;    // notch 5: every odd turn
+            case 2:  return (turn_ % 4) == 0;    // notch 3: every 4th turn
+            default: return false;
+        }
+    }
+
+    // The plate code for one step while the gate-probability lane is shown.
+    // Every visible step gets one: the lane reports the step's SETTING, which
+    // a gate-off step has just as much as a gate-on one (the manual's own
+    // advice is to "turn off the gate to silence a step completely", i.e. the
+    // gate lives in a different lane and is read on a different buttonmode).
+    void gateProbLed(const EngineState& s, int step, float& b, float& c) const {
+        int idx = cur_.gateprob[step];
+        if (isTurnNotch(idx)) {                 // cyan: steady on its turn
+            c = kLedCyan;
+            b = (turnNotchPlays(idx) || blinkOn(s, kBlinkHzTurn)) ? 1.0f : 0.0f;
+            return;
+        }
+        c = kLedBlue;
+        switch (idx) {
+            case 7:  b = 1.0f; break;                                   // always
+            case 6:  b = blinkOn(s, kBlinkHz50)   ? 1.0f : 0.0f; break;  // 50%
+            case 3:  b = blinkOn(s, kBlinkHz25)   ? 1.0f : 0.0f; break;  // 25%
+            case 1:  b = blinkOn(s, kBlinkHz12)   ? 1.0f : 0.0f; break;  // 12%
+            default: b = blinkOn(s, kBlinkHzCond) ? 1.0f : 0.0f; break;  // conditional
+        }
+    }
+
+    void updateLeds(EngineState& s, int page, int bm, bool selected, bool gateProb,
+                    float btnColor) {
         if (!selected) {
             if (ledsLit_) for (int i = 0; i < numFaders_; i++) setLaneLed(s, i, 0.0f, 0.0f);
             ledsLit_ = false;
@@ -1255,7 +1346,8 @@ protected:
             int step = page * numFaders_ + i;
             float b = 0.0f, c = 0.0f;
             if (step < numsteps_) {
-                switch (bm) {
+                if (gateProb) gateProbLed(s, step, b, c);
+                else switch (bm) {
                     case 0:  if (cur_.gate[step]) { b = 1.0f; c = btnColor; } break;
                     case 1:  if (step == start0)  { b = 1.0f; c = kLedGreen; }
                              else if (step == end0) { b = 1.0f; c = kLedRed; } break;
@@ -1747,13 +1839,14 @@ protected:
         int idx = cur_.gateprob[step];        // 0..7, 7 = always
         auto coin = [&](float p) { bool r = randUniform(s.rngState) < p;
                                    lastRandomPos_ = r; return r; };
+        // The turn-based notches go through turnNotchPlays, which the plate LED
+        // reads too (#84) — one per-turn rule for both, so the light and the
+        // sound can never disagree.
+        if (isTurnNotch(idx)) return turnNotchPlays(idx);
         switch (idx) {
             case 7: return true;
             case 6: return coin(0.50f);
-            case 5: return (turn_ % 2) == 0;              // every even turn
-            case 4: return (turn_ % 2) == 1;              // every odd turn
             case 3: return coin(0.25f);
-            case 2: return (turn_ % 4) == 0;              // every 4th turn
             case 1: return coin(0.12f);
             default: return lastRandomPos_;               // conditional
         }

@@ -91,6 +91,11 @@ public:
     std::vector<fc::RecallHold> hold_;
     bool ownsFaders_ = false;
 
+    // The M4's plate LED sits directly below its fader, and the manual gives it
+    // the gate-probability colour/blink codes whenever that lane is on the
+    // faders (#84, SeqCore::gateProbLed). The E4 does not take part.
+    bool plateFollowsFaderLane() const override { return true; }
+
     void setLaneLed(EngineState& s, int lane, float bright, float color) override {
         if (FaderState* f = s.controllers.fader(firstFader_ + lane)) {
             f->led = bright;
