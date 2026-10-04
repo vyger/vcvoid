@@ -146,6 +146,9 @@ enum class DisplayLayout : uint8_t {
     Value   = 0,   // header + a number (+ numbermode/fontsize): [display], Groups A/B
     Text    = 1,   // header + one interned text: [display], recorder
     Bubbles = 2,   // header + a chain of `count` bubbles, `index` filled: button
+    NoteName = 3,  // header + a note name: notebuttons, encoquencer
+    GatePattern = 4, // header + a gate-pattern picture: encoquencer
+    Range = 5,     // header + "first-last" steps: encoquencer's playing range
 };
 
 // Per-DB8E symbolic screen content. NOT pixels: a header plus one tagged layout
@@ -170,6 +173,19 @@ struct DisplayState {
     // Bubbles (button.md: a chain of `count` bubbles joined by short segments,
     // the one at `index` filled solid). Parameters, not geometry.
     struct { uint8_t count = 0, index = 0; } bubbles;
+    // NoteName (notebuttons.md: "automatically displays the selected note").
+    // The NUMBER of the note, counted in semitones from C; the spelling ("D#",
+    // "E") is the screen's business. `withOctave` says whether the number also
+    // carries an octave (a pitch) or is a bare pitch class 0..11, as
+    // notebuttons' is — the screen must not invent an octave the circuit has
+    // not got.
+    struct { int16_t semitone = 0; bool withOctave = false; } note;
+    // GatePattern (encoquencer): the step's gate pattern 0..3. Measured on
+    // hardware: 0 four squares, first filled; 1 four filled squares; 2 one long
+    // bar; 3 the words "tie to next".
+    uint8_t gatePattern = 0;
+    // Range (encoquencer's "Playing range"): first and last step, 1-based.
+    struct { uint8_t first = 0, last = 0; } range;
     const void* owner = nullptr;  // opaque circuit identity for linger arbitration
     uint8_t ownerTier = 0;        // tier of the last accepted write (see enum above)
     uint64_t lingerUntilTick = 0;
@@ -198,6 +214,15 @@ public:
     void configure(const std::vector<std::string>& controllerModels);
 
     int encoderCount() const { return (int)encoders_.size(); }
+    // The encoders a SEQUENCER may use, i.e. every encoder except the DB8E's
+    // own — encoquencer.md: "The encoder of the DB8E *cannot* be used for the
+    // encoquencer", and `firstfader` "does *not* take into account any DB8Es.
+    // They are simply ignored." Counted 1-based in chain order;
+    // sequencerEncoder() maps that count to the global encoder index (0 = none).
+    int sequencerEncoderCount() const { return (int)seqEncoders_.size(); }
+    int sequencerEncoder(int k1) const {
+        return (k1 >= 1 && k1 <= (int)seqEncoders_.size()) ? seqEncoders_[size_t(k1 - 1)] : 0;
+    }
     int faderCount() const { return (int)faders_.size(); }
     int displayCount() const { return (int)displays_.size(); }
 
@@ -280,6 +305,7 @@ private:
     struct Slot { uint8_t ctrl; uint8_t num; };
     std::vector<Slot> slots_;             // [global-1] -> (ctrl,num)
     std::vector<EncoderState> encoders_;  // parallel to slots_
+    std::vector<int> seqEncoders_;        // global indices of the non-DB8E encoders
     std::vector<FaderState> faders_;      // [global fader-1]
     std::vector<Slot> faderSlots_;        // [global fader-1] -> (ctrl, index on it)
     // [global fader-1] bitmask: bit 0 = the patch drives L<ctrl>.<k>,

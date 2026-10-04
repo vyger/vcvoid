@@ -50,6 +50,9 @@ struct DroidDB8E : ChainModule {
     // hardware's "update firmware" screen rather than guessing.
     uint8_t dispLayout = 0;
     uint8_t dispBubbleCount = 0, dispBubbleIndex = 0;
+    int16_t dispNoteSemitone = 0;
+    bool dispNoteWithOctave = false;
+    uint8_t dispGatePattern = 0, dispRangeFirst = 0, dispRangeLast = 0;
     bool dispActive = false;
 
     DroidDB8E() {
@@ -85,6 +88,11 @@ struct DroidDB8E : ChainModule {
         dispLayout = b.dispLayout;
         dispBubbleCount = b.dispBubbleCount;
         dispBubbleIndex = b.dispBubbleIndex;
+        dispNoteSemitone = b.dispNoteSemitone;
+        dispNoteWithOctave = b.dispNoteWithOctave != 0;
+        dispGatePattern = b.dispGatePattern;
+        dispRangeFirst = b.dispRangeFirst;
+        dispRangeLast = b.dispRangeLast;
         // The engine's own DisplayState::active, not a guess from the content:
         // an `encoder` parked at output 0 with no header is real content that
         // the old "any field is non-empty" heuristic read as an idle screen.
@@ -182,16 +190,42 @@ struct DB8EDisplay : Widget {
             case droid::DisplayLayout::Text:
                 drawBody(vg, bodyY, module->dispText);
                 return;
+            case droid::DisplayLayout::NoteName: {
+                char noteBuf[16];
+                formatNoteName(noteBuf, sizeof noteBuf, module->dispNoteSemitone,
+                               module->dispNoteWithOctave);
+                drawBody(vg, bodyY, noteBuf);
+                return;
+            }
+            case droid::DisplayLayout::GatePattern:
+                drawGatePattern(vg, bodyY, module->dispGatePattern, fg);
+                return;
+            case droid::DisplayLayout::Range: {
+                char rangeBuf[16];
+                std::snprintf(rangeBuf, sizeof rangeBuf, "%d-%d",
+                              (int)module->dispRangeFirst, (int)module->dispRangeLast);
+                drawBody(vg, bodyY, rangeBuf);
+                return;
+            }
             case droid::DisplayLayout::Value: {
-                // SPEC-GAP: numbermode formatting (volts/percent/note/gauge/
-                // sparkline) is not implemented; this is the plain fraction.
+                // SPEC-GAP: numbermode formatting beyond 1-3 (volts/percent/
+                // note/gauge/sparkline) is not implemented; those show the
+                // plain fraction.
                 // %g's SIGNIFICANT-digit count is what the hardware appears to
                 // use — every value read off the issue-#19 capture (652.74,
                 // 1259.73, 2003.16, 514.97) carries six, as does the manual's
                 // own `0.278` example. %.4g truncated all four of those to
                 // 652.7 / 1260 / 2003 / 515.
+                // A circuit that FIXES the format (display.md numbermode 1-3:
+                // no / one / two decimal places) gets it; the encoquencer's
+                // edit screens use 1 and 3, measured on hardware.
                 char bodyBuf[32];
-                std::snprintf(bodyBuf, sizeof bodyBuf, "%.6g", module->dispValue);
+                switch (module->dispNumbermode) {
+                    case 1:  std::snprintf(bodyBuf, sizeof bodyBuf, "%.0f", module->dispValue); break;
+                    case 2:  std::snprintf(bodyBuf, sizeof bodyBuf, "%.1f", module->dispValue); break;
+                    case 3:  std::snprintf(bodyBuf, sizeof bodyBuf, "%.2f", module->dispValue); break;
+                    default: std::snprintf(bodyBuf, sizeof bodyBuf, "%.6g", module->dispValue); break;
+                }
                 drawBody(vg, bodyY, bodyBuf);
                 return;
             }
@@ -203,10 +237,60 @@ struct DB8EDisplay : Widget {
     }
 
 private:
+    // A note number as the DB8E spells it. Sharps, as hardware.md §6.12 writes
+    // the DB8E's own pitch readout ("F♯1 +47"), with '#' standing in for '♯'
+    // because ShareTechMono has no musical glyphs. With an octave the number is
+    // a pitch counted from C0 (12 -> "C1"); without one it is a bare pitch
+    // class 0..11 and no octave digit is drawn.
+    static void formatNoteName(char* buf, size_t n, int semitone, bool withOctave) {
+        static const char* const kNames[12] = {"C", "C#", "D", "D#", "E", "F",
+                                               "F#", "G", "G#", "A", "A#", "B"};
+        int pc = ((semitone % 12) + 12) % 12;
+        if (withOctave) {
+            int octave = (semitone - pc) / 12;
+            std::snprintf(buf, n, "%s%d", kNames[pc], octave);
+        } else {
+            std::snprintf(buf, n, "%s", kNames[pc]);
+        }
+    }
+
     void drawBody(NVGcontext* vg, float y, const char* body) {
         nvgFontSize(vg, bodyPx(module->dispFontsize));
         nvgTextAlign(vg, NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE);
         nvgText(vg, box.size.x / 2.f, y, body, NULL);
+    }
+
+    // The sequencer's gate pattern for a step, as the DB8E draws it (measured
+    // on hardware, encoquencer): 0 four squares in a row with the first filled
+    // (only the first repetition plays), 1 all four filled (every repetition),
+    // 2 one long bar (one gate held over the step), 3 the words "tie to next".
+    void drawGatePattern(NVGcontext* vg, float y, int pattern, NVGcolor fg) {
+        if (pattern == 3) { drawBody(vg, y, "tie to next"); return; }
+        const float side = std::min(11.f, (box.size.x - 16.f) / 4.6f);
+        const float gap = side * 0.2f;
+        const float total = 4.f * side + 3.f * gap;
+        const float x0 = box.size.x / 2.f - total / 2.f;
+        const float top = y - side / 2.f;
+        nvgStrokeColor(vg, fg);
+        nvgFillColor(vg, fg);
+        nvgStrokeWidth(vg, 1.f);
+        if (pattern == 2) {
+            nvgBeginPath(vg);
+            nvgRect(vg, x0, top + side * 0.2f, total, side * 0.6f);
+            nvgFill(vg);
+            return;
+        }
+        for (int i = 0; i < 4; i++) {
+            float x = x0 + (float)i * (side + gap);
+            nvgBeginPath(vg);
+            nvgRect(vg, x + 0.5f, top + 0.5f, side - 1.f, side - 1.f);
+            nvgStroke(vg);
+            if (pattern == 1 || i == 0) {
+                nvgBeginPath(vg);
+                nvgRect(vg, x + 2.f, top + 2.f, side - 4.f, side - 4.f);
+                nvgFill(vg);
+            }
+        }
     }
 
     // The `button` circuit's state chain (button.md "Display"; measured on

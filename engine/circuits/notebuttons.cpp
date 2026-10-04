@@ -38,7 +38,10 @@
 //     (triggered / immediate auto-save-old + load-new on `preset` change /
 //     value-carrying trigger when `preset` is unpatched). Simultaneous-trigger
 //     precedence clearall > clear > savepreset > loadpreset. SD persistence
-//     (dontsave / boot load) and display/header (DB8E) are headless no-ops.
+//     (dontsave / boot load) is a headless no-op.
+//   * DB8E display (issue #22, Group C): the NoteName layout — the selected
+//     pitch class 0..11, no octave — on a note change while selected, titled
+//     from the `output` target or else `semitone`'s.
 #include "../src/registry.hpp"
 #include "../src/uihelpers.hpp"
 #include <cmath>
@@ -120,7 +123,26 @@ public:
         if (selected)
             for (int i = 1; i <= N; i++)
                 out("led", i).set(s, (i - 1 == note_) ? 1.0f : 0.0f);
+
+        // --- DB8E screen: the selected note (issue #22, Group C) -------------
+        // notebuttons.md "Display": the circuit "automatically displays the
+        // selected note". It goes out as the NoteName layout, payload the pitch
+        // class with no octave (the circuit has none); the spelling is the
+        // screen's business (docs/adr/0003-db8e-custom-display-layouts.md).
+        // Same rules as `button`'s bubbles: select-gated like the LEDs, the
+        // first tick swallowed so a merely loaded patch leaves the screen dark,
+        // and a refused write leaves the baseline alone so it re-attempts.
+        // Any change of the note counts — a press, a clocked press landing, a
+        // preset load or a clear — since the manual says "selected note", not
+        // "pressed button".
+        if (disp_.changed(float(note_)) && selected &&
+            ui::showNoteName(*this, s, note_, /*withOctave=*/false))
+            disp_.accept(float(note_));
     }
+
+    // notebuttons.md: the title "is derived from the target of the `output`
+    // parameter or, if that is not patched, from `semitone`".
+    const char* autoHeaderFallbackJack() const override { return "semitone"; }
 
     // Persisted: the latched note + all 16 presets + current preset slot.
     // (pending_ is a runtime clock-quantization latch, not manual state.)
@@ -161,6 +183,7 @@ private:
     int  prevPreset_ = 0;
     bool prevHigh_[N + 1] = {};
     bool caPrev_ = false, clPrev_ = false, spPrev_ = false, lpPrev_ = false, ckPrev_ = false;
+    ui::DisplayBaseline disp_;   // last note shown on the DB8E (issue #22)
 };
 
 DROID_REGISTER_CIRCUIT(notebuttons, NoteButtons)

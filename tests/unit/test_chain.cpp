@@ -456,6 +456,10 @@ TEST(chain_extended_blocks_are_pod) {
     DownstreamBlock d;
     CHECK(d.dispLayout == 0);        // droid::DisplayLayout::Value
     CHECK(d.dispBubbleCount == 0);
+    CHECK(d.dispNoteSemitone == 0);
+    CHECK(d.dispNoteWithOctave == 0);
+    CHECK(d.dispGatePattern == 0);
+    CHECK(d.dispRangeFirst == 0 && d.dispRangeLast == 0);
     CHECK(d.dispHeader[0] == '\0');
 }
 

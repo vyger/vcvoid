@@ -22,6 +22,10 @@
 //     fader layout) is modelled; zorder 1..3 and nume4s reshape the panel layout
 //     and are inert here (documented SPEC-GAP — they need the E4 grid geometry and
 //     have no effect with a single E4 or on the played cv/gate sequence).
+//   * DB8E (issue #22, Group C): every turn and push shows the edit — title
+//     and value as measured on hardware, see SeqCore::showLaneEdit. A turn
+//     shows even when the value is already at its end (the encoder was
+//     touched), so the screen always answers a hand on the encoder.
 #include "../src/registry.hpp"
 #include "../src/seqcore.hpp"
 
@@ -30,7 +34,9 @@ namespace droid {
 class Encoquencer : public SeqCore {
 public:
     int availableLanes(EngineState& s) override {
-        int n = s.controllers.encoderCount();
+        // DB8E encoders are not sequencer lanes (encoquencer.md: "They are
+        // simply ignored"), so lanes count and address only the E4 encoders.
+        int n = s.controllers.sequencerEncoderCount();
         return n > 0 ? n : 4;
     }
 
@@ -41,7 +47,7 @@ public:
             int step = page * numFaders_ + i;
             if (step >= numsteps_) continue;
             int enc = firstFader_ + i;
-            EncoderState* e = s.controllers.encoder(enc);
+            EncoderState* e = s.controllers.encoder(s.controllers.sequencerEncoder(enc));
             if (!e) continue;
 
             // push-button editing (buttonmode). Both edges are reported:
@@ -50,14 +56,19 @@ public:
             if (buttons) {
                 bool pushed = e->pushed;
                 bool wasPushed = (i < (int)prevTouch_.size()) ? prevTouch_[i] : false;
-                if (pushed != wasPushed) plateEdge(s, bm, i, step, pushed);
+                if (pushed != wasPushed) {
+                    plateEdge(s, bm, i, step, pushed);
+                    if (pushed) showButtonEdit(s, bm, step);
+                }
                 if (i < (int)prevTouch_.size()) prevTouch_[i] = pushed;
             }
 
             if (!faders) continue;                          // another chain member's encoders
             // turn editing (relative detents drained by the engine each tick)
+            bool turned = e->pendingDetents != 0;
             bool changed = adjustByDetents(s, fm, step, e->pendingDetents);
             if (changed && fm == 0) { cur_.gate[step] = true; onCvEdited(s, step); }  // gate auto-on + compose audition
+            if (turned) showLaneEdit(s, fm, step);
             e->ringDisplay = storedPos(s, fm, step);          // panel-only readout
             e->ring.active = true;                            // claim the ring (issue #15);
             e->ring.style = 1;                                // 25-cell gauge render
@@ -66,8 +77,15 @@ public:
         wasSelected_ = true;
     }
 
+    bool displaysEdits() const override { return true; }
+
+    // encoquencer has no `header` jack; an unquantized CV edit is titled from
+    // the `cv` target ("Output O1", measured on hardware).
+    const char* autoHeaderFallbackJack() const override { return "cv"; }
+
     void setLaneLed(EngineState& s, int lane, float bright, float color) override {
-        if (EncoderState* e = s.controllers.encoder(firstFader_ + lane)) {
+        if (EncoderState* e = s.controllers.encoder(
+                s.controllers.sequencerEncoder(firstFader_ + lane))) {
             e->stepLed = bright;
             e->stepLedColor = color;
         }

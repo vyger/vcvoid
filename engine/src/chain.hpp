@@ -194,6 +194,15 @@ struct DownstreamBlock {                  // one module's LED/gate-out state, fr
     // segments, the one at `index` filled solid. Parameters, not geometry.
     uint8_t dispBubbleCount = 0;
     uint8_t dispBubbleIndex = 0;
+    // NoteName payload (notebuttons): the note counted in semitones from C, and
+    // whether that number carries an octave. The spelling is drawn Rack-side.
+    int16_t dispNoteSemitone = 0;
+    uint8_t dispNoteWithOctave = 0;
+    // GatePattern payload (encoquencer): the pattern index 0..3.
+    uint8_t dispGatePattern = 0;
+    // Range payload (encoquencer's "Playing range"): first/last step, 1-based.
+    uint8_t dispRangeFirst = 0;
+    uint8_t dispRangeLast = 0;
     // DisplayState::active — has any circuit ever written this screen? Carried
     // explicitly rather than inferred from the content, because a legitimately
     // displayed value of exactly 0 with no header is indistinguishable from an

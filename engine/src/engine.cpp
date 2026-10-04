@@ -72,7 +72,10 @@ static void deriveAutoHeaders(const CompiledCircuit& cc, Circuit& c,
                               std::vector<std::string>& texts) {
     // Only circuits that can actually show a header get one derived: otherwise
     // every `[copy] output = O1` in every patch would intern a dead string.
-    bool canDisplay = false;
+    // A circuit with no `header` jack can still title itself from an output's
+    // target when it names one (encoquencer: "Output O1" over an unquantized
+    // CV edit, measured on hardware — its title source is `cv`).
+    bool canDisplay = c.autoHeaderFallbackJack() != nullptr;
     for (unsigned j = 0; j < cc.def->numJacks && !canDisplay; j++)
         canDisplay = !std::strcmp(cc.def->jacks[j].name, "header");
     if (!canDisplay) return;
@@ -99,6 +102,14 @@ static void deriveAutoHeaders(const CompiledCircuit& cc, Circuit& c,
         if (slot >= 0 && slot < (int)c.autoHeaderTexts.size())
             c.autoHeaderTexts[size_t(slot)] = t;
     }
+    // A circuit whose manual names a second title source for when `output` is
+    // not patched (notebuttons: `semitone`) falls back to that jack's target.
+    if (!scalar)
+        if (const char* fb = c.autoHeaderFallbackJack())
+            for (const auto& p : cc.params)
+                if (p.def && !p.def->isInput && p.def->count == 1 &&
+                    !std::strcmp(p.def->name, fb))
+                    scalar = &p.a;
     if (scalar) c.autoHeaderText = headerTextForTarget(*scalar, texts);
 }
 

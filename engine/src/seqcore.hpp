@@ -241,6 +241,7 @@
 #include "notes.hpp"
 #include "rng.hpp"
 #include "controllerstate.hpp"
+#include "uihelpers.hpp"
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
@@ -1466,6 +1467,125 @@ protected:
         if (changed) bulkStamp(s, fm, step);
         return changed;
     }
+
+    // ---- DB8E: show the edit (issue #22, Group C) --------------------------
+    // encoquencer.md: the circuit "automatically uses the display whenever you
+    // edit something in the sequencer". What it shows was MEASURED on a DB8E
+    // (blue-7), one edit at a time, with and without `cvname`/`gatename`:
+    //
+    //   turn, pitch, quantize 1/2  "Pitch" / note with octave ("C2", "C#0")
+    //   turn, pitch, quantize 0    derived `cv` title ("Output O1") / the
+    //                              0..1 position, two decimals ("1.00")
+    //   turn, randomize            "Randomize" / 0..7
+    //   turn, gate probability     "Probability" / "50%"
+    //   turn, repeats / ratchets   "Repeats" / "Ratchets" / the count
+    //   turn or push, gate pattern "Gate pattern" / a picture (GatePattern)
+    //   turn or push, gate         "Gate" / "play" | "silent"
+    //   turn or push, skip         "Skip" / "skip" | "play"
+    //   push, start/end            "Playing range" / "1-2"
+    //
+    // `cvname` replaces BOTH pitch titles; `gatename` replaces "Gate" and
+    // switches the words to "on"/"off" (also the manual's wording). No other
+    // title changes with them. SPEC-GAP: `cvnotches` (a notched NUMBER) was not
+    // measured; it shows the number under the manual's own "Number".
+    //
+    // Only the skin that opts in (displaysEdits) calls these, so motoquencer
+    // is unchanged until it is measured too.
+    virtual bool displaysEdits() const { return false; }
+
+    void internTexts(const TextInterner& intern) override {
+        txPitch_ = intern("Pitch");           txNumber_ = intern("Number");
+        txGate_ = intern("Gate");             txPlay_ = intern("play");
+        txSilent_ = intern("silent");         txOn_ = intern("on");
+        txOff_ = intern("off");               txRandomize_ = intern("Randomize");
+        txProbability_ = intern("Probability");
+        txRepeats_ = intern("Repeats");       txRatchets_ = intern("Ratchets");
+        txGatePattern_ = intern("Gate pattern");
+        txSkip_ = intern("Skip");             txSkipWord_ = intern("skip");
+        txPlayingRange_ = intern("Playing range");
+        for (int i = 0; i < 8; i++) txProb_[i] = intern(kProbText[i]);
+    }
+
+    // A TURN edited `step` in fader mode `fm`.
+    void showLaneEdit(EngineState& s, int fm, int step) {
+        if (!displaysEdits()) return;
+        switch (fm) {
+            case 0: showPitchEdit(s, step); return;
+            case 1: ui::showValueWithHeader(*this, s, float(cur_.randcv[step]), 0, kNumInt, txRandomize_); return;
+            case 2: ui::showCircuitText(*this, s, txProb_[cur_.gateprob[step] & 7], txProbability_); return;
+            case 3: ui::showValueWithHeader(*this, s, float(cur_.repeats[step]), 0, kNumInt, txRepeats_); return;
+            case 4: ui::showGatePattern(*this, s, cur_.gatepat[step], txGatePattern_); return;
+            case 5: ui::showValueWithHeader(*this, s, float(cur_.ratchets[step]), 0, kNumInt, txRatchets_); return;
+            case 6: showGateEdit(s, step); return;
+            default: showSkipEdit(s, step); return;
+        }
+    }
+
+    // A PUSH (or touch plate) edited `step` in button mode `bm`.
+    void showButtonEdit(EngineState& s, int bm, int step) {
+        if (!displaysEdits()) return;
+        switch (bm) {
+            case 0: showGateEdit(s, step); return;
+            case 1: ui::showStepRange(*this, s, rangeStart0(s) + 1, rangeEnd0(s) + 1, txPlayingRange_); return;
+            case 2: ui::showGatePattern(*this, s, cur_.gatepat[step], txGatePattern_); return;
+            default: showSkipEdit(s, step); return;
+        }
+    }
+
+private:
+    static constexpr uint8_t kNumInt = 1;   // display.md numbermode 1: "0"
+    static constexpr uint8_t kNum2dp = 3;   // display.md numbermode 3: "0.12"
+    // gateprob index -> the words the DB8E shows, all eight measured on
+    // hardware by stepping an encoder down from "always". They line up with the
+    // index meanings probTable uses (0 conditional, 1 12%, 2 every 4th, 3 25%,
+    // 4 odd, 5 even, 6 50%, 7 always).
+    static constexpr const char* kProbText[8] = {
+        "if last", "12%", "every 4th", "25%", "odd turns", "even turns", "50%", "always"};
+
+    // The `cvname`/`gatename` text when patched, else `fallback`.
+    int nameOr(EngineState& s, const char* jack, int fallback) {
+        return in(jack).connected() ? ui::floorText(in(jack).value(s)) : fallback;
+    }
+
+    void showPitchEdit(EngineState& s, int step) {
+        int cn = (int)std::lround(in("cvnotches").value(s));
+        int quant = (int)std::lround(in("quantize").value(s));
+        if (cn >= 2) {
+            ui::showValueWithHeader(*this, s, float(fc::notchIndex(cur_.cvpos[step], cn)),
+                                    0, kNumInt, nameOr(s, "cvname", txNumber_));
+            return;
+        }
+        if (quant == 0) {   // the position itself, titled from the `cv` target
+            ui::showValueWithHeader(*this, s, cur_.cvpos[step], 0, kNum2dp,
+                                    nameOr(s, "cvname", autoHeaderText));
+            return;
+        }
+        // The note the step is DIALED to: the notch's semitone, before invert,
+        // randomisation and the play-time shifters (it is the edit being shown).
+        std::vector<long> allowed = allowedSemis(s);
+        if (allowed.empty()) return;
+        long semi = allowed[size_t(fc::notchIndex(cur_.cvpos[step], (int)allowed.size()))];
+        ui::showNoteName(*this, s, (int)semi, /*withOctave=*/true,
+                         nameOr(s, "cvname", txPitch_));
+    }
+
+    void showGateEdit(EngineState& s, int step) {
+        bool named = in("gatename").connected();
+        int word = cur_.gate[step] ? (named ? txOn_ : txPlay_) : (named ? txOff_ : txSilent_);
+        ui::showCircuitText(*this, s, word, nameOr(s, "gatename", txGate_));
+    }
+
+    void showSkipEdit(EngineState& s, int step) {
+        ui::showCircuitText(*this, s, cur_.skip[step] ? txSkipWord_ : txPlay_, txSkip_);
+    }
+
+    int txPitch_ = 0, txNumber_ = 0, txGate_ = 0, txPlay_ = 0, txSilent_ = 0,
+        txOn_ = 0, txOff_ = 0, txRandomize_ = 0, txProbability_ = 0,
+        txRepeats_ = 0, txRatchets_ = 0, txGatePattern_ = 0, txSkip_ = 0,
+        txSkipWord_ = 0, txPlayingRange_ = 0;
+    int txProb_[8] = {};
+
+protected:
 
     // The plain relative column write behind adjustByDetents (the counterpart of
     // setLaneValue for encoders).
