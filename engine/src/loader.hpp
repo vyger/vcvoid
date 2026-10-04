@@ -12,6 +12,7 @@ struct CompiledParam {
     int arrayIndex = 1;
     Atom a, b, c;
     bool simple = false;
+    bool subtractForm = false;   // `X - REG`: see ParamLine::subtractForm
     int line = 0;
 };
 

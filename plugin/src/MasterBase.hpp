@@ -132,6 +132,13 @@ struct DroidMasterBase : Module {
     // Off by default so a patch built here stays hardware-compatible; same
     // threading note as ignoreHwMemoryLimits above.
     bool allowExperimentalCircuits = false;
+    // Issue #88: measure RAM the way the Forge deploys with "Detect and share
+    // duplicate values for inputs" on — repeated input values become one jack
+    // table entry, so a patch can fit that otherwise would not. OFF by default,
+    // matching the Forge's own default: the reported budget should be the one
+    // the user sees in the Forge unless they changed it there too. Persisted;
+    // same threading note as the two flags above.
+    bool shareInputValues = false;
 
     // --- visible error state (issue #46) ---------------------------------
     // A master that refuses to run used to look exactly like one that is
@@ -636,6 +643,7 @@ public:
         droid::LoadOptions lopts;
         lopts.ignoreMemoryLimits = ignoreHwMemoryLimits;
         lopts.allowExperimental = allowExperimentalCircuits;
+        lopts.shareInputValues = shareInputValues;
         auto fresh = std::make_unique<droid::Engine>(
             masterType_, effectiveRate);
         droid::LoadResult r = fresh->load(text, lopts);
@@ -753,8 +761,12 @@ public:
                              std::istreambuf_iterator<char>());
                 return true;
             });
+            // The budget is only meaningful alongside the mode it was measured
+            // in, so the status line names the mode whenever it is not the
+            // Forge's default (#88).
             patchStatus = system::getFilename(path) +
-                string::f(" — ok, %u bytes RAM", r.ramUsed);
+                string::f(" — ok, %u bytes RAM%s", r.ramUsed,
+                          shareInputValues ? " (shared inputs)" : "");
             if (!r.warnings.empty()) {
                 patchStatus += string::f(" — %d warning(s)", (int)r.warnings.size());
                 for (const auto& w : r.warnings)
@@ -1444,6 +1456,8 @@ public:
             json_boolean(ignoreHwMemoryLimits));
         json_object_set_new(root, "allowExperimentalCircuits",
             json_boolean(allowExperimentalCircuits));
+        json_object_set_new(root, "shareInputValues",
+            json_boolean(shareInputValues));
         json_object_set_new(root, "showRegisterLabels",
             json_boolean(registerLabels.show));
         json_object_set_new(root, "circuitStateStore", storeToJson(storeCopy));
@@ -1476,6 +1490,10 @@ public:
         // on Rack reopen instead of failing with the gate error (#12).
         if (json_t* j = json_object_get(root, "allowExperimentalCircuits"))
             allowExperimentalCircuits = json_boolean_value(j);
+        // Likewise for the shared-input budget (#88): a patch that only fits
+        // with sharing on must come back the same way, not as out of memory.
+        if (json_t* j = json_object_get(root, "shareInputValues"))
+            shareInputValues = json_boolean_value(j);
         if (json_t* j = json_object_get(root, "showRegisterLabels"))
             registerLabels.show = json_boolean_value(j);
         // Load the saved circuit state BEFORE the patch load below, so that
@@ -2062,6 +2080,7 @@ struct DroidMasterBaseWidget : ModuleWidget {
     void appendStatusCard(Menu* menu, DroidMasterBase* m,
                           const std::string& patchPath,
                           const std::string& stateStatus, unsigned ramUsed,
+                          bool ramShared,
                           const std::vector<std::string>& declared,
                           const std::vector<std::string>& physical) {
         vcvoid::status::Report rep = m->statusReport();
@@ -2120,7 +2139,12 @@ struct DroidMasterBaseWidget : ModuleWidget {
         std::string shortName = vcvoid::status::elideMiddle(fileName, 32);
         if (!fileName.empty()) {
             std::string line = shortName;
-            if (ramUsed) line += string::f(" · %u bytes RAM", ramUsed);
+            // #88: name the accounting mode next to the figure when it is not
+            // the Forge's default, so "97 496 bytes" can never be read as the
+            // number the Forge would show with its own preferences.
+            if (ramUsed)
+                line += string::f(" · %u bytes RAM%s", ramUsed,
+                                  ramShared ? " (shared)" : "");
             if (!stateStatus.empty()) line += " · " + stateStatus;
             addWrapped(line);
         }
@@ -2202,7 +2226,26 @@ struct DroidMasterBaseWidget : ModuleWidget {
             // off. Flag it so the failure is diagnosable from the UI.
             midiWarn = m->engine && m->engine->patchUsesMidi() && !m->engine->midiAvailable();
         }
-        appendStatusCard(menu, m, patchPath, stateStatus, ramUsed, declared, physical);
+        appendStatusCard(menu, m, patchPath, stateStatus, ramUsed, m->shareInputValues,
+                         declared, physical);
+        // #88: the Forge's deploy preference "Detect and share duplicate values
+        // for inputs". It changes nothing about how the patch RUNS — only how
+        // much RAM it is charged, and therefore whether an over-budget patch is
+        // refused — so it belongs with the budget the card above reports, not
+        // with the Experimental switches. Off by default, like the Forge's own.
+        menu->addChild(createBoolMenuItem("Share duplicate input values", "",
+            [m]() { return m->shareInputValues; },
+            [m](bool v) {
+                m->shareInputValues = v;
+                // Re-evaluate immediately: the figure on the card, and whether
+                // an over-budget patch loads at all, both move with this.
+                std::string path;
+                {
+                    std::lock_guard<std::mutex> lock(m->engineMutex);
+                    path = m->patchPath;
+                }
+                if (!path.empty()) m->loadPatchFile(path);
+            }));
         menu->addChild(new MenuSeparator);
         menu->addChild(createMenuLabel("chain: " + chainLine));
         if (midiWarn)
