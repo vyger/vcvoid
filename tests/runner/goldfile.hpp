@@ -29,10 +29,11 @@ struct Event {
     float tol = 1e-6f;
     // ExpectDisplay `bubbles`: the SECOND integer operand (the filled bubble's
     // index; `value` carries the count). ExpectDisplay `note`: 1 when the
-    // `octave` word was given (`value` carries the semitone). Issue #22, Group C.
+    // `octave` word was given (`value` carries the semitone). ExpectDisplay
+    // `range`: the last step (`value` carries the first). Issue #22, Group C.
     float value2 = 0.0f;
     int line = 0;
-    // ExpectDisplay only: `field` is one of header|text|value|mode|font|bubbles|note|off;
+    // ExpectDisplay only: `field` is one of header|text|value|mode|font|bubbles|note|gatepattern|range|off;
     // `strValue` is the unquoted expected string for header/text (empty otherwise).
     std::string field;
     std::string strValue;

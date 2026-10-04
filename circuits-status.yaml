@@ -592,6 +592,12 @@ circuits:
       and so is bulkedit (a turn stamps the steps to the right, like a fader).
       Both push EDGES are reported to the core, so buttonmode 1's two-finger
       start/end gesture works on the encoders exactly as on the M4 plates.
+      Lanes are the NON-DB8E encoders only (encoquencer.md: DB8Es 'are simply
+      ignored'; ControllerState::sequencerEncoder). DB8E (issue #22, Group C):
+      every turn and push shows the edit -- titles, words, number formats and
+      the gate-pattern pictures measured on hardware (SeqCore::showLaneEdit);
+      cvname/gatename replace only the pitch/gate titles. SPEC-GAP: the
+      cvnotches number screen was not measured (manual's 'Number').
       All motoquencer IMPLEMENTED and DEFERRED scope applies identically
       (shared core), buttoncolor included -- it paints the E4 step LED exactly
       as it paints the M4 one (#76; the golden reads it back through

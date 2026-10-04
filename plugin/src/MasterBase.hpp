@@ -1313,6 +1313,9 @@ public:
                         b.dispBubbleIndex = ds->bubbles.index;
                         b.dispNoteSemitone   = ds->note.semitone;
                         b.dispNoteWithOctave = ds->note.withOctave ? 1 : 0;
+                        b.dispGatePattern    = ds->gatePattern;
+                        b.dispRangeFirst     = ds->range.first;
+                        b.dispRangeLast      = ds->range.last;
                     }
                 }
             }

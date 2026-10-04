@@ -241,12 +241,35 @@ GoldFile parse(const std::string& path) {
                     ev.value = float(st);
                     ev.value2 = oct ? 1.0f : 0.0f;
                 }
+                else if (ev.field == "gatepattern") {
+                    // The GatePattern layout (encoquencer, issue #22 Group C):
+                    // the pattern index 0..3, never the picture.
+                    int pat;
+                    if (!(ls >> pat)) {
+                        g.parseError = "'expectdisplay gatepattern' expects an "
+                            "integer 0..3 at line " + std::to_string(lineNo);
+                        return g;
+                    }
+                    ev.value = float(pat);
+                }
+                else if (ev.field == "range") {
+                    // The Range layout (encoquencer's "Playing range"): first
+                    // and last step, 1-based.
+                    int first, last;
+                    if (!(ls >> first) || !(ls >> last)) {
+                        g.parseError = "'expectdisplay range' expects two integers "
+                            "(first last) at line " + std::to_string(lineNo);
+                        return g;
+                    }
+                    ev.value = float(first);
+                    ev.value2 = float(last);
+                }
                 else if (ev.field == "off") {
                     // no operand
                 }
                 else {
                     g.parseError = "'expectdisplay' unknown field '" + ev.field +
-                        "' (want header|text|value|mode|font|bubbles|note|off) at line " +
+                        "' (want header|text|value|mode|font|bubbles|note|gatepattern|range|off) at line " +
                         std::to_string(lineNo);
                     return g;
                 }

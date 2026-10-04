@@ -6,12 +6,15 @@ namespace droid {
 void ControllerState::configure(const std::vector<std::string>& controllerModels) {
     slots_.clear();
     faderSlots_.clear();
+    seqEncoders_.clear();
     int displayCount = 0;
     for (size_t i = 0; i < controllerModels.size(); i++) {
         const ControllerModel* m = findControllerModel(controllerModels[i]);
         if (!m) continue;
-        for (uint8_t n = 1; n <= m->encoders; n++)
+        for (uint8_t n = 1; n <= m->encoders; n++) {
             slots_.push_back(Slot{uint8_t(i + 1), n});
+            if (controllerModels[i] != "db8e") seqEncoders_.push_back((int)slots_.size());
+        }
         // 4 per M4, in chain order. The slot also records (ctrl, index on that
         // controller), which is what addresses the fader's touch-plate LED
         // register pair L<ctrl>.<k> / R<ctrl>.<k> (hardware.md §6.11).
