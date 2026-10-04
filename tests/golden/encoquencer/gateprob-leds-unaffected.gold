@@ -1,0 +1,50 @@
+# encoquencer: the motoquencer fader-mode-2 gate-probability plate codes (#84)
+# do NOT apply to the E4. encoquencer.md "LED visualization" splits the two
+# surfaces explicitly:
+#
+#   "The middle three LEDs below each encoder have the same function as the
+#    touch button's LED in the M4: They reflect the current `buttonmode`."
+#
+# and gives the gate probabilities their own, different scheme in the 25-cell
+# ring instead ("The eight possible settings are represented by eight positions
+# in the ring. The LEDs are blue for the various standard random positions of
+# 100%, 50%, 25% and 12%. The positions for playing a note every 2nd or 4th turn
+# are light green. And the special position 1 ... is magenta."). The ring itself
+# is panel-only and not modelled; what matters here is that the step LED keeps
+# reporting the buttonmode in fader mode 2, with no blinking.
+tickrate 100
+patch <<<
+[e4]
+[encoquencer]
+    clock       = I1
+    fadermode   = I2
+    numsteps    = 4
+    numfaders   = 4
+    buttonmode  = 0
+    defaultgate = 1
+    cv          = O1
+    gate        = O2
+>>>
+# Fader mode 2 (gate probability) and encoder 1 dialled all the way down to
+# notch 1 (the conditional-random setting, which on the M4 blinks fastest).
+@0 set I2 2
+@1 turn E1.1 -7
+# The step LEDs are the buttonmode-0 gate colour, the `buttoncolor` default 0.1
+# -- not the manual's blue 1.2 -- on every gate-on step.
+@2 expect E1.led 1 tol 1e-6
+@2 expect E1.color 0.1 tol 1e-6
+@2 expect E2.color 0.1 tol 1e-6
+# And they stay lit: at tick 30 every one of the M4's blink codes would be in an
+# off phase, and at tick 44 all four of them are.
+@30 expect E1.led 1 tol 1e-6
+@30 expect E1.color 0.1 tol 1e-6
+@44 expect E1.led 1 tol 1e-6
+@44 expect E1.color 0.1 tol 1e-6
+@44 expect E4.led 1 tol 1e-6
+# Pushing encoder 1 still toggles its gate off (buttonmode 0 is untouched), and
+# a gate-off step is dark -- the plates are reporting gates, not probabilities.
+@45 push E1.1 1
+@46 push E1.1 0
+@46 expect E1.led 0 tol 1e-6
+@46 expect E1.color 0 tol 1e-6
+@46 expect E2.led 1 tol 1e-6

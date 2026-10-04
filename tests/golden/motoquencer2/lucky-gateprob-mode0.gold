@@ -1,0 +1,29 @@
+# The other side of lucky-gateprob-in-subset.gold: with `probabilitymode` at its
+# default 0 the notch table is the identity over 0..7, so luckygateprob draws
+# exactly what motoquencer draws — dent 1 + int(U*7) with `luckyamount` 0 as the
+# floor 1. Seed 1's first four uniforms (0.558488 / 0.173574 / 0.147250 / 0.101457)
+# give 4 / 2 / 2 / 1, read off the eight-notch grid as k/7:
+#   4 = every odd turn -> 4/7 = 0.571429
+#   2 = every 4th turn -> 2/7 = 0.285714
+#   1 = 12% random     -> 1/7 = 0.142857
+# That last value is the one `probabilitymode = 2` has to suppress, and the sibling
+# golden shows the same draw landing on 2 there instead. Substituting [motoquencer]
+# for [motoquencer2] in the patch below gives the identical four numbers.
+experimental
+seed 1
+tickrate 100
+patch <<<
+[m4]
+[motoquencer2]
+    numfaders     = 4
+    fadermode     = 2
+    clock         = I1
+    luckygateprob = I2
+    luckyamount   = 0
+    cv            = O1
+>>>
+@1 set I2 1
+@1 expect F1 0.571429 tol 1e-4
+@1 expect F2 0.285714 tol 1e-4
+@1 expect F3 0.285714 tol 1e-4
+@1 expect F4 0.142857 tol 1e-4

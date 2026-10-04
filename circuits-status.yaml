@@ -575,13 +575,23 @@ circuits:
       All motoquencer IMPLEMENTED and DEFERRED scope applies identically
       (shared core), buttoncolor included -- it paints the E4 step LED exactly
       as it paints the M4 one (#76; the golden reads it back through
-      E<n>.led / E<n>.color). encoquencer-only: ledpreview + 25-LED ring visualization
+      E<n>.led / E<n>.color). The one step-LED rule that is NOT shared is
+      motoquencer's fader-mode-2 gate-probability colour/blink codes (#84):
+      encoquencer.md 'LED visualization' gives the middle-three step LEDs the
+      `buttonmode` and nothing else, and puts the eight gate-probability
+      settings in the 25-cell RING under a different scheme entirely (blue for
+      the random positions, light green for the turn-based ones, magenta for
+      position 1), so the E4 step LED keeps its buttonmode colour in fader
+      mode 2 (SeqCore::plateFollowsFaderLane, false here, true on the M4).
+      encoquencer-only: ledpreview + 25-LED ring visualization
       are panel-only; zorder/nume4s only reshape the step->encoder grid
       mapping -- zorder=0 (natural order) modelled, zorder 1..3 and nume4s
       inert (documented SPEC-GAP: need E4 grid geometry; no effect on played
       cv/gate). requires-human: LED ring semantics need real E4 hardware.
       6 goldens (transport, turn-edit + push-gate, fadermode/repeats,
-      lucky-gates, start/end push gesture, bulkedit) plus a buttoncolor golden."
+      lucky-gates, start/end push gesture, bulkedit) plus a buttoncolor golden
+      and gateprob-leds-unaffected (the step LED stays the buttonmode colour,
+      unblinking, in fader mode 2)."
   euklid:
     status: done
     difficulty: easy
@@ -1063,7 +1073,21 @@ circuits:
       buttonmode-0 gate LEDs (#76) -- read per INSTANCE, not chain-wide like
       buttonmode itself, so a linked sequencer 'that does something else than
       gates' marks its own plates (the goldens read the LEDs back through the
-      harness handles F<n>.led / F<n>.color); composemode (transport freezes; a
+      harness handles F<n>.led / F<n>.color); the fader-mode-2
+      GATE-PROBABILITY LED codes (#84) -- while the gate-probability lane is on
+      the faders (fadermode 2, or a linked 12/22/... that resolves to 2 on this
+      instance) each plate reports its step's NOTCH instead of the buttonmode:
+      steady blue for notch 8 (always), the same blue blinking at three rates
+      for the random 50/25/12% notches 7/4/2, blue blinking fastest for the
+      conditional notch 1, and cyan for the turn-based notches 6/5/3 -- steady
+      in the turns where the step plays, blinking in the others, off the SAME
+      per-turn counter the gate decision uses (SeqCore::turnNotchPlays serves
+      both, so the light and the sound cannot disagree). `buttoncolor` does not
+      reach these codes (the manual names fixed colours), the white played-step
+      marker still beats them, and the plates are left entirely alone in every
+      other fadermode. An instance that owns the plates while ANOTHER chain
+      member owns the faders keeps painting its buttonmode -- the codes follow
+      the fader lane, and it can only speak for its own steps; composemode (transport freezes; a
       fadermode-0 CV edit jumps to that step, outputs its CV and opens a
       10 ms audition gate -- duration a SPEC-GAP literal reading of 'a short
       time'); quantize 0/1/2 with the shared scale core (notes.hpp);
@@ -1198,6 +1222,22 @@ circuits:
       patterns 1..4 and 6, patterns 5 and 7 never cross anything so their cycle
       is every N moves for an order of N steps (that Nth move being the restart
       itself), and pattern 6's 'small random number' is a uniform 1..3.
+      SPEC-GAP for the fader-mode-2 gate-probability LED codes (#84; the manual
+      gives only 'blink in various speeds' and 'blinking fast', with no
+      numbers): the blink is HALF DUTY on a ladder that reads as 'faster = less
+      likely' -- 2 Hz at 50%, 4 Hz at 25%, 6 Hz at 12% -- with the fastest code,
+      8 Hz, reserved for the conditional notch 1 that the manual singles out as
+      'blinking fast', and the SLOWEST, 2 Hz, for the cyan off-turn blink
+      (whose colour already separates it, so the blink only has to say 'not
+      this bar'). The phase is free-running off ENGINE TIME (s.tick /
+      s.tickRateHz), not off the patch clock, so every lane blinks together and
+      the rates are reproducible in goldens; a blinked-off plate drops its
+      brightness to 0 and keeps its colour value, leaving the hue available to
+      a renderer that would rather dim than extinguish. The codes paint every
+      visible step, gate-on or not: the lane reports the step's SETTING, and
+      the manual's own advice for silencing a step is to turn its gate off in a
+      different lane. Blue is the colour table's named 1.2 (not the
+      buttonmode-0 gate default 0.1), cyan its 0.2.
       SPEC-GAPs for per-step CV randomization (#57; the manual gives only
       'a different random offset each time the step is played' and 'at position
       7 the offset is up to cvrange'): the offset is BIPOLAR uniform,
@@ -1214,7 +1254,7 @@ circuits:
       (cvnotches>=2) moves by whole notches inside the notch list; detents 1..3
       under accumulatorrange>0 ('slight/medium/strong', no strengths given) keep
       the same detent/7 scaling; composemode auditions the dialed note itself.
-      107 goldens (incl. composemode, holdcv-drift, defaultcv-notches,
+      113 goldens (incl. composemode, holdcv-drift, defaultcv-notches,
       gatelength-min, startend touch/two-finger/clear/setendstep/pages,
       doublerange basic/limits, linktonext transport/mirroring/holdcv/
       buttonmode/lucky-order/startend/doublerange, bulkedit faders/pages/
@@ -1229,7 +1269,15 @@ circuits:
       plus pattern with reverse, with pingpong, inside a form part, with
       start/end, out-of-range clamping and a chain member following the main,
       plus pitch-dressing and randomize zero-inert/spread/detents/
-      exceeds-range/per-step-entry/quantized/accumulator/linktonext).
+      exceeds-range/per-step-entry/quantized/accumulator/linktonext, plus the
+      three fader-mode-2 LED-code goldens: gateprob-leds (steady blue at notch
+      8, the three random rates and the conditional notch separated by their
+      blink phases, white over the top, and the buttonmode colours back the
+      moment the lane changes), gateprob-leds-turns (cyan steady on the turns
+      where the step plays and blinking on the others, mirrored across an even
+      and an odd turn) and gateprob-leds-linked (fadermode 12 paints the
+      MEMBER's own notches, and a plate owner without the faders falls back to
+      its buttonmode)).
       requires-human: motor haptics + auto-moving faders + LED rings need real
       M4 hardware."
   motorfader:
@@ -1995,6 +2043,39 @@ circuits:
       cubic, 7 → Fourier), N=0/N=1/gap/
       fade-default, refusal, RAM 964 (crossfader with the same lines 948,
       i.e. the 16-byte base delta)."
+  motoquencer2:
+    status: done
+    experimental: true
+    difficulty: easy
+    binding: controller-required
+    verification: headless
+    spec_gap: false
+    depends_on: [motoquencer]
+    notes: "EXPERIMENTAL (vcvoid only, #85) — not DROID firmware, refused at
+      load unless LoadOptions.allowExperimental. Declared in
+      engine/experimental.json, where it `extends` the firmware's motoquencer
+      rather than copying its 112 jacks (tools/jackgen/overlay.py resolves it
+      for both consumers, so the inherited jacks cannot drift from the Forge's
+      file). The circuit is motoquencer verbatim — engine/src/motoquencer.hpp,
+      the M4 surface, extracted to a header for exactly this reuse — plus one
+      input, `probabilitymode` (pm, integer, rounded+clamped 0..2): 0 = the
+      gate-probability lane's usual eight notches, 1 = the five random chances
+      (stored 0/1/3/6/7), 2 = the four trig conditions (stored 2/4/5/7).
+      Stored values, presets, saved state, LED codes and probabilityPlays are
+      untouched; SeqCore::probTable / probNotchOf only reshape the fader's notch
+      grid, its snap/nudge targets, the position a stored value is displayed at
+      and luckygateprob's candidate list. Non-destructive: a value outside the
+      active subset shows at the nearest notch (ties resolve down) and keeps
+      playing — applyEdit ignores a readback that is still in that notch, which
+      is what stops the motor recall from rewriting the step. Read off the chain
+      main only, like fadermode, with no +10 addressing. Goldens: notch grid per
+      mode (0/1/2) with the stored index read back on the eight-notch grid,
+      clamping (-1/0.4/1.4/7), out-of-subset value surviving both mode switches
+      and still playing on odd turns until its fader moves, linktonext member's
+      own pm ignored, seeded luckygateprob in-subset (mode 2 draws 5/2/2/2 where
+      mode 0 draws 4/2/2/1), motoquencer's basic-play and lucky-gateprob goldens
+      reproduced under the new name, refusal, RAM 1188 (motoquencer with the same
+      lines 1184, i.e. the 4-byte base delta)."
   trigseq:
     status: done
     experimental: true

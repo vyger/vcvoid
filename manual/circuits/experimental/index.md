@@ -24,6 +24,7 @@
 |---------|----------|
 | [`crossfader2`](crossfader2.md) | `crossfader` plus `curve` (monotone cubic, no corners, no overshoot) and `loop` (seamless ring) — draw an LFO on eight faders |
 | [`midihirescc`](midihirescc.md) | 14-bit (hi-res) MIDI CC output — one jack per controller, both bytes sent together |
+| [`motoquencer2`](motoquencer2.md) | `motoquencer` plus `probabilitymode` — restrict the gate-probability lane to just the random chances or just the trig conditions |
 | [`trigseq`](trigseq.md) | Declarative trigger sequencer — write the rhythm as text (`"x...x.x."`) |
 
 ## Adding one
@@ -33,4 +34,6 @@ for why this exists and how it is built. In short: declare the circuit in
 `engine/experimental.json` (the Forge's own schema — one file feeds both the
 engine's jack tables and droidcheck), implement it in `engine/circuits/`, write
 its page here with `experimental: true` in the frontmatter, and mark its goldens
-with the `experimental` directive.
+with the `experimental` directive. A circuit that is "firmware circuit X plus a
+jack" declares `"extends": "X"` plus `extra_inputs` instead of copying X's jack
+list, so the inherited jacks stay a pure function of the vendored firmware file.

@@ -6,6 +6,7 @@
 #include <patch.hpp>   // rack::patch::Manager -- context.hpp only forward-declares it
 #include <algorithm>
 #include <arpa/inet.h>
+#include <cerrno>
 #include <chrono>
 #include <cmath>
 #include <cstdlib>
@@ -15,6 +16,7 @@
 #include <memory>
 #include <netinet/in.h>
 #include <sys/socket.h>
+#include <sys/time.h>
 #include <thread>
 #include <unistd.h>
 
@@ -133,6 +135,10 @@ std::string Bridge::handleMasterStatus(DroidMasterBase* m, int* code) {
     std::vector<std::string> chain;
     bool x7 = false;
     bool midiWarn = false;
+    // issue #83: read it once, up front, so every field below describes the
+    // same instant — a stall that begins mid-serialisation must not produce a
+    // body that is half "stalled" and half "chain error".
+    bool stalled = m->engineStalled.load(std::memory_order_relaxed);
     {
         std::lock_guard<std::mutex> lk(m->engineMutex);
         patchPath = m->patchPath;
@@ -140,7 +146,8 @@ std::string Bridge::handleMasterStatus(DroidMasterBase* m, int* code) {
         stateStatus = m->stateStatus;   // issue #42: restored / migrated / fresh
         chain = m->chainPhysical;
         x7 = m->x7Present;
-        chainError = m->chainError;
+        // Suppressed while stalled: the scan that produced it never ran.
+        chainError = vcvoid::status::chainErrorToReport(stalled, m->chainError);
         // Same diagnostic the context menu computes (MasterBase.hpp
         // appendContextMenu / ISSUE-3): a MIDI patch with no reachable MIDI
         // hardware runs silently. Reuse the engine's own predicates under the
@@ -167,7 +174,13 @@ std::string Bridge::handleMasterStatus(DroidMasterBase* m, int* code) {
     json_object_set_new(o, "x7Present", json_boolean(x7));
     json_object_set_new(o, "chainError", json_string(chainError.c_str()));
     // issue #46: the one word the panel is showing — no-patch / load-failed /
-    // warnings / chain-error / running. Recomputed here (currentState(), which
+    // engine-stalled / warnings / chain-error / running. "engine-stalled"
+    // (issue #83) means nothing has called process() for ~0.5 s, i.e. Rack
+    // itself is not stepping the rack (an Audio module with no device
+    // selected): while it holds, `chain` and `chainError` below are stale by
+    // construction and are reported empty rather than wrong.
+    //
+    // Recomputed here (currentState(), which
     // takes engineMutex itself, hence outside the block above) rather than read
     // from the widget's last publish: POST /master/{id}/patch, /reload and
     // /reset-state all answer with this body immediately after loading on the
@@ -176,6 +189,20 @@ std::string Bridge::handleMasterStatus(DroidMasterBase* m, int* code) {
     // (a failing patch over a running one replied "running").
     json_object_set_new(o, "state",
         json_string(vcvoid::status::stateName(m->currentState())));
+    // …and the raw fact behind it, which `state` can outrank: a master with no
+    // patch reports "no-patch" whether or not anything is stepping it, but
+    // "is this Rack running at all" is a question a harness has to be able to
+    // ask before it loads anything (tools/uatbridge-smoke.sh does, as a
+    // precondition).
+    json_object_set_new(o, "engineStalled", json_boolean(stalled));
+    // Which clock should be stepping the rack (issue #83): "module" = an audio
+    // module holds Rack's engine clock, "fallback" = Rack's own CPU timer owns
+    // it. Alongside engineStalled this says WHICH clock stopped, which is the
+    // difference between "your audio device died" and "Rack itself is not
+    // stepping". Sampled by the widget, same as engineStalled.
+    json_object_set_new(o, "engineClock",
+        json_string(m->engineClockHeldByModule.load(std::memory_order_relaxed)
+                        ? "module" : "fallback"));
     json_object_set_new(o, "midiWarning", json_boolean(midiWarn));
     json_object_set_new(o, "timingMode",
         json_string(timingMode == DroidMasterBase::TimingMode::Adaptive
@@ -234,8 +261,14 @@ std::string Bridge::handleMasterDiagnostics(DroidMasterBase* m, int* code) {
     // issue #69: the fix the context menu offers for a chain error — the
     // models "Add missing controllers" would create, or why it cannot. Empty
     // strings in every other state.
-    json_object_set_new(o, "chainFix", json_string(m->chainFix.c_str()));
-    json_object_set_new(o, "chainFixBlocker", json_string(m->chainFixBlocker.c_str()));
+    // Suppressed with the error they explain while the engine is stalled
+    // (issue #83): an offer to add the controllers of a chain nobody scanned
+    // is the same wrong answer in a different field.
+    bool stalled = m->engineStalled.load(std::memory_order_relaxed);
+    json_object_set_new(o, "chainFix",
+        json_string(vcvoid::status::chainErrorToReport(stalled, m->chainFix).c_str()));
+    json_object_set_new(o, "chainFixBlocker",
+        json_string(vcvoid::status::chainErrorToReport(stalled, m->chainFixBlocker).c_str()));
     json_object_set_new(o, "patchPath", json_string(patchPath.c_str()));
     json_object_set_new(o, "stateLine", json_string(stateLine.c_str()));
     // The free-text line stays available so a failure report can quote exactly
@@ -1452,6 +1485,92 @@ std::string Bridge::handleRackQuit(int* code) {
     }, code);
 }
 
+// GET  /rack/engine-clock -- who is stepping the engine right now.
+// POST /rack/engine-clock {"freeze": true|false} -- UAT ONLY: stop/restart it.
+//
+// Rack steps every module from one of two clocks (Engine.hpp, on
+// startFallbackThread: "If no master module is set, the fallback Engine thread
+// will step blocks, using the CPU clock for timing"): an audio module that has
+// claimed the clock, or Rack's CPU-clocked fallback thread when no module has.
+// Issue #83's failure is a module holding the clock and never running it, and
+// that is otherwise only reproducible with an audio device that dies on cue --
+// which is why this verb exists.
+//
+// Freezing hands the clock to the vcvoid master itself. A master never calls
+// stepBlock(), so the engine stops exactly as it does when an audio device
+// stops calling back: no module's process() runs, and nothing else about the
+// rack changes. Unfreezing restores the module that held the clock before
+// (NULL included, which is what re-starts the fallback thread), so a rack with
+// working audio comes back to its own audio module rather than to the CPU
+// timer. setMasterModule() "Exclusively locks", so both go through uiCall.
+std::string Bridge::handleRackEngineClock(const Request& req, int* code) {
+    if (req.method == "GET") {
+        return uiCall([](int* c) -> json_t* {
+            rack::engine::Module* holder = APP->engine->getMasterModule();
+            json_t* o = json_object();
+            json_object_set_new(o, "clock",
+                json_string(holder ? "module" : "fallback"));
+            json_object_set_new(o, "moduleId",
+                json_integer(holder ? (json_int_t) holder->id : -1));
+            *c = 200;
+            return o;
+        }, code);
+    }
+    json_t* root = parseJsonBody(req.body, code);
+    if (!root) return "{\"error\":\"invalid JSON body\"}";
+    json_t* jf = json_object_get(root, "freeze");
+    if (!jf || !json_is_boolean(jf)) {
+        json_decref(root);
+        *code = 400;
+        return "{\"error\":\"missing boolean 'freeze'\"}";
+    }
+    bool freeze = json_is_true(jf);
+    json_decref(root);
+    // The module to park the clock on: any registered master will do, since
+    // none of them step the engine. 503 rather than a silent no-op when the
+    // rack has none -- there is nothing to freeze the engine WITH.
+    int64_t victimId = -1;
+    {
+        std::lock_guard<std::mutex> lk(mastersMutex_);
+        if (!masters_.empty()) victimId = masters_.front()->id;
+    }
+    if (freeze && victimId < 0) {
+        *code = 503;
+        return "{\"error\":\"no vcvoid master in the rack to park the engine clock on\"}";
+    }
+    // The victim is re-resolved by id on the UI thread rather than captured as
+    // a pointer: the module can be deleted between this HTTP thread and the
+    // drain, and handing a dangling Module* to setMasterModule() would be a
+    // use-after-free rather than a 404.
+    return uiCall([this, freeze, victimId](int* c) -> json_t* {
+        if (freeze) {
+            rack::engine::Module* victim = APP->engine->getModule(victimId);
+            if (!victim) {
+                *c = 404;
+                return json_pack("{s:s}", "error", "master vanished before the freeze ran");
+            }
+            if (!clockFrozen_) {
+                frozenClockPrev_ = APP->engine->getMasterModule();
+                clockFrozen_ = true;
+            }
+            APP->engine->setMasterModule(victim);
+        } else if (clockFrozen_) {
+            APP->engine->setMasterModule(frozenClockPrev_);
+            frozenClockPrev_ = nullptr;
+            clockFrozen_ = false;
+        }
+        rack::engine::Module* holder = APP->engine->getMasterModule();
+        json_t* o = json_object();
+        json_object_set_new(o, "frozen", json_boolean(clockFrozen_));
+        json_object_set_new(o, "clock",
+            json_string(holder ? "module" : "fallback"));
+        json_object_set_new(o, "moduleId",
+            json_integer(holder ? (json_int_t) holder->id : -1));
+        *c = 200;
+        return o;
+    }, code);
+}
+
 // POST /rack/sample-rate {hz} -- mirrors Rack's Engine menu "Sample rate"
 // picker. rack::engine::Engine::setSampleRate() (Engine.hpp) is PRIVATE
 // (rack.hpp: `#define PRIVATE __attribute__((deprecated(...)))` on clang,
@@ -1854,7 +1973,7 @@ std::string Bridge::handlePing(int* code) {
     return dumpAndFree(o);
 }
 
-std::string Bridge::dispatch(const Request& req) {
+std::string Bridge::dispatch(const Request& req, bool keepAlive) {
     int code = 404;
     std::string body = "{\"error\":\"no such route\"}";
     auto parts = splitPath(req.path);
@@ -1918,6 +2037,9 @@ std::string Bridge::dispatch(const Request& req) {
         body = handleRackQuit(&code);
     else if (req.method == "POST" && req.path == "/rack/sample-rate")
         body = handleRackSampleRate(req, &code);
+    else if ((req.method == "POST" || req.method == "GET") &&
+             req.path == "/rack/engine-clock")
+        body = handleRackEngineClock(req, &code);
     else if (req.method == "GET" && req.path == "/modules")
         body = handleModulesList(&code);
     else if (req.method == "POST" && req.path == "/modules")
@@ -1939,7 +2061,7 @@ std::string Bridge::dispatch(const Request& req) {
         body = handleCablesDelete(id, &code);
     }
     // Later tasks extend routing here (parts-based).
-    return makeResponse(code, body);
+    return makeResponse(code, body, keepAlive);
 }
 
 void Bridge::listenLoop() {
@@ -1958,6 +2080,17 @@ void Bridge::listenLoop() {
     for (;;) {
         int cli = accept(srv, nullptr, nullptr);
         if (cli < 0) continue;
+        // issue #95: a client that connects and never finishes sending a
+        // request (stalled, or half-open) used to hold this loop forever --
+        // the blocking read() below had no timeout, so one bad client wedged
+        // every endpoint including /ping. Bound both directions: a stalled
+        // reader is dropped by the loop below, and a stalled writer (one that
+        // never drains its socket buffer) can't hang the write() at the
+        // bottom either.
+        struct timeval tv{};
+        tv.tv_sec = 2;
+        setsockopt(cli, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof tv);
+        setsockopt(cli, SOL_SOCKET, SO_SNDTIMEO, &tv, sizeof tv);
         // Apply Rack's thread-local context once it exists (noted by
         // installBridgeWidget on the UI thread) — plugin init spawned this
         // thread before Rack created its Context, so APP-> uses on this
@@ -1968,25 +2101,70 @@ void Bridge::listenLoop() {
                 ctxApplied = true;
             }
         }
-        std::string raw;
+        // issue #97: serve as many requests as the client sends on this one
+        // connection. Every response used to say `Connection: close` and the
+        // server closed first, so each request left a 30s TIME_WAIT on the
+        // (clientPort, 2601) tuple; a 10Hz UAT poll walked the whole 16k
+        // ephemeral range and new connects then stalled in SYN_SENT.
+        // `pending` carries bytes read past the current request (pipelined
+        // or back-to-back requests), so each one is framed by Content-Length
+        // rather than "everything received so far".
+        std::string pending;
         char buf[8192];
-        // Single read is fine for our tiny bodies; loop until headers+body seen.
+        bool dropped = false, served = false, keepAlive = false, writeFailed = false;
         for (;;) {
-            ssize_t n = read(cli, buf, sizeof buf);
-            if (n <= 0) break;
-            raw.append(buf, n);
-            size_t he = raw.find("\r\n\r\n");
-            if (he == std::string::npos) continue;
-            size_t cl = 0;
-            size_t p = raw.find("Content-Length:");
-            if (p != std::string::npos) cl = std::strtoul(raw.c_str() + p + 15, nullptr, 10);
-            if (raw.size() >= he + 4 + cl) break;
+            size_t reqLen = requestLength(pending);
+            while (reqLen == 0) {
+                ssize_t n = read(cli, buf, sizeof buf);
+                if (n < 0) {
+                    // SO_RCVTIMEO elapsed (or another recv error): a stalled
+                    // client, or an idle keep-alive one. Either way drop it
+                    // rather than blocking the next connection (the loop is
+                    // single-threaded).
+                    dropped = true;
+                    break;
+                }
+                if (n == 0) {
+                    // Peer closed. Clean end of a keep-alive connection when
+                    // nothing is half-read; otherwise a truncated request.
+                    dropped = true;
+                    break;
+                }
+                pending.append(buf, n);
+                reqLen = requestLength(pending);
+            }
+            if (dropped) break;
+            std::string raw = pending.substr(0, reqLen);
+            pending.erase(0, reqLen);
+            Request req;
+            bool ok = parseRequest(raw, req);
+            // HTTP/1.1 stays open unless the client asked to close; HTTP/1.0
+            // (and an unparseable request) keeps the old close-every-time
+            // behaviour.
+            keepAlive = ok && wantsKeepAlive(raw);
+            std::string resp = ok
+                ? dispatch(req, keepAlive)
+                : makeResponse(400, "{\"error\":\"bad request\"}");
+            if (write(cli, resp.data(), resp.size()) < 0) { writeFailed = true; break; }
+            served = true;
+            if (!keepAlive) break;
         }
-        Request req;
-        std::string resp = parseRequest(raw, req)
-            ? dispatch(req)
-            : makeResponse(400, "{\"error\":\"bad request\"}");
-        (void)write(cli, resp.data(), resp.size());
+        if (dropped && !(served && pending.empty())) {
+            // Noisy only for real drops: a keep-alive client that just goes
+            // away after being served is the normal end of a connection.
+            INFO("vcvoid: uatbridge dropped a stalled/incomplete HTTP connection "
+                 "(%zu byte(s) received, errno=%d)", pending.size(), errno);
+        }
+        if (served && !dropped && !writeFailed) {
+            // The client asked us to close (HTTP/1.0, or `Connection: close`).
+            // Wait for ITS FIN first instead of sending ours: TIME_WAIT lands
+            // on whichever side closes actively, and a client that asked to
+            // close always closes right after reading the response. Bounded
+            // by SO_RCVTIMEO, so a client that doesn't costs 2s and leaves the
+            // TIME_WAIT with us, exactly as before.
+            char drain[256];
+            while (read(cli, drain, sizeof drain) > 0) {}
+        }
         close(cli);
     }
 }
