@@ -1,0 +1,79 @@
+# motoquencer, fader mode 2 in a linktonext chain: the gate-probability plate
+# codes follow the FADER lane, including the linked `fadermode = 12` form (#84).
+#
+# motoquencer.md: "for accessing the parameters of the steps of the linked
+# sequencer, add 10 to fadermode or buttonmode". So `fadermode = 12` means
+# "chain member 1, mode 2 (gate probability)" -- the codes must come from THAT
+# instance's own gateprob values, not the main's.
+#
+# The fader and the button/LED surfaces are addressed independently, and the
+# plates belong to the BUTTON owner (buttoncolor-linked.gold). vcvoid therefore
+# paints the gate-probability codes only on the instance that owns the faders in
+# mode 2: an instance holding the plates while someone ELSE holds the faders
+# keeps painting its buttonmode, which is the only thing it can honestly report
+# about its own steps. The last block pins that case.
+#
+# Blink phases at tickrate 100 (half duty, free-running): 50% = 2 Hz, on for
+# ticks 0..24 of each 50-tick cycle; 25% = 4 Hz, on for ticks 0..12 of each
+# 25-tick cycle. No clock runs here, so there is no white played step anywhere.
+tickrate 100
+patch <<<
+[m4]
+[motoquencer]
+    clock       = I1
+    fadermode   = I2
+    buttonmode  = I3
+    numsteps    = 4
+    numfaders   = 4
+    defaultgate = 1
+    linktonext  = 1
+    cv          = O1
+    gate        = O2
+[motoquencer]
+    defaultgate = 1
+    cv          = O3
+    gate        = O4
+>>>
+# fadermode 2 + buttonmode 0: the MAIN owns both surfaces. Its steps are all at
+# the top notch, so every plate is steady blue.
+@0 set I2 2
+@0 set I3 0
+@1 expect F1.led 1 tol 1e-6
+@1 expect F1.color 1.2 tol 1e-6
+@1 expect F2.color 1.2 tol 1e-6
+# Dial the MAIN's step 2 down to notch 7 (idx 6, random 50%): it blinks at 2 Hz,
+# so at tick 30 it is dark while the others stay lit.
+@2 move F2 0.8571429
+@30 expect F1.led 1 tol 1e-6
+@30 expect F2.led 0 tol 1e-6
+@30 expect F2.color 1.2 tol 1e-6
+# fadermode 12 + buttonmode 10: the MEMBER owns both. Its own steps are all at
+# notch 8, so tick 32 -- still inside the main's blink-off window -- shows four
+# steady blue plates. The main's 50% step is not what these plates report.
+@31 set I2 12
+@31 set I3 10
+@32 expect F1.led 1 tol 1e-6
+@32 expect F1.color 1.2 tol 1e-6
+@32 expect F2.led 1 tol 1e-6
+@32 expect F2.color 1.2 tol 1e-6
+# Dial the MEMBER's step 2 to notch 4 (idx 3, random 25%). Tick 63 is an off
+# phase for 4 Hz but an ON phase for 2 Hz, so a dark lane 2 there is the
+# member's own 25% rate and could not be the main's 50% one.
+@33 move F2 0.4285714
+@60 expect F2.led 1 tol 1e-6
+@63 expect F1.led 1 tol 1e-6
+@63 expect F2.led 0 tol 1e-6
+@63 expect F2.color 1.2 tol 1e-6
+# buttonmode back to 0 while fadermode stays 12: the MAIN owns the plates, the
+# MEMBER owns the faders. The plate owner cannot speak for a lane it does not
+# hold, so it paints its buttonmode-0 gate colour (0.1) and nothing blinks.
+# Asserted one tick after the handover -- the outgoing owner releases the LEDs
+# on the tick it loses them and the member ticks after the main
+# (buttoncolor-linked.gold).
+@64 set I3 0
+@65 expect F1.led 1 tol 1e-6
+@65 expect F1.color 0.1 tol 1e-6
+@65 expect F2.led 1 tol 1e-6
+@65 expect F2.color 0.1 tol 1e-6
+@88 expect F2.led 1 tol 1e-6
+@88 expect F2.color 0.1 tol 1e-6

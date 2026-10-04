@@ -9,7 +9,7 @@
 //
 // Two things are modelled:
 //
-//   1. `evaluate()` — the five states a master can be in (design: issue #46,
+//   1. `evaluate()` — the states a master can be in (design: issue #46,
 //      option C "module halo") and, for each, the ring colour, what the 4x4
 //      matrix does, and the words for the tooltip and the context-menu card.
 //
@@ -63,6 +63,7 @@
 // every error the loader raises IS mapped; Unmapped is the safe default for
 // ones added later.
 #include "src/types.hpp"   // droid::ErrorCode, droid::LoadError (via -I../engine)
+#include <cstdint>
 #include <string>
 #include <vector>
 
@@ -179,22 +180,24 @@ constexpr RGB kRingGrey {0.478f, 0.478f, 0.478f};
 constexpr float kBlinkPeriod = 0.9f;
 
 enum class State {
-    NoPatch,      // no patch file on this master
-    LoadFailed,   // the patch was refused; nothing is running
-    Warnings,     // running, but the load raised warnings
-    ChainError,   // loaded and valid, but the controller chain does not match
-    Running,      // nothing to report
+    NoPatch,       // no patch file on this master
+    LoadFailed,    // the patch was refused; nothing is running
+    EngineStalled, // Rack is not stepping any module: process() has gone quiet
+    Warnings,      // running, but the load raised warnings
+    ChainError,    // loaded and valid, but the controller chain does not match
+    Running,       // nothing to report
 };
 
 // Stable machine-readable name for one state, for the UAT bridge's
 // /master/status (and anything else that has to assert on it in a test).
 inline const char* stateName(State st) {
     switch (st) {
-        case State::NoPatch:    return "no-patch";
-        case State::LoadFailed: return "load-failed";
-        case State::Warnings:   return "warnings";
-        case State::ChainError: return "chain-error";
-        case State::Running:    return "running";
+        case State::NoPatch:       return "no-patch";
+        case State::LoadFailed:    return "load-failed";
+        case State::EngineStalled: return "engine-stalled";
+        case State::Warnings:      return "warnings";
+        case State::ChainError:    return "chain-error";
+        case State::Running:       return "running";
     }
     return "running";
 }
@@ -212,6 +215,12 @@ inline Severity severityFor(State st) {
         case State::NoPatch:    return Severity::Info;
         case State::LoadFailed: return Severity::Error;
         case State::ChainError: return Severity::Error;
+        // Not an error of the patch's or the master's making: the host stopped
+        // stepping every module in the rack, and it fixes itself the moment
+        // the host starts again. Warning, so a check that asks "is anything
+        // wrong" still sees it, without classing a missing audio device as a
+        // broken module.
+        case State::EngineStalled: return Severity::Warning;
         case State::Warnings:   return Severity::Warning;
         case State::Running:    return Severity::Ok;
     }
@@ -247,6 +256,11 @@ inline bool ringColor(State st, RGB& out) {
         case State::NoPatch:    out = kRingGrey;  return true;
         case State::LoadFailed: out = kRingRed;   return true;
         case State::ChainError: out = kRingRed;   return true;
+        // Amber, not red: red is "this master has a fault you must fix", and a
+        // stalled engine is neither the master's fault nor fixable on the
+        // master. Every master in the rack goes amber together, which is
+        // itself the clue that the problem is the host, not any one module.
+        case State::EngineStalled: out = kRingAmber; return true;
         case State::Warnings:   out = kRingAmber; return true;
         case State::Running:    break;
     }
@@ -400,6 +414,122 @@ inline BlinkCode blinkCode(droid::ErrorCode code, int line) {
     return b;
 }
 
+// --- "is anything stepping the engine at all?" (issue #83) ----------------
+// Rack steps every module from one of exactly two clocks (Engine.hpp, on
+// startFallbackThread: "If no master module is set, the fallback Engine thread
+// will step blocks, using the CPU clock for timing"):
+//
+//   * an audio module that has claimed the engine clock — the MASTER MODULE in
+//     Rack's vocabulary — stepping the engine from its device callback, or
+//   * Rack's own CPU-clocked fallback thread, which runs ONLY while no module
+//     holds the clock.
+//
+// So nothing steps when a module holds the clock and then stops running it:
+// its device was unplugged, changed under it, or opened and never called back.
+// "No device selected" is NOT that case — an audio module with no device never
+// claims the clock, so the fallback thread covers it and the rack keeps
+// running (verified on Rack 2.6.6). The field reports behind issue #83 are the
+// first case: /cpu reported tick.valid false and /probe sampleRateHz 0, i.e.
+// process() genuinely never ran.
+//
+// When that happens no module's process() is called, the expander relay never
+// runs, chainPhysical stays empty — and the master used to read that empty
+// chain as a chain error ("patch declares db8e, chain has nothing") and send
+// the user hunting a chain bug that does not exist.
+//
+// The master can tell the difference itself, because it knows whether its own
+// process() has been called lately. The audio side publishes a monotonic
+// heartbeat (one increment per process() call); the UI side, which keeps
+// running either way, watches that number against the wall clock. This is that
+// watcher: pure, so the decision is unit-testable without a Rack or an audio
+// device (test_masterstatus.cpp), and so the widget is left with nothing but
+// "read the counter, read the clock, store the answer".
+//
+// Half a second: long enough that no block size and no device switch looks
+// like a stall (a 44.1 kHz engine at a 4096-frame block still steps ~11× a
+// second), short enough that a user who just unset the device does not sit in
+// front of a wrong error message.
+constexpr double kStallSeconds = 0.5;
+// …but the FIRST heartbeat gets longer, because "nothing has ticked yet" is
+// also what a rack looks like for the moment between the modules appearing and
+// the audio device opening. Only a module that has never once stepped waits
+// this long; once it has, a stop is reported at kStallSeconds.
+constexpr double kStallStartupSeconds = 2.0;
+
+class StallMonitor {
+public:
+    // Feed the heartbeat and the current wall-clock time (any monotonic clock
+    // in seconds). Returns true while the engine counts as stalled. Call once
+    // per UI frame; calling it more or less often changes nothing but the
+    // resolution of the answer.
+    bool update(uint64_t heartbeat, double now) {
+        if (!seeded_) {
+            seeded_ = true;
+            heartbeat_ = heartbeat;
+            lastMoved_ = now;
+            stalled_ = false;
+            return false;
+        }
+        if (heartbeat != heartbeat_) {
+            heartbeat_ = heartbeat;
+            lastMoved_ = now;
+            everMoved_ = true;
+        } else if (now < lastMoved_) {
+            lastMoved_ = now;        // clock went backwards: re-baseline, never stall on it
+        }
+        double limit = everMoved_ ? kStallSeconds : kStallStartupSeconds;
+        stalled_ = (now - lastMoved_) >= limit;
+        return stalled_;
+    }
+    bool stalled() const { return stalled_; }
+    // Forget everything, as if the module had just been placed — used when the
+    // answer must not be reported for a module that is not being stepped on
+    // purpose (a bypassed module steps nothing and is not stalled).
+    void reset() {
+        seeded_ = false;
+        everMoved_ = false;
+        stalled_ = false;
+    }
+
+private:
+    bool seeded_ = false;      // heartbeat_/lastMoved_ hold a real observation
+    bool everMoved_ = false;   // the heartbeat has advanced at least once
+    bool stalled_ = false;
+    uint64_t heartbeat_ = 0;
+    double lastMoved_ = 0.0;
+};
+
+// The chain verdict as it should be REPORTED while this is going on. The chain
+// scan's inputs are assembled by process(), so a verdict computed while nothing
+// is stepping describes a chain nobody looked at — on a cold start with no
+// audio device that is exactly the bogus "chain has nothing" of issue #83. It
+// is SUPPRESSED rather than cleared: the field it suppresses is written by the
+// widget under the master's engineMutex and read by the UAT bridge's HTTP
+// thread under the same lock, so having the stall reach in and blank it would
+// mean a second writer — a data race on a std::string — for a value the reader
+// can just as easily ignore. One rule, used by evaluate() below for the card
+// and by the bridge for /status and /diagnostics.
+inline std::string chainErrorToReport(bool engineStalled,
+                                      const std::string& chainError) {
+    return engineStalled ? std::string() : chainError;
+}
+
+// What the card says when it happens. Which of the two clocks SHOULD be
+// running decides the sentence, because the fix is different for each and
+// naming the wrong one sends the reader to the wrong place — the whole failure
+// mode issue #83 is about.
+constexpr const char* kEngineStalledTitle = "ENGINE NOT RUNNING";
+
+inline std::string engineStalledMessage(bool clockHeldByModule) {
+    if (clockHeldByModule)
+        return "A module holds Rack's engine clock and has stopped running "
+               "it — usually an audio device that went away or never "
+               "started. Reselect the device on Rack's Audio module, or "
+               "remove the module to hand the clock back to Rack's CPU timer.";
+    return "Nothing is stepping Rack's engine. No module holds the engine "
+           "clock, so Rack's own CPU timer should be running it.";
+}
+
 // Everything the master knows about its own health, flattened into plain data
 // so the verdict below is a pure function of it.
 struct Report {
@@ -412,6 +542,15 @@ struct Report {
     std::string errorMessage;      // the FIRST error; the rest are in the copy text
     int warningCount = 0;
     std::string warningMessage;    // the first warning
+    // The UI thread's verdict from StallMonitor above: nothing has called
+    // process() lately, so nothing below this line can be trusted to be
+    // current — least of all the chain scan, which process() is what fills in.
+    bool engineStalled = false;
+    // Which of Rack's two clocks should be stepping us: true when a module
+    // holds the engine clock (APP->engine->getMasterModule()), false when the
+    // CPU-clocked fallback thread owns it. Only consulted while stalled, to
+    // say which one stopped.
+    bool engineClockHeldByModule = false;
     std::string chainError;        // non-empty: the chain does not match the patch
     // The "add missing controllers" offer (issue #69), as a chain error's
     // FIX rather than its description: chainFix names the modules the action
@@ -479,6 +618,20 @@ inline Status evaluate(const Report& r) {
         s.message = r.errorMessage;
         if (r.errorCount > 1)
             s.message += " (+" + std::to_string(r.errorCount - 1) + " more)";
+        return s;
+    }
+    if (r.engineStalled) {
+        // Above the chain check on purpose (issue #83): the chain the master
+        // sees is assembled by process(), so while process() is not running
+        // the chain reads as empty and the chain check would report a
+        // controller mismatch that is not there. Below the load checks,
+        // because those are the UI thread's own work and are true whether or
+        // not anything is stepping.
+        s.state = State::EngineStalled;
+        s.ringVisible = ringColor(s.state, s.ring);
+        s.matrix = Matrix::Mirror;   // frozen where the last tick left it
+        s.title = kEngineStalledTitle;
+        s.message = engineStalledMessage(r.engineClockHeldByModule);
         return s;
     }
     if (!r.chainError.empty()) {

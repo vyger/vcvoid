@@ -2,6 +2,7 @@
 #include "src/engine.hpp"
 #include "src/gatereader.hpp"
 #include "src/loader.hpp"
+#include <string>
 using namespace droid;
 
 // Experimental circuits (#12): circuits that exist only in vcvoid, declared in
@@ -102,10 +103,44 @@ TEST(firmware_circuits_are_not_experimental) {
     // experimental circuit does not require editing this line — only the
     // firmware count is load-bearing (jackgen.py asserts the same 76).
     CHECK(gen::kNumCircuits - experimental == 76);
-    CHECK(experimental == 3);
+    CHECK(experimental == 4);
     CHECK(gen::findCircuit("euklid") != nullptr);
     CHECK(!gen::findCircuit("euklid")->experimental);
     CHECK(gen::findCircuit("trigseq")->experimental);
     CHECK(gen::findCircuit("midihirescc")->experimental);
     CHECK(gen::findCircuit("crossfader2")->experimental);
+    CHECK(gen::findCircuit("motoquencer2")->experimental);
+    CHECK(!gen::findCircuit("motoquencer")->experimental);
+}
+
+// motoquencer2 (#85) is "motoquencer plus one jack", and its overlay entry says
+// exactly that (`extends` in engine/experimental.json, resolved by
+// tools/jackgen/overlay.py) instead of transcribing motoquencer's 112 jacks. This
+// pins the derivation: one extra input, appended after the inherited inputs, and
+// every inherited jack identical to the firmware circuit's, in the same order. A
+// hand-copied list could drift from the firmware after a Forge update; this cannot.
+TEST(motoquencer2_jacks_are_derived_from_motoquencer) {
+    const gen::CircuitDef* a = gen::findCircuit("motoquencer");
+    const gen::CircuitDef* b = gen::findCircuit("motoquencer2");
+    CHECK(a != nullptr && b != nullptr);
+    CHECK(b->numJacks == a->numJacks + 1);
+    // The extra jack sits at the end of the INPUTS (jacks are inputs then outputs).
+    unsigned extra = 0;
+    while (extra < b->numJacks && std::string(b->jacks[extra].name) != "probabilitymode")
+        extra++;
+    CHECK(extra < b->numJacks);
+    CHECK(b->jacks[extra].isInput);
+    CHECK(std::string(b->jacks[extra].shortName) == "pm");
+    CHECK(b->jacks[extra].type == gen::JackType::Integer);
+    CHECK(b->jacks[extra].hasDefault && b->jacks[extra].defaultValue == 0.0f);
+    CHECK(extra + 1 < b->numJacks && !b->jacks[extra + 1].isInput);   // outputs follow
+    for (unsigned i = 0; i < a->numJacks; i++) {
+        const gen::JackDef& ja = a->jacks[i];
+        const gen::JackDef& jb = b->jacks[i < extra ? i : i + 1];
+        CHECK(std::string(ja.name) == jb.name);
+        CHECK(std::string(ja.shortName) == jb.shortName);
+        CHECK(ja.type == jb.type && ja.ramHint == jb.ramHint);
+        CHECK(ja.count == jb.count && ja.startAt == jb.startAt);
+        CHECK(ja.isInput == jb.isInput && ja.hasDefault == jb.hasDefault);
+    }
 }

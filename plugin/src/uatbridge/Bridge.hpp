@@ -15,6 +15,7 @@
 
 struct DroidMasterBase;
 namespace rack { struct Context; }
+namespace rack { namespace engine { struct Module; } }
 
 namespace uat {
 
@@ -45,7 +46,8 @@ public:
     void noteContext(rack::Context* c) { rackCtx_.store(c); }
     rack::Context* rackContext() const { return rackCtx_.load(); }
 
-    std::string dispatch(const Request& req);
+    // keepAlive decides this response's Connection header (issue #97).
+    std::string dispatch(const Request& req, bool keepAlive = false);
 
 private:
     Bridge() = default;
@@ -91,6 +93,13 @@ private:
     std::string handleRackSave(int* code);
     std::string handleRackQuit(int* code);
     std::string handleRackSampleRate(const Request& req, int* code);
+    // issue #83: read/steer which clock steps Rack's engine, so a UAT can
+    // reproduce a stalled engine without an audio device that misbehaves on
+    // cue. frozenClockPrev_ remembers the module that held the clock before a
+    // freeze so unfreezing puts it back rather than guessing.
+    std::string handleRackEngineClock(const Request& req, int* code);
+    rack::engine::Module* frozenClockPrev_ = nullptr;   // UI thread only
+    bool clockFrozen_ = false;                          // UI thread only
     std::string handleMasterTickRate(DroidMasterBase* m, const Request& req, int* code);
 
     // Issue #3: CPU cost query + per-circuit profiling toggle.

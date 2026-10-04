@@ -1,7 +1,10 @@
 #include "ram.hpp"
+#include <cctype>
+#include <cmath>
 #include <cstdio>
 #include <set>
 #include <string>
+#include <vector>
 
 // ---------------------------------------------------------------------------
 // Forge parity notes (read tools/droidcheck/vendor/droidforge/droidforge/...):
@@ -38,6 +41,28 @@
 //
 // Controllers (patch.cpp:768-771): start from sum of controller ramSizes; on a
 // MASTER (typeOfMaster()==16) always add the X7's 864 bytes, attached or not.
+// (Patch::usedRAM counts the X7 only when needsX7(); the BUDGET rule — the one
+// that decides whether a patch loads — always reserves it. We follow the budget
+// rule, and tools/ramcheck.sh corrects for the difference on the Forge side.)
+//
+// Shared input values (issue #88; jackdeduplicator.cpp:81-99). The Forge's
+// deploy preference "Detect and share duplicate values for inputs"
+// (compression/deduplicate_jacks) makes the deployed patch reuse one jack-table
+// entry for every input written with the same value, so each repeat costs 0:
+//   1. ONLY jacks whose ramhint is `input` are sharable — not trigger_input,
+//      not taptempo_input, and no output kind.
+//   2. The key is JackAssignmentInput::valueToCanonicalString(): the atoms that
+//      are actually present, joined by " * " and " + " in SLOT order (see
+//      canonicalInputValue below). It is purely syntactic after parsing, so
+//      `I2 - I1` and `-1 * I1 + I2` share, while `I1 * -1 + I2` does not.
+//   3. ONE deduplicator runs over the WHOLE patch in circuit order — sharing is
+//      not per circuit, and the first occurrence is the one that pays.
+//   4. A shared repeat costs no texts either: each text atom in it increments
+//      savedTexts, and the stuff block is sized on countTexts() - savedTexts.
+//      Note the Forge recomputes that block INSIDE the per-circuit budget walk
+//      from the savedTexts known so far (patch.cpp:779-801), so the overhead
+//      shrinks as the walk proceeds; the reported total uses the final count.
+// Constants and cables are NOT affected — they are already counted uniquely.
 // ---------------------------------------------------------------------------
 
 namespace droid {
@@ -50,6 +75,71 @@ static std::string canon(double n) {
     char buf[64];
     std::snprintf(buf, sizeof buf, "%.10f", n);
     return std::string(buf);
+}
+
+// Mirrors AtomNumber::niceNumber (patch/atomnumber.cpp): fixed-point with
+// NUMBER_DIGITS (14, main/tuning.h) minus the value's decimal exponent, then
+// trailing zeros and a trailing '.' chopped. Only the equivalence classes this
+// induces matter here — two inputs share iff their canonical strings are equal.
+static std::string niceNumber(double num) {
+    int l = num == 0.0 ? 0 : (int)std::log10(std::fabs(num));
+    int precision = 14 - l;
+    if (precision < 0) precision = 0;
+    if (precision > 60) precision = 60;    // snprintf sanity; never hit in practice
+    char buf[128];
+    std::snprintf(buf, sizeof buf, "%.*f", precision, num);
+    std::string s(buf);
+    while (s.find('.') != std::string::npos && s.back() == '0') s.pop_back();
+    if (!s.empty() && s.back() == '.') s.pop_back();
+    return s;
+}
+
+// Atom::toCanonicalString(): niceNumber for an AtomNumber, the register
+// spelling for an AtomRegister, "_name" for an AtomCable, the quoted content
+// for an AtomText. The Forge lowercases register and cable tokens while
+// parsing, so we lowercase the cable here (our RegId is already normalized).
+static std::string atomCanon(const Atom& a, const std::vector<std::string>& texts) {
+    switch (a.kind) {
+        case Atom::Kind::Cable: {
+            std::string s = a.cable;
+            for (auto& ch : s) ch = char(std::tolower((unsigned char)ch));
+            return s;
+        }
+        case Atom::Kind::Register:
+            return toString(a.reg);
+        case Atom::Kind::Number: {
+            if (a.isText) {
+                size_t idx = a.number < 0 ? 0 : (size_t)a.number;
+                return "\"" + (idx < texts.size() ? texts[idx] : std::string()) + "\"";
+            }
+            // A fraction's stored value is the folded DOUBLE 1.0/divisor
+            // (jackassignmentinput.cpp:249), not our folded float — recompute
+            // it from the exact divisor, exactly as the constant count does.
+            return niceNumber(a.isFraction ? 1.0 / double(a.fractionDenom)
+                                           : double(a.number));
+        }
+        default:
+            return std::string();
+    }
+}
+
+std::string canonicalInputValue(const CompiledParam& p,
+                                const std::vector<std::string>& texts) {
+    // A is always present for a jack that parsed (the Forge's atoms[0] is null
+    // only for an undefined jack, which never reaches the jack table). B and C
+    // exist only when they came from the source: the implicit B=1 / C=0 we
+    // materialize are the Forge's null atoms and must not appear in the key.
+    const Atom* a = &p.a;
+    const Atom* b = p.b.fromSource ? &p.b : nullptr;
+    // `X - REG` lands in our slots as A=REG, B=-1 but in the Forge's as
+    // A=-1, B=REG. Swap back, so the two spellings of it key alike.
+    if (p.subtractForm && b) std::swap(a, b);
+    const Atom* c = p.c.fromSource ? &p.c : nullptr;
+
+    std::string s = atomCanon(*a, texts);
+    if (b) s += " * " + atomCanon(*b, texts);
+    if (c) s += " + " + atomCanon(*c, texts);
+    return s;
 }
 
 static unsigned jackCost(const CompiledParam& p) {
@@ -74,7 +164,7 @@ static unsigned jackCost(const CompiledParam& p) {
     return 16;                  // unreachable; matches Forge's defensive default
 }
 
-unsigned computeRam(const CompiledPatch& p, MasterType master,
+unsigned computeRam(const CompiledPatch& p, MasterType master, bool shareInputValues,
                     std::vector<LoadError>& errorsOut) {
     unsigned used = 0;
     for (auto& name : p.controllers)
@@ -116,20 +206,53 @@ unsigned computeRam(const CompiledPatch& p, MasterType master,
             for (const Atom* a : {&pp.a, &pp.b, &pp.c})
                 if (a->isText) numTexts++;
 
-    unsigned stuff = alignUp((unsigned)constants.size() * 4 +
-                             (unsigned)p.cableNames.size() * 8 +
-                             numTexts * 4 + alignUp(numTexts * 2, 4), 16);
+    // Per-circuit footprint, plus the running saved-text count as of the end of
+    // that circuit. The one deduplicator spans the whole patch: the Forge builds
+    // a single JackDeduplicator and hands it to every Circuit::RAMUsage in turn.
+    std::set<std::string> shared;
+    std::vector<unsigned> circuitMem(p.circuits.size(), 0);
+    std::vector<unsigned> savedTextsAfter(p.circuits.size(), 0);
+    unsigned savedTexts = 0;
+    for (size_t i = 0; i < p.circuits.size(); i++) {
+        const CompiledCircuit& cc = p.circuits[i];
+        unsigned mem = cc.def->ramSize;
+        for (auto& pp : cc.params) {
+            unsigned cost = jackCost(pp);
+            if (shareInputValues && pp.def->ramHint == gen::RamHint::Input) {
+                if (!shared.insert(canonicalInputValue(pp, p.texts)).second) {
+                    cost = 0;        // deployed as a reference "@<offset>"
+                    for (const Atom* a : {&pp.a, &pp.b, &pp.c})
+                        if (a->isText) savedTexts++;
+                }
+            }
+            mem += cost;
+        }
+        circuitMem[i] = mem;
+        savedTextsAfter[i] = savedTexts;
+    }
+
+    auto stuffFor = [&](unsigned saved) {
+        unsigned t = numTexts - saved;
+        return alignUp((unsigned)constants.size() * 4 +
+                       (unsigned)p.cableNames.size() * 8 +
+                       t * 4 + alignUp(t * 2, 4), 16);
+    };
 
     unsigned budget = gen::kAvailableMemory[master == MasterType::Master16 ? 0 : 1];
-    for (auto& cc : p.circuits) {
-        unsigned mem = cc.def->ramSize;
-        for (auto& pp : cc.params) mem += jackCost(pp);
-        if (used + mem + stuff > budget)
-            errorsOut.push_back({cc.line, "This circuit exceeds the available memory",
-                                 ErrorCode::OutOfMemory});
-        used += mem;
+    for (size_t i = 0; i < p.circuits.size(); i++) {
+        // The Forge re-sizes the stuff block on every circuit from the texts
+        // saved so far, so the overhead a later circuit is measured against can
+        // be smaller than the one an earlier circuit saw.
+        if (used + circuitMem[i] + stuffFor(savedTextsAfter[i]) > budget) {
+            // The Forge appends its own hint here when sharing is off
+            // (patch.cpp:805-807); ours names the menu item that turns it on.
+            std::string msg = "This circuit exceeds the available memory";
+            if (!shareInputValues) msg += " (try \"Share duplicate input values\")";
+            errorsOut.push_back({p.circuits[i].line, msg, ErrorCode::OutOfMemory});
+        }
+        used += circuitMem[i];
     }
-    return used + stuff;
+    return used + stuffFor(savedTexts);
 }
 
 } // namespace droid
