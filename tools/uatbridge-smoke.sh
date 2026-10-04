@@ -86,6 +86,10 @@ do_http() {
     fi
     HTTP_CODE=$(printf '%s' "$resp" | tail -n1)
     HTTP_BODY=$(printf '%s' "$resp" | sed '$d')
+    if [ "$HTTP_CODE" = "000" ]; then
+        echo "--- HTTP 000 on $method $path: lsof -nP -iTCP:2601 ---" >&2
+        lsof -nP -iTCP:2601 >&2 || echo "(lsof found nothing or is unavailable)" >&2
+    fi
 }
 
 assert_code() {

@@ -6,6 +6,7 @@
 #include <patch.hpp>   // rack::patch::Manager -- context.hpp only forward-declares it
 #include <algorithm>
 #include <arpa/inet.h>
+#include <cerrno>
 #include <chrono>
 #include <cmath>
 #include <cstdlib>
@@ -15,6 +16,7 @@
 #include <memory>
 #include <netinet/in.h>
 #include <sys/socket.h>
+#include <sys/time.h>
 #include <thread>
 #include <unistd.h>
 
@@ -1958,6 +1960,17 @@ void Bridge::listenLoop() {
     for (;;) {
         int cli = accept(srv, nullptr, nullptr);
         if (cli < 0) continue;
+        // issue #95: a client that connects and never finishes sending a
+        // request (stalled, or half-open) used to hold this loop forever --
+        // the blocking read() below had no timeout, so one bad client wedged
+        // every endpoint including /ping. Bound both directions: a stalled
+        // reader is dropped by the loop below, and a stalled writer (one that
+        // never drains its socket buffer) can't hang the write() at the
+        // bottom either.
+        struct timeval tv{};
+        tv.tv_sec = 2;
+        setsockopt(cli, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof tv);
+        setsockopt(cli, SOL_SOCKET, SO_SNDTIMEO, &tv, sizeof tv);
         // Apply Rack's thread-local context once it exists (noted by
         // installBridgeWidget on the UI thread) — plugin init spawned this
         // thread before Rack created its Context, so APP-> uses on this
@@ -1970,10 +1983,23 @@ void Bridge::listenLoop() {
         }
         std::string raw;
         char buf[8192];
+        bool dropped = false;
         // Single read is fine for our tiny bodies; loop until headers+body seen.
         for (;;) {
             ssize_t n = read(cli, buf, sizeof buf);
-            if (n <= 0) break;
+            if (n < 0) {
+                // SO_RCVTIMEO elapsed (or another recv error): the client
+                // never finished sending a request. Drop it rather than
+                // blocking the next connection.
+                dropped = true;
+                break;
+            }
+            if (n == 0) {
+                // Peer closed before a full request arrived (half-open or
+                // truncated request).
+                dropped = true;
+                break;
+            }
             raw.append(buf, n);
             size_t he = raw.find("\r\n\r\n");
             if (he == std::string::npos) continue;
@@ -1981,6 +2007,12 @@ void Bridge::listenLoop() {
             size_t p = raw.find("Content-Length:");
             if (p != std::string::npos) cl = std::strtoul(raw.c_str() + p + 15, nullptr, 10);
             if (raw.size() >= he + 4 + cl) break;
+        }
+        if (dropped) {
+            INFO("vcvoid: uatbridge dropped a stalled/incomplete HTTP connection "
+                 "(%zu byte(s) received, errno=%d)", raw.size(), errno);
+            close(cli);
+            continue;
         }
         Request req;
         std::string resp = parseRequest(raw, req)
