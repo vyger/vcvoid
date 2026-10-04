@@ -196,8 +196,9 @@ vcvoid is licensed **GPL-3.0-or-later**. See [LICENSE](LICENSE).
   renders (© Der Mann mit der Maschine) **with the author's permission**, on the
   condition that the DROID name and DROID/DMMDM branding are removed — hence the
   vcvoid wordmark and de-branded panels. The wordmark uses Share Tech Mono (OFL).
-  A public permission request to the faceplate author (@Zarkuun) is tracked in
-  [issue #1](https://github.com/vyger/vcvoid/issues/1).
+  The faceplate author (@Zarkuun) confirmed on 2026-10-03: "I am completely
+  fine with this. Please go ahead!"
+  ([issue #1](https://github.com/vyger/vcvoid/issues/1#issuecomment-5966521569)).
 - The **`manual/`** tree is a restructured, machine-readable **derivative of the
   official DROID manual** (firmware blue-7, © Der Mann mit der Maschine). It is
   reproduced here as documentation-of-record for building a faithful emulation —

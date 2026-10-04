@@ -7,7 +7,8 @@ description: Drive VCV Rack's localhost UAT bridge (127.0.0.1:2601) to run pre-r
 
 Reference card for the `UatBridge` HTTP endpoint hand-rolled into the vcvoid
 plugin (`plugin/src/uatbridge/Bridge.cpp`), active only when the plugin is
-launched with `VCVOID_UAT_BRIDGE=1`. Everything below is verified against the
+launched with `VCVOID_UAT_BRIDGE=1` (Mac and Linux builds only; on Windows the
+listener is compiled out and the variable is ignored). Everything below is verified against the
 actual dispatch table and handlers — not the design spec's aspiration.
 Bridge is single-threaded (one accept loop): calls are effectively
 serialized; a long `/probe` blocks every other request for its window.
@@ -117,7 +118,7 @@ listed here 404 with `{"error":"no such route"}`.
 | `POST /master/{id}/reset-state` | — | same shape as `/status` (fresh-boot: all stateful circuits re-seed from startvalues) | 400 no patch loaded; 404 unknown master |
 | `POST /master/{id}/add-missing-controllers` | — | `{added:["p2b8","m4",...], blocker:""}` — creates the controllers (and an X7 when the patch wants one) that the declared chain has and the rack lacks, each placed in chain order, shoving later modules right; adds only, never removes/reorders/replaces, and lands as one undoable Rack history action | 409 `{added:[], blocker:"<why>"}` when a module of the wrong type sits at a needed position or an attached X7 isn't first (nothing is added); 503 ui-not-attached; 404 unknown master |
 | `POST /master/{id}/tick-rate` | `{hz}` (one of `2000\|4000\|6000\|8000`, implies Fixed) **or** `{mode:"adaptive"}` (implies Adaptive at the master's current `adaptiveHz`) | same shape as `/status` | 400 invalid JSON, or neither a valid `hz` nor `mode:"adaptive"` (if both `mode` and `hz` are present, `mode` wins — `hz` is not even inspected); 503 ui-not-attached; 404 unknown master |
-| `GET /master/{id}/cpu` | — | `{timingMode, targetHz, effectiveRate, adaptiveHz, tick:{valid, avgUs, maxUs, estCpuShare, windowSeconds}, rack:{meterEnabled, cpuShare?}, profiling:{enabled, circuits:[{index, circuit, totalUs, ticks, avgUs}, ...]}}` — see the CPU/profiling notes below | 404 unknown master |
+| `GET /master/{id}/cpu` | — | `{timingMode, targetHz, effectiveRate, adaptiveHz, tick:{valid, avgUs, maxUs, estCpuShare, windowSeconds}, rack:{meterEnabled}, profiling:{enabled, circuits:[{index, circuit, totalUs, ticks, avgUs}, ...]}}` — see the CPU/profiling notes below | 404 unknown master |
 | `POST /master/{id}/cpu/profiling` | `{enabled}` (bool) | same shape as `/cpu` | 400 missing/invalid `enabled`; 409 `{"error":"no patch loaded"}`; 404 unknown master |
 
 Note: `statusLine` carries both the success message (`"ok, N bytes RAM"`) and
@@ -206,10 +207,10 @@ structured fields, so a check never has to regex a human-readable sentence.
   stale/zero until a full epoch completes at the current `effectiveRate`.
   `tick.estCpuShare` is `avgUs × effectiveRate / 1e6`, an estimate derived
   from the same atomics, not Rack's own meter.
-- `rack.cpuShare` is present only in clang builds (it uses a private Rack
-  API that GCC poisons at compile time) and only once Rack's own CPU meter
-  is turned on (Engine menu) and has collected at least one sample;
-  otherwise only `rack.meterEnabled` is reported.
+- `rack` carries only `meterEnabled` (whether Rack's CPU meter is on in the
+  Engine menu). Rack's meter value itself sits behind a private Rack API a
+  plugin must not call, so there is no `rack.cpuShare`; use
+  `tick.estCpuShare`.
 - `profiling.enabled`/`profiling.circuits` reflect per-circuit wall-time
   profiling (`Engine::setProfiling`), off by default and **reset to off on
   every patch (re)load** — including a hot-reload and Adaptive's own
