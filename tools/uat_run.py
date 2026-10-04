@@ -16,6 +16,7 @@ Exit code = number of FAIL steps (XFAIL/SKIP don't count).
 """
 import argparse
 import glob
+import http.client
 import json
 import os
 import re
@@ -25,8 +26,6 @@ import subprocess
 import sys
 import tempfile
 import time
-import urllib.error
-import urllib.request
 from datetime import datetime, timezone
 
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -46,7 +45,7 @@ HOLD_SETTLE_MARGIN = 0.35
 
 def settle_for(hold_ms):
     time.sleep(hold_ms / 1000.0 * HOLD_SETTLE_FACTOR + HOLD_SETTLE_MARGIN)
-BASE = "http://127.0.0.1:2601"
+HOST, PORT = "127.0.0.1", 2601
 
 RACK_APP_CANDIDATES = [
     "/Applications/VCV Rack 2 Pro.app/Contents/MacOS/Rack",
@@ -74,7 +73,7 @@ class AbortRun(Exception):
 
 
 class Bridge:
-    """Thin urllib client for the UatBridge HTTP API. Tracks whether we
+    """Thin keep-alive HTTP client for the UatBridge API. Tracks whether we
     issued a graceful quit, and consecutive-unexpected-503 count for the
     503-storm abort rail."""
 
@@ -86,25 +85,57 @@ class Bridge:
         # frames); the 3-consecutive-503 abort rail only arms once readiness
         # polling is done. Runner toggles this around discover_master().
         self.allow_503 = True
+        # One HTTP connection, reused for the whole run (issue #97).
+        self._conn = None
+        self._conn_timeout = None
+
+    def _connection(self, timeout):
+        """The run's single keep-alive connection (issue #97). urllib opened a
+        fresh socket per call and the bridge closed it, leaving a 30s TIME_WAIT
+        per request: a 10Hz poll walked the whole ephemeral range and later
+        connects stalled in SYN_SENT. One reused socket costs one port."""
+        if self._conn is not None and self._conn_timeout != timeout:
+            self._disconnect()
+        if self._conn is None:
+            self._conn = http.client.HTTPConnection(HOST, PORT, timeout=timeout)
+            self._conn_timeout = timeout
+        return self._conn
+
+    def _disconnect(self):
+        if self._conn is not None:
+            try:
+                self._conn.close()
+            except Exception:
+                pass
+        self._conn = None
+        self._conn_timeout = None
 
     def _call(self, method, path, body=None, timeout=15):
-        url = BASE + path
         data = None
-        headers = {}
+        headers = {"Connection": "keep-alive"}
         if body is not None:
             data = json.dumps(body).encode("utf-8")
             headers["Content-Type"] = "application/json"
-        req = urllib.request.Request(url, data=data, headers=headers, method=method)
-        try:
-            with urllib.request.urlopen(req, timeout=timeout) as resp:
-                code = resp.getcode()
+        code, raw = None, ""
+        for attempt in (0, 1):
+            conn = self._connection(timeout)
+            try:
+                conn.request(method, path, body=data, headers=headers)
+                resp = conn.getresponse()
+                code = resp.status
                 raw = resp.read().decode("utf-8")
-        except urllib.error.HTTPError as e:
-            code = e.code
-            raw = e.read().decode("utf-8") if e.fp else ""
-        except (urllib.error.URLError, ConnectionRefusedError, socket.timeout) as e:
-            self.runner.handle_connection_failure(path, e)
-            raise
+                if resp.will_close:
+                    self._disconnect()
+                break
+            except (http.client.HTTPException, OSError) as e:
+                # A pooled socket the bridge retired (its ~2s keep-alive idle
+                # timeout) only fails when we next use it: reconnect and retry
+                # once before calling it a real connection failure.
+                self._disconnect()
+                if attempt == 0 and not isinstance(e, socket.timeout):
+                    continue
+                self.runner.handle_connection_failure(path, e)
+                raise
         try:
             parsed = json.loads(raw) if raw else None
         except json.JSONDecodeError:

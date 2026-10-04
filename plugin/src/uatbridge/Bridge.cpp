@@ -1856,7 +1856,7 @@ std::string Bridge::handlePing(int* code) {
     return dumpAndFree(o);
 }
 
-std::string Bridge::dispatch(const Request& req) {
+std::string Bridge::dispatch(const Request& req, bool keepAlive) {
     int code = 404;
     std::string body = "{\"error\":\"no such route\"}";
     auto parts = splitPath(req.path);
@@ -1941,7 +1941,7 @@ std::string Bridge::dispatch(const Request& req) {
         body = handleCablesDelete(id, &code);
     }
     // Later tasks extend routing here (parts-based).
-    return makeResponse(code, body);
+    return makeResponse(code, body, keepAlive);
 }
 
 void Bridge::listenLoop() {
@@ -1981,44 +1981,70 @@ void Bridge::listenLoop() {
                 ctxApplied = true;
             }
         }
-        std::string raw;
+        // issue #97: serve as many requests as the client sends on this one
+        // connection. Every response used to say `Connection: close` and the
+        // server closed first, so each request left a 30s TIME_WAIT on the
+        // (clientPort, 2601) tuple; a 10Hz UAT poll walked the whole 16k
+        // ephemeral range and new connects then stalled in SYN_SENT.
+        // `pending` carries bytes read past the current request (pipelined
+        // or back-to-back requests), so each one is framed by Content-Length
+        // rather than "everything received so far".
+        std::string pending;
         char buf[8192];
-        bool dropped = false;
-        // Single read is fine for our tiny bodies; loop until headers+body seen.
+        bool dropped = false, served = false, keepAlive = false, writeFailed = false;
         for (;;) {
-            ssize_t n = read(cli, buf, sizeof buf);
-            if (n < 0) {
-                // SO_RCVTIMEO elapsed (or another recv error): the client
-                // never finished sending a request. Drop it rather than
-                // blocking the next connection.
-                dropped = true;
-                break;
+            size_t reqLen = requestLength(pending);
+            while (reqLen == 0) {
+                ssize_t n = read(cli, buf, sizeof buf);
+                if (n < 0) {
+                    // SO_RCVTIMEO elapsed (or another recv error): a stalled
+                    // client, or an idle keep-alive one. Either way drop it
+                    // rather than blocking the next connection (the loop is
+                    // single-threaded).
+                    dropped = true;
+                    break;
+                }
+                if (n == 0) {
+                    // Peer closed. Clean end of a keep-alive connection when
+                    // nothing is half-read; otherwise a truncated request.
+                    dropped = true;
+                    break;
+                }
+                pending.append(buf, n);
+                reqLen = requestLength(pending);
             }
-            if (n == 0) {
-                // Peer closed before a full request arrived (half-open or
-                // truncated request).
-                dropped = true;
-                break;
-            }
-            raw.append(buf, n);
-            size_t he = raw.find("\r\n\r\n");
-            if (he == std::string::npos) continue;
-            size_t cl = 0;
-            size_t p = raw.find("Content-Length:");
-            if (p != std::string::npos) cl = std::strtoul(raw.c_str() + p + 15, nullptr, 10);
-            if (raw.size() >= he + 4 + cl) break;
+            if (dropped) break;
+            std::string raw = pending.substr(0, reqLen);
+            pending.erase(0, reqLen);
+            Request req;
+            bool ok = parseRequest(raw, req);
+            // HTTP/1.1 stays open unless the client asked to close; HTTP/1.0
+            // (and an unparseable request) keeps the old close-every-time
+            // behaviour.
+            keepAlive = ok && wantsKeepAlive(raw);
+            std::string resp = ok
+                ? dispatch(req, keepAlive)
+                : makeResponse(400, "{\"error\":\"bad request\"}");
+            if (write(cli, resp.data(), resp.size()) < 0) { writeFailed = true; break; }
+            served = true;
+            if (!keepAlive) break;
         }
-        if (dropped) {
+        if (dropped && !(served && pending.empty())) {
+            // Noisy only for real drops: a keep-alive client that just goes
+            // away after being served is the normal end of a connection.
             INFO("vcvoid: uatbridge dropped a stalled/incomplete HTTP connection "
-                 "(%zu byte(s) received, errno=%d)", raw.size(), errno);
-            close(cli);
-            continue;
+                 "(%zu byte(s) received, errno=%d)", pending.size(), errno);
         }
-        Request req;
-        std::string resp = parseRequest(raw, req)
-            ? dispatch(req)
-            : makeResponse(400, "{\"error\":\"bad request\"}");
-        (void)write(cli, resp.data(), resp.size());
+        if (served && !dropped && !writeFailed) {
+            // The client asked us to close (HTTP/1.0, or `Connection: close`).
+            // Wait for ITS FIN first instead of sending ours: TIME_WAIT lands
+            // on whichever side closes actively, and a client that asked to
+            // close always closes right after reading the response. Bounded
+            // by SO_RCVTIMEO, so a client that doesn't costs 2s and leaves the
+            // TIME_WAIT with us, exactly as before.
+            char drain[256];
+            while (read(cli, drain, sizeof drain) > 0) {}
+        }
         close(cli);
     }
 }

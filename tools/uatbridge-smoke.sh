@@ -76,13 +76,20 @@ trap cleanup EXIT
 
 # do_http METHOD PATH [JSON-BODY] -> sets HTTP_CODE, HTTP_BODY. Never aborts
 # under set -e; connection failures surface as HTTP_CODE=000.
+#
+# One curl process per call cannot reuse a connection, so each call still
+# costs one ephemeral port. What matters for issue #97 is that we stay on
+# HTTP/1.1 WITHOUT `Connection: close`: the bridge then keeps the socket open
+# and curl is the side that closes when it exits, so the 30s TIME_WAIT lands
+# on the client's socket instead of piling up on the server against :2601.
+# Don't add --http1.0 or a `Connection: close` header here.
 do_http() {
     local method="$1" path="$2" body="${3:-}" resp
     if [ -n "$body" ]; then
-        resp=$(curl -s -m 15 -w '\n%{http_code}' -X "$method" \
+        resp=$(curl -s --http1.1 -m 15 -w '\n%{http_code}' -X "$method" \
                -H 'Content-Type: application/json' -d "$body" "$BASE$path") || resp=$'\n000'
     else
-        resp=$(curl -s -m 15 -w '\n%{http_code}' -X "$method" "$BASE$path") || resp=$'\n000'
+        resp=$(curl -s --http1.1 -m 15 -w '\n%{http_code}' -X "$method" "$BASE$path") || resp=$'\n000'
     fi
     HTTP_CODE=$(printf '%s' "$resp" | tail -n1)
     HTTP_BODY=$(printf '%s' "$resp" | sed '$d')
