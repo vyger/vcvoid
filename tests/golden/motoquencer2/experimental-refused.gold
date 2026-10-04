@@ -1,0 +1,15 @@
+# The experimental gate (ADR 0001). This golden deliberately OMITS the
+# `experimental` header line, so the patch loads with allowExperimental=false —
+# the default a user gets until they flip "Allow experimental circuits" in the
+# module's context menu. The load must fail, and the message must name the
+# circuit so it can be found in a long patch. Getting this wrong is how a patch
+# built around motoquencer2 would look loadable on hardware, where only the real
+# [motoquencer] exists.
+expect_load_error Circuit 'motoquencer2' is experimental
+patch <<<
+[m4]
+[motoquencer2]
+    clock = I1
+    cv    = O1
+    gate  = O2
+>>>

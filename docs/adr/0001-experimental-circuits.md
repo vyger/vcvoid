@@ -105,3 +105,28 @@ also forced a related finding worth recording: the Forge charges 6 bytes per
 constant counting, while our accounting had stubbed texts at zero. That is fixed
 in the same change, so an experimental circuit's documented footprint is a
 number the engine actually computes.
+
+**An overlay entry may `extends` a firmware circuit** (added for
+[`motoquencer2`](../../manual/circuits/experimental/motoquencer2.md), issue #85).
+Some experimental circuits are "firmware circuit X plus one jack", and X can be
+large: `motoquencer` has 112 jacks, each with its own description. Transcribing
+them into the overlay would put a hundred-jack copy of the Forge's own data in
+this repo, silently free to drift the day the Forge edits one of those jacks —
+precisely the failure mode this ADR exists to prevent, and one this ADR's
+"Costs" section already names. So `tools/jackgen/overlay.py` resolves
+`"extends": "motoquencer"` plus `extra_inputs` / `extra_outputs` into a full
+circuit definition, deep-copied from the vendored firmware file with the extra
+jacks appended and any other key (title, description, `ramsize`) overridden.
+Both consumers call the same `overlay.load()`, so they still see one identical
+definition, and a jack name or short form that collides with the base's is a
+hard error rather than a silent shadow.
+
+This is **not** the "vcvoid extensions to existing firmware circuits" mechanism
+that the Decision above deliberately rules out. `[motoquencer]` is untouched and
+still generated from the firmware alone; `extends` only says where a *separate,
+experimental* circuit's jack list comes from, and the result is gated, refused
+and documented exactly like a hand-written entry. The engine side mirrors the
+same idea: `engine/src/motoquencer.hpp` holds the M4 editing surface so
+`motoquencer2` inherits the implementation verbatim instead of forking it, and
+`SeqCore` asks its subclass for the new setting (returning the hardware
+behaviour by default) rather than reading a jack the hardware circuits lack.

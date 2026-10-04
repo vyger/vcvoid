@@ -305,4 +305,5 @@ only when "Allow experimental circuits" is enabled on the master module. See
 
 - [`crossfader2`](experimental/crossfader2.md) — `crossfader` plus a smooth (monotone cubic) `curve` and a `loop` ring mode: draw an LFO on eight faders
 - [`midihirescc`](experimental/midihirescc.md) — 14-bit (hi-res) MIDI CC output: one jack per controller, both bytes sent together
+- [`motoquencer2`](experimental/motoquencer2.md) — `motoquencer` plus `probabilitymode`: restrict the gate-probability lane to the random chances or the trig conditions
 - [`trigseq`](experimental/trigseq.md) — Declarative trigger sequencer: write the rhythm as text
