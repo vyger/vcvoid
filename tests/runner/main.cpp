@@ -37,14 +37,18 @@ static bool evalExpectDisplay(const Engine& e, const gold::Event& ev,
         return true;
     }
     if (ev.field == "text") {
-        if (!d->isText) return fail(" text: display body is a value, not text");
+        if (d->layout != droid::DisplayLayout::Text)
+            return fail(" text: display layout is %d, not Text",
+                        int(d->layout));
         const std::string& got = e.textForNumber(float(d->bodyText));
         if (got != ev.strValue)
             return fail(" text = \"%s\", expected \"%s\"", got.c_str(), ev.strValue.c_str());
         return true;
     }
     if (ev.field == "value") {
-        if (d->isText) return fail(" value: display body is text, not a value");
+        if (d->layout != droid::DisplayLayout::Value)
+            return fail(" value: display layout is %d, not Value",
+                        int(d->layout));
         if (std::fabs(d->value - ev.value) > ev.tol)
             return fail(" value = %g, expected %g (tol %g)", d->value, ev.value, ev.tol);
         return true;
@@ -52,6 +56,19 @@ static bool evalExpectDisplay(const Engine& e, const gold::Event& ev,
     if (ev.field == "mode") {
         if (int(d->numbermode) != int(ev.value))
             return fail(" mode = %d, expected %d", int(d->numbermode), int(ev.value));
+        return true;
+    }
+    // The `button` state chain (issue #22, Group C): symbolic payload only —
+    // how many bubbles and which one is filled, never their geometry.
+    if (ev.field == "bubbles") {
+        if (d->layout != droid::DisplayLayout::Bubbles)
+            return fail(" bubbles: display layout is %d, not Bubbles",
+                        int(d->layout));
+        if (int(d->bubbles.count) != int(ev.value) ||
+            int(d->bubbles.index) != int(ev.value2))
+            return fail(" bubbles = %d %d, expected %d %d",
+                        int(d->bubbles.count), int(d->bubbles.index),
+                        int(ev.value), int(ev.value2));
         return true;
     }
     if (ev.field == "font") {

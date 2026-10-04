@@ -202,12 +202,26 @@ GoldFile parse(const std::string& path) {
                     }
                     ev.value = float(iv);
                 }
+                else if (ev.field == "bubbles") {
+                    // The `button` state chain (issue #22, Group C): two
+                    // integer operands, `count` then the filled `index`. The
+                    // payload is symbolic — this asserts how many bubbles and
+                    // which one is solid, never where they are drawn.
+                    int cnt, idx;
+                    if (!(ls >> cnt) || !(ls >> idx)) {
+                        g.parseError = "'expectdisplay bubbles' expects two integers "
+                            "(count index) at line " + std::to_string(lineNo);
+                        return g;
+                    }
+                    ev.value = float(cnt);
+                    ev.value2 = float(idx);
+                }
                 else if (ev.field == "off") {
                     // no operand
                 }
                 else {
                     g.parseError = "'expectdisplay' unknown field '" + ev.field +
-                        "' (want header|text|value|mode|font|off) at line " +
+                        "' (want header|text|value|mode|font|bubbles|off) at line " +
                         std::to_string(lineNo);
                     return g;
                 }

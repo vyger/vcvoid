@@ -147,9 +147,9 @@ struct DownstreamBlock {                  // one module's LED/gate-out state, fr
     // the L-register white OVERLAY rides leds[] as on every other model —
     // manual/circuits/encoder.md: L is additive white, not the value dot).
     // motorTarget/notches let the Rack fader animate circuit-commanded moves
-    // and render dent positions. disp* is the DB8E's symbolic screen content
-    // (header/text as NUL-terminated ASCII truncated to fit; value+numbermode
-    // when dispIsText == 0). Pixels are rendered Rack-side.
+    // and render dent positions. disp* is the DB8E's symbolic screen content:
+    // a header (NUL-terminated ASCII, truncated to fit) plus the payload named
+    // by dispLayout. Pixels are rendered Rack-side.
     float ring[kMaxEncodersPerModule] = {};
     // Issue #15: the full select-gated ring image (EncoderState::RingDisplay),
     // mirroring hardware. ringFlags bits: 0 = active (a selected circuit drives
@@ -183,7 +183,17 @@ struct DownstreamBlock {                  // one module's LED/gate-out state, fr
     float dispValue = 0.f;
     uint8_t dispNumbermode = 0;
     uint8_t dispFontsize = 0;
-    uint8_t dispIsText = 0;
+    // Which LAYOUT the master is sending (droid::DisplayLayout as a byte; issue
+    // #22, Group C). The payload fields above/below are each read only under
+    // their own tag. A renderer that meets a tag it does not know must draw the
+    // hardware's "update firmware" screen (hardware.md §6.13) rather than fall
+    // through to another layout's payload — see
+    // docs/adr/0003-db8e-custom-display-layouts.md.
+    uint8_t dispLayout = 0;
+    // Bubbles payload (button.md's state chain): `count` bubbles joined by short
+    // segments, the one at `index` filled solid. Parameters, not geometry.
+    uint8_t dispBubbleCount = 0;
+    uint8_t dispBubbleIndex = 0;
     // DisplayState::active — has any circuit ever written this screen? Carried
     // explicitly rather than inferred from the content, because a legitimately
     // displayed value of exactly 0 with no header is indistinguishable from an

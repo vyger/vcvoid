@@ -22,8 +22,16 @@
 //     true adaptive-budget exhaustion point (not derivable from the manual).
 //   * Fractional play positions floor-index the dense tape (no interpolation
 //     between samples); integer speeds are exact.
-//   * save/load/filenumber are SD-card I/O -> no-ops headless. display/header
-//     drive a DB8E display -> ignored.
+//   * save/load/filenumber are SD-card I/O -> no-ops headless.
+//   * DB8E display (issue #22, Group C): recorder.md "the display will show
+//     **Recording**, **Playback** or **Bypass** whenever you change the
+//     recording mode". Those three words are not in the patch, so they are
+//     interned at load through Circuit::internTexts and sent as the Text layout
+//     (docs/adr/0003-db8e-custom-display-layouts.md). STOP maps to "Bypass":
+//     the manual's own name for idle ("The circuit starts in idle / stopped
+//     mode and `L1.3` is lit. In that mode the input is bypassed to the
+//     output"). SPEC-GAP: a `bypass = 1` overlay is NOT a mode change and does
+//     not write -- unmeasured, and the manual ties the screen to the mode.
 //   * Convention corners (manual silent): pause holds the current play position;
 //     bypass forces the signal outputs but leaves the LEDs reflecting the state;
 //     when `select` deselects the circuit its buttons are not processed and its
@@ -35,6 +43,7 @@
 //     stop) ... is ignored" -- so the transport is suspended: recording appends
 //     nothing to the tape during scrub and resumes when scrub is released.
 #include "../src/registry.hpp"
+#include "../src/uihelpers.hpp"
 #include "../src/gatereader.hpp"
 #include <cmath>
 #include <vector>
@@ -47,6 +56,15 @@ class Recorder : public Circuit {
     enum { STOP = 0, PLAY = 1, RECORD = 2 };
 
 public:
+    // Circuit-provided strings (issue #22, Group C): the three mode words are
+    // the recorder's own, never the patch's, so they are interned here at load
+    // and shown by text number like any other text.
+    void internTexts(const TextInterner& intern) override {
+        txtRecording_ = intern("Recording");
+        txtPlayback_  = intern("Playback");
+        txtBypass_    = intern("Bypass");
+    }
+
     void tick(EngineState& s) override {
         if (cvTape_.empty()) {
             cap_ = (long)std::llround(kTapeSeconds * s.tickRateHz);
@@ -221,6 +239,27 @@ public:
             out("playled").set(s, pl ? 1.0f : 0.0f);
             out("stopled").set(s, sl ? 1.0f : 0.0f);
         }
+
+        // --- DB8E screen: the mode word (issue #22, Group C) ----------------
+        // The screen follows `outState`, the mode that drove THIS tick's output
+        // and this tick's LEDs -- not the possibly-newer `state_`. The two
+        // differ in exactly one place: a button-driven playback reaching the
+        // tape end drops `state_` to STOP after the output stage, so reading
+        // `state_` would put "Bypass" on screen a tick before the stop LED
+        // lights. A deliberate mode change (a button edge, a `mode` move) lands
+        // in `outState` on its own tick either way, so nothing else is delayed.
+        //
+        // The baseline swallows the first tick, so merely loading a patch that
+        // starts idle leaves the screen dark; a refused write leaves it
+        // untouched so the change re-attempts (delay-not-discard). Select-gated
+        // like the LEDs, and `display = 0` suppresses through the shared helper.
+        if (disp_.changed((float)outState)) {
+            int txt = outState == RECORD ? txtRecording_
+                    : outState == PLAY   ? txtPlayback_
+                                         : txtBypass_;
+            if ((!selConn || selected) && ui::showCircuitText(*this, s, txt))
+                disp_.accept((float)outState);
+        }
     }
 
 private:
@@ -257,6 +296,9 @@ private:
     uint64_t lastClock_ = 0, recWindowUntil_ = 0, overflowUntil_ = 0;
     double period_ = 0.0;
     GateReader recBtn_, playBtn_, stopBtn_, sampleGate_, clockGate_, saveGate_, loadGate_;
+    // DB8E (issue #22): the three interned mode words + the last mode shown.
+    int txtRecording_ = 0, txtPlayback_ = 0, txtBypass_ = 0;
+    ui::DisplayBaseline disp_;
 };
 
 DROID_REGISTER_CIRCUIT(recorder, Recorder)

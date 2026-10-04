@@ -27,8 +27,11 @@ struct Event {
                            // drag does — no plate press);
                            // ExpectDisplay value/mode/font: the numeric operand
     float tol = 1e-6f;
+    // ExpectDisplay `bubbles` only: the SECOND integer operand (the filled
+    // bubble's index; `value` carries the count). Issue #22, Group C.
+    float value2 = 0.0f;
     int line = 0;
-    // ExpectDisplay only: `field` is one of header|text|value|mode|font|off;
+    // ExpectDisplay only: `field` is one of header|text|value|mode|font|bubbles|off;
     // `strValue` is the unquoted expected string for header/text (empty otherwise).
     std::string field;
     std::string strValue;

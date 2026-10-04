@@ -1,6 +1,8 @@
 #include "ChainModule.hpp"
 #include "EncoderWidgets.hpp"
 #include "DroidWidgets.hpp"
+#include "src/controllerstate.hpp"   // droid::DisplayLayout (via -I../engine)
+#include <algorithm>
 #include <cmath>
 #include <cstring>
 
@@ -16,8 +18,8 @@
 // db8e buttons = 9). It diffs detentCount[0] into turn events, writes ring[0]
 // (value dot) + leds[0..8] (L1.1-8 = the 8 button LEDs, L1.9 = leds[8] = the
 // ring's white overlay), and fills the disp* fields (header/body as
-// NUL-terminated ASCII via textForNumber; value+numbermode when !isText). This
-// module publishes a monotonic detent counter + push level, and mirrors the
+// NUL-terminated ASCII via textForNumber; the payload named by the layout tag).
+// This module publishes a monotonic detent counter + push level, and mirrors the
 // downstream disp* content for the OLED widget's draw().
 struct DroidDB8E : ChainModule {
     enum ParamId { ENUMS(BUTTON_PARAMS, 8), PARAMS_LEN };
@@ -42,7 +44,12 @@ struct DroidDB8E : ChainModule {
     char dispHeader[24] = {};
     char dispText[24] = {};
     float dispValue = 0.f;
-    uint8_t dispNumbermode = 0, dispFontsize = 0, dispIsText = 0;
+    uint8_t dispNumbermode = 0, dispFontsize = 0;
+    // Which layout the master is sending (droid::DisplayLayout as a byte) plus
+    // each layout's payload — issue #22, Group C. An unknown tag draws the
+    // hardware's "update firmware" screen rather than guessing.
+    uint8_t dispLayout = 0;
+    uint8_t dispBubbleCount = 0, dispBubbleIndex = 0;
     bool dispActive = false;
 
     DroidDB8E() {
@@ -75,7 +82,9 @@ struct DroidDB8E : ChainModule {
         dispValue = b.dispValue;
         dispNumbermode = b.dispNumbermode;
         dispFontsize = b.dispFontsize;
-        dispIsText = b.dispIsText;
+        dispLayout = b.dispLayout;
+        dispBubbleCount = b.dispBubbleCount;
+        dispBubbleIndex = b.dispBubbleIndex;
         // The engine's own DisplayState::active, not a guess from the content:
         // an `encoder` parked at output 0 with no header is real content that
         // the old "any field is non-empty" heuristic read as an idle screen.
@@ -158,25 +167,81 @@ struct DB8EDisplay : Widget {
             nvgStroke(vg);
         }
 
-        // Body line (middle): text, or the plain numeric value.
-        //
-        // SPEC-GAP: numbermode formatting (volts/percent/note/gauge/sparkline)
-        // is not implemented; this is the plain fraction. %g's SIGNIFICANT-digit
-        // count is what the hardware appears to use — every value read off the
-        // issue-#19 capture (652.74, 1259.73, 2003.16, 514.97) carries six, as
-        // does the manual's own `0.278` example. %.4g truncated all four of
-        // those to 652.7 / 1260 / 2003 / 515.
-        char bodyBuf[32];
-        const char* body;
-        if (module->dispIsText) {
-            body = module->dispText;
-        } else {
-            std::snprintf(bodyBuf, sizeof bodyBuf, "%.6g", module->dispValue);
-            body = bodyBuf;
+        // Body: the layout the master named (issue #22, Group C). Every
+        // branch reads only its own payload, and an unrecognised tag draws the
+        // DB8E's own "update firmware" screen (hardware.md §6.13) rather than
+        // falling through to another layout — that is the hardware's behaviour
+        // when a master sends a layout its display firmware predates, and it
+        // keeps an engine/plugin version skew from drawing nonsense.
+        const float bodyY = box.size.y * 0.6f;
+        switch ((droid::DisplayLayout)module->dispLayout) {
+            case droid::DisplayLayout::Bubbles:
+                drawBubbleChain(vg, bodyY, module->dispBubbleCount,
+                                module->dispBubbleIndex, fg);
+                return;
+            case droid::DisplayLayout::Text:
+                drawBody(vg, bodyY, module->dispText);
+                return;
+            case droid::DisplayLayout::Value: {
+                // SPEC-GAP: numbermode formatting (volts/percent/note/gauge/
+                // sparkline) is not implemented; this is the plain fraction.
+                // %g's SIGNIFICANT-digit count is what the hardware appears to
+                // use — every value read off the issue-#19 capture (652.74,
+                // 1259.73, 2003.16, 514.97) carries six, as does the manual's
+                // own `0.278` example. %.4g truncated all four of those to
+                // 652.7 / 1260 / 2003 / 515.
+                char bodyBuf[32];
+                std::snprintf(bodyBuf, sizeof bodyBuf, "%.6g", module->dispValue);
+                drawBody(vg, bodyY, bodyBuf);
+                return;
+            }
         }
+        // Unknown layout tag: the hardware's fallback screen.
+        nvgFontSize(vg, 9.f);
+        nvgTextAlign(vg, NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE);
+        nvgText(vg, box.size.x / 2.f, bodyY, "update firmware", NULL);
+    }
+
+private:
+    void drawBody(NVGcontext* vg, float y, const char* body) {
         nvgFontSize(vg, bodyPx(module->dispFontsize));
         nvgTextAlign(vg, NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE);
-        nvgText(vg, box.size.x / 2.f, box.size.y * 0.6f, body, NULL);
+        nvgText(vg, box.size.x / 2.f, y, body, NULL);
+    }
+
+    // The `button` circuit's state chain (button.md "Display"; measured on
+    // hardware in issue #19): `count` bubbles in a row joined by short
+    // horizontal segments, the one at `index` filled solid and the rest drawn
+    // as outlines. The engine sends only (count, index) — radius, pitch and
+    // stroke are chosen here, scaled so 2..4 bubbles sit comfortably in the
+    // narrow 6 HP OLED box and a larger count still fits.
+    void drawBubbleChain(NVGcontext* vg, float y, int count, int index,
+                         NVGcolor fg) {
+        if (count < 1) return;
+        const float avail = box.size.x - 8.f;
+        // pitch = 2r + gap, with the connecting segment spanning the gap.
+        float r = std::min(5.5f, avail / (float)(3 * count + 1));
+        if (r < 1.f) r = 1.f;
+        const float gap = r * 2.f;
+        const float pitch = 2.f * r + gap;
+        const float total = pitch * (float)(count - 1);
+        const float x0 = box.size.x / 2.f - total / 2.f;
+
+        nvgStrokeColor(vg, fg);
+        nvgStrokeWidth(vg, std::max(1.f, r * 0.28f));
+        // Joining segments first, so the bubbles sit on top of them.
+        for (int i = 0; i + 1 < count; i++) {
+            nvgBeginPath(vg);
+            nvgMoveTo(vg, x0 + pitch * (float)i + r, y);
+            nvgLineTo(vg, x0 + pitch * (float)(i + 1) - r, y);
+            nvgStroke(vg);
+        }
+        for (int i = 0; i < count; i++) {
+            nvgBeginPath(vg);
+            nvgCircle(vg, x0 + pitch * (float)i, y, r);
+            if (i == index) { nvgFillColor(vg, fg); nvgFill(vg); }
+            else            { nvgStroke(vg); }
+        }
     }
 };
 

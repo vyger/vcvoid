@@ -1,0 +1,54 @@
+# recorder: the mode words under the `mode` input, an explicit `header`, and
+# `display = 0` suppression (issue #22, Group C).
+#
+# The screen follows the transport mode however it is driven, so the `mode`
+# input (0 = idle/bypass, 1 = playback, 2 = recording) produces the same three
+# words as the buttons do. `header` overrides the (here empty) automatic title
+# for the whole circuit, exactly as on every other display-tier circuit, and
+# `display = 0` suppresses the output entirely (hardware.md §6.12).
+#
+# One recorder per screen, so they never contend for one DB8E.
+patch <<<
+[db8e]
+[db8e]
+
+# D1: mode-driven, with its own title.
+[recorder]
+    mode    = I1
+    cvin    = I2
+    cvout   = O1
+    header  = "Tape A"
+    display = 1
+
+# D2: the same mode changes, suppressed. If `display = 0` leaked, the `off`
+# checks below would fail.
+[recorder]
+    mode    = I1
+    cvin    = I2
+    cvout   = O2
+    display = 0
+>>>
+@0 set I2 0.25
+@0 expectdisplay D1 off
+@0 expectdisplay D2 off
+# mode 2 -> recording
+@1 set I1 2
+@1 expectdisplay D1 text "Recording"
+@1 expectdisplay D1 header "Tape A"
+@1 expectdisplay D2 off
+@2 expectdisplay D1 text "Recording"
+# mode 1 -> playback
+@3 set I1 1
+@3 expectdisplay D1 text "Playback"
+@3 expectdisplay D1 header "Tape A"
+@3 expectdisplay D2 off
+# mode 0 -> idle, i.e. bypass. With `mode` patched the transport never changes
+# itself, so this word stays until the patch moves the mode again.
+@5 set I1 0
+@5 expectdisplay D1 text "Bypass"
+@6 expectdisplay D1 text "Bypass"
+@7 expectdisplay D2 off
+# ... and back to recording, to show the screen is not one-shot.
+@8 set I1 2
+@8 expectdisplay D1 text "Recording"
+@8 expectdisplay D2 off

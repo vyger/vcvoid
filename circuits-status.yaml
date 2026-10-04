@@ -158,8 +158,17 @@ circuits:
       handling applies clear, then savepreset, then loadpreset non-exclusively
       (a same-tick loadpreset overrides a clear); clearall wipes presets;
       startvalue seeds P and clear; SD persistence a headless no-op.
-      display/header (DB8E) not modelled. 13 goldens. Not goldened:
-      double-click/longpress timing vs hardware, DB8E display,
+      DB8E display (issue #22, Group C): for `states` 3 or 4 the circuit sends
+      the BUBBLES layout -- button.md only says it 'automatically displays it's
+      state', but hardware draws a chain of `states` bubbles joined by short
+      horizontal segments with the current one filled solid (measured, issue
+      #19), so the payload is (count, index) under the ordinary derived header
+      and the circles are Rack-side. states 1/2 send nothing (the manual scopes
+      the feature to 3 and 4); select-gated like `led`, `display = 0`
+      suppresses, first tick swallowed so a merely loaded patch leaves the
+      screen dark. See docs/adr/0003-db8e-custom-display-layouts.md. 15
+      goldens. Not goldened: double-click/longpress timing vs hardware, the
+      bubble GEOMETRY (Rack-side, verified by eye),
       longpress+doubleclick combination."
   buttongroup:
     status: done
@@ -1614,11 +1623,21 @@ circuits:
       lossless up to tape length, overflow fires on tape-length exceed
       (untested; same convention as delay); fractional play positions
       floor-index (no interpolation), integer speeds exact;
-      save/load/filenumber SD no-ops; display/header (DB8E) ignored.
+      save/load/filenumber SD no-ops.
+      DB8E display (issue #22, Group C): the TEXT layout, showing 'Recording' /
+      'Playback' / 'Bypass' on a transport-mode change (recorder.md Display).
+      STOP maps to 'Bypass' -- the manual's own name for idle ('In that mode
+      the input is bypassed to the output'). Those three words are not in the
+      patch, so they are interned at load through the new
+      Circuit::internTexts seam (docs/adr/0003-db8e-custom-display-layouts.md).
+      The screen follows `outState`, so it changes in lockstep with the LEDs
+      rather than a tick ahead of them at an auto-stop; select-gated,
+      `display = 0` suppresses, no automatic header (no scalar `output` jack).
+      SPEC-GAP: a `bypass = 1` overlay is not a mode change and does not write.
       Convention corners (manual silent): pause holds the play position;
       bypass forces signal outputs but LEDs still reflect state; deselected
       select skips button processing, no LED writes; same-tick button-edge
-      precedence stop<record<play. 13 goldens. Not goldened (implemented):
+      precedence stop<record<play. 15 goldens. Not goldened (implemented):
       select/selectat overlay, clock-relative timewindow, overflow."
   sample:
     status: done
