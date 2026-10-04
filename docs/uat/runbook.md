@@ -31,8 +31,8 @@ locators.
 **Two executors, two jobs.** `make smoke` (`tools/uatbridge-smoke.sh`) is the
 **contract gate**: one pass over every endpoint's status codes and response
 shapes, the `GET /master/{id}/diagnostics` classes (`no-patch`, `running`,
-`load-failed` with the right line, `warnings`, `chain-error`), the state-store
-lines from #42, the 64 000-byte size gate from #41 and the `POST /params/hold`
+`load-failed` with the right line, `warnings`, `chain-error`, `engine-stalled`),
+the state-store lines from #42, the 64 000-byte size gate from #41 and the `POST /params/hold`
 / `/params/release` contract. It is fail-fast and takes seconds; run it first,
 and treat a failure there as "stop, this build is broken" rather than as one
 red row. Everything timing- or state-dependent — gestures, persistence,
@@ -462,6 +462,37 @@ g8-first row pins `chainError` and freezes the G8 gates).
    (`severity`, `code`/`codeColor`, `line`, the card's `title`/`message`) —
    one model, `plugin/src/MasterStatus.hpp`, so what it reports is what the
    panel paints. Use it for the assertions and keep your eyes for the pixels.
+2b-ii. ☐ **A stalled engine** (issue #83). Rack steps the rack from one of two
+   clocks (`Engine.hpp`, `startFallbackThread`: *"If no master module is set,
+   the fallback Engine thread will step blocks, using the CPU clock for
+   timing"*): an audio module that has claimed the engine clock, or Rack's own
+   CPU timer when no module has. The stall is the first one failing — a
+   claimed clock that stops being run.
+   **An Audio module set to "No device" is NOT that case** and must not be
+   used as the repro: it never claims the clock, so the fallback thread keeps
+   the rack running. Measured on Rack 2.6.6 with a device-less
+   `AudioInterface2`: `/probe` reports `sampleRateHz` 44100 and a 2 Hz output
+   gives 2 edges in 1300 ms — i.e. full-speed, real-time stepping, and
+   `.engineStalled` correctly stays `false`.
+   **Repro**, from the bridge, no audio hardware needed:
+   `POST /rack/engine-clock {"freeze": true}` parks the engine clock on the
+   vcvoid master, which never calls `stepBlock()` — the same shape as an audio
+   device that stops calling back. Then:
+   - within ~0.5 s every master goes **amber**; `GET /master/{id}/status` →
+     `.state == "engine-stalled"`, `.engineStalled == true`,
+     `.engineClock == "module"`, and `.chainError` **empty** (suppressed at
+     report time, not cleared — the widget never writes that field off-lock);
+   - the context-menu card is titled **ENGINE NOT RUNNING** over "A module
+     holds Rack's engine clock and has stopped running it…", and must NOT read
+     "chain has nothing" even on a master whose patch declares controllers;
+   - `GET /master/{id}/diagnostics` → `severity` `warning`, `chainFix` empty.
+   `POST /rack/engine-clock {"freeze": false}` hands the clock back to
+   whatever held it before: within a frame the ring clears and `.state`
+   returns to `"running"` (or to the chain verdict it genuinely has), with no
+   reload. `GET /rack/engine-clock` reports who holds it at any time.
+   `.engineStalled` is also what `make smoke` checks as a precondition before
+   it loads anything — it is the raw flag, which `state` can outrank (a master
+   with no patch still reports `"no-patch"`).
 2c. ☐ **"Add missing controllers" when it's blocked** (issue #69): load
    `uat-overlays.ini` (declares `p2b8` + `b32`) and put the *wrong* module at
    controller 2 — `DELETE /modules/{b32id}`, then `POST /modules` a `p4b2`

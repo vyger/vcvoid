@@ -216,6 +216,18 @@ done
 [ "$HTTP_CODE" = "200" ] || fail "master $MASTER_ID never registered (last HTTP $HTTP_CODE)"
 echo "ok: master registered"
 
+# --- precondition: Rack is actually stepping the rack (issue #83) ------------
+# Rack runs its CPU-clocked fallback thread only when there is NO primary Audio
+# module; an Audio module that is present with no device selected steps nothing
+# at all. Every timing-, chain- and register-dependent assertion below then
+# fails for a reason that has nothing to do with this build, so ask the master
+# — which now knows — once, here, and say what to do about it.
+do_http GET "/master/$MASTER_ID/status"
+if [ "$(echo "$HTTP_BODY" | jq -r '.engineStalled // false')" = "true" ]; then
+    fail "the Rack engine is not running: nothing has stepped master $MASTER_ID for ~0.5 s. Select a device on Rack's Audio module (or delete the Audio module, which hands Rack back to its CPU clock), then re-run."
+fi
+echo "ok: engine is stepping (.engineStalled false)"
+
 # --- diagnostics: no-patch, before this run loads anything --------------------
 # (issue #46: the structured record the panel's error display derives from.)
 do_http GET "/master/$MASTER_ID/diagnostics"
