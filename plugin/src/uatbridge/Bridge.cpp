@@ -5,7 +5,6 @@
 #include <rack.hpp>
 #include <patch.hpp>   // rack::patch::Manager -- context.hpp only forward-declares it
 #include <algorithm>
-#include <arpa/inet.h>
 #include <cerrno>
 #include <chrono>
 #include <cmath>
@@ -14,11 +13,18 @@
 #include <future>
 #include <jansson.h>
 #include <memory>
+#include <thread>
+// The listener is BSD sockets, so it is built on Mac and Linux only; on
+// Windows Bridge::start() is a no-op (ARCH_* comes from rack.hpp's arch.hpp).
+// The bridge is a dev-only UAT tool, so nothing user-facing is lost.
+#if !defined(ARCH_WIN)
+#include <arpa/inet.h>
 #include <netinet/in.h>
 #include <sys/socket.h>
 #include <sys/time.h>
-#include <thread>
 #include <unistd.h>
+#define VCVOID_UAT_BRIDGE_SOCKETS 1
+#endif
 
 #ifndef VCVOID_GIT_HASH
 #define VCVOID_GIT_HASH "unknown"
@@ -72,6 +78,9 @@ static json_t* jerr(const char* msg) {
 }
 
 void Bridge::start() {
+#if !defined(VCVOID_UAT_BRIDGE_SOCKETS)
+    return;   // no socket listener on this platform (see the includes above)
+#endif
     const char* env = std::getenv("VCVOID_UAT_BRIDGE");
     if (!env || !*env || g_bridge) return;
     g_bridge = new Bridge();
@@ -1741,26 +1750,12 @@ std::string Bridge::handleMasterCpu(DroidMasterBase* m, int* code) {
     json_object_set_new(tick, "windowSeconds", json_real(1.0));
     json_object_set_new(o, "tick", tick);
 
-    // Rack's own meter, as its UI shows it (fraction of realtime). Uses the
-    // PRIVATE Module::meterBuffer API -- acceptable in this env-gated dev
-    // bridge; reads of the ring are torn-read tolerable diagnostics. Only
-    // meaningful while settings::cpuMeter is on.
+    // Whether Rack's own CPU meter is on. The meter's value itself lives
+    // behind Rack's PRIVATE Module::meterBuffer API, which a plugin must not
+    // call, so only the setting is reported; tick.estCpuShare above is the
+    // bridge's own estimate.
     json_t* rk = json_object();
-    bool meterOn = rack::settings::cpuMeter;
-    json_object_set_new(rk, "meterEnabled", json_boolean(meterOn));
-#ifdef __clang__
-    // PRIVATE is only a deprecation warning under clang; on GCC it expands to
-    // __attribute__((error(...))) and these calls would hard-fail, so non-clang
-    // builds report only meterEnabled and omit cpuShare.
-    int mlen = m->meterLength();
-    if (meterOn && mlen > 0) {
-        const float* buf = m->meterBuffer();
-        double sum = 0.0;
-        for (int i = 0; i < mlen; i++) sum += buf[i];
-        double sr = APP->engine->getSampleRate();
-        json_object_set_new(rk, "cpuShare", json_real(sum / mlen * sr));
-    }
-#endif
+    json_object_set_new(rk, "meterEnabled", json_boolean(rack::settings::cpuMeter));
     json_object_set_new(o, "rack", rk);
 
     // Per-circuit profile: engine call under engineMutex, the documented
@@ -2065,6 +2060,7 @@ std::string Bridge::dispatch(const Request& req, bool keepAlive) {
 }
 
 void Bridge::listenLoop() {
+#if defined(VCVOID_UAT_BRIDGE_SOCKETS)
     int srv = socket(AF_INET, SOCK_STREAM, 0);
     int yes = 1;
     setsockopt(srv, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof yes);
@@ -2167,6 +2163,7 @@ void Bridge::listenLoop() {
         }
         close(cli);
     }
+#endif  // VCVOID_UAT_BRIDGE_SOCKETS
 }
 
 } // namespace uat
