@@ -99,6 +99,14 @@ static void deriveAutoHeaders(const CompiledCircuit& cc, Circuit& c,
         if (slot >= 0 && slot < (int)c.autoHeaderTexts.size())
             c.autoHeaderTexts[size_t(slot)] = t;
     }
+    // A circuit whose manual names a second title source for when `output` is
+    // not patched (notebuttons: `semitone`) falls back to that jack's target.
+    if (!scalar)
+        if (const char* fb = c.autoHeaderFallbackJack())
+            for (const auto& p : cc.params)
+                if (p.def && !p.def->isInput && p.def->count == 1 &&
+                    !std::strcmp(p.def->name, fb))
+                    scalar = &p.a;
     if (scalar) c.autoHeaderText = headerTextForTarget(*scalar, texts);
 }
 

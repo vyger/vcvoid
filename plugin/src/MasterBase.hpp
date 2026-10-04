@@ -1311,6 +1311,8 @@ public:
                         b.dispFontsize    = ds->fontsize;
                         b.dispBubbleCount = ds->bubbles.count;
                         b.dispBubbleIndex = ds->bubbles.index;
+                        b.dispNoteSemitone   = ds->note.semitone;
+                        b.dispNoteWithOctave = ds->note.withOctave ? 1 : 0;
                     }
                 }
             }

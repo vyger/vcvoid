@@ -1,0 +1,56 @@
+# notebuttons: the selected note on the DB8E (issue #22, Group C).
+#
+# notebuttons.md "Display": the circuit "automatically displays the selected
+# note". The engine sends the NoteName layout, whose payload is the note NUMBER
+# counted in semitones from C — here a bare pitch class 0..11 with no octave,
+# because the circuit has none. The spelling ("D#") is drawn by the screen.
+# See docs/adr/0003-db8e-custom-display-layouts.md.
+#
+# Header: derived from the `output` target, the cable `_KEY` -> "KEY".
+#
+# Any change of the selected note shows, not only a press: here a clocked press
+# lands on the clock and a `clear` goes back to `startnote`.
+tickrate 100
+patch <<<
+[b32]
+[db8e]
+
+[notebuttons]
+    button1   = B1.1
+    button3   = B1.3
+    button5   = B1.5
+    button12  = B1.12
+    startnote = 4
+    clock     = I1
+    clear     = I2
+    output    = _KEY
+
+[copy]
+    input  = _KEY
+    output = O1
+>>>
+# Merely loading the patch (startnote 4 is already selected) leaves the screen
+# dark: it only wakes when the selection changes.
+@0 expectdisplay D1 off
+# A press while `clock` is patched only PENDS the note: nothing to show yet.
+@1 set B1.3 1
+@1 expectdisplay D1 off
+@2 set B1.3 0
+# The clock lands it: D (2), titled from the `output` cable.
+@3 set I1 1
+@3 expectdisplay D1 note 2
+@3 expectdisplay D1 header "KEY"
+@4 set I1 0
+# B (11) through the same route.
+@5 set B1.12 1
+@6 set B1.12 0
+@6 expectdisplay D1 note 2
+@7 set I1 1
+@7 expectdisplay D1 note 11
+@8 set I1 0
+# `clear` goes back to startnote 4 (E): the screen follows the note, whatever
+# moved it.
+@9 set I2 1
+@9 expectdisplay D1 note 4
+@10 set I2 0
+@10 expectdisplay D1 note 4

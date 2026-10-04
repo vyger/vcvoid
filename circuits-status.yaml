@@ -1394,7 +1394,10 @@ circuits:
       (manual silent): (1) LED is a persistent radio indicator, not momentary
       (buttongroup analogy); (2) gate is button-dependent so 0 while
       deselected; (3) clock-pending last-press-wins + same-tick flush. SD
-      persistence and DB8E display/header are headless no-ops. Goldens read
+      persistence is a headless no-op. DB8E (issue #22, Group C): the
+      NoteName layout, payload the pitch class with no octave, on any note
+      change while selected; title from the `output` target, else
+      `semitone`'s (Circuit::autoHeaderFallbackJack). Goldens read
       output through an internal cable (O jacks clamp note numbers above 1)."
   nudge:
     status: done

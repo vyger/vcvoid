@@ -50,6 +50,8 @@ struct DroidDB8E : ChainModule {
     // hardware's "update firmware" screen rather than guessing.
     uint8_t dispLayout = 0;
     uint8_t dispBubbleCount = 0, dispBubbleIndex = 0;
+    int16_t dispNoteSemitone = 0;
+    bool dispNoteWithOctave = false;
     bool dispActive = false;
 
     DroidDB8E() {
@@ -85,6 +87,8 @@ struct DroidDB8E : ChainModule {
         dispLayout = b.dispLayout;
         dispBubbleCount = b.dispBubbleCount;
         dispBubbleIndex = b.dispBubbleIndex;
+        dispNoteSemitone = b.dispNoteSemitone;
+        dispNoteWithOctave = b.dispNoteWithOctave != 0;
         // The engine's own DisplayState::active, not a guess from the content:
         // an `encoder` parked at output 0 with no header is real content that
         // the old "any field is non-empty" heuristic read as an idle screen.
@@ -182,6 +186,13 @@ struct DB8EDisplay : Widget {
             case droid::DisplayLayout::Text:
                 drawBody(vg, bodyY, module->dispText);
                 return;
+            case droid::DisplayLayout::NoteName: {
+                char noteBuf[16];
+                formatNoteName(noteBuf, sizeof noteBuf, module->dispNoteSemitone,
+                               module->dispNoteWithOctave);
+                drawBody(vg, bodyY, noteBuf);
+                return;
+            }
             case droid::DisplayLayout::Value: {
                 // SPEC-GAP: numbermode formatting (volts/percent/note/gauge/
                 // sparkline) is not implemented; this is the plain fraction.
@@ -203,6 +214,23 @@ struct DB8EDisplay : Widget {
     }
 
 private:
+    // A note number as the DB8E spells it. Sharps, as hardware.md §6.12 writes
+    // the DB8E's own pitch readout ("F♯1 +47"), with '#' standing in for '♯'
+    // because ShareTechMono has no musical glyphs. With an octave the number is
+    // a pitch counted from C0 (12 -> "C1"); without one it is a bare pitch
+    // class 0..11 and no octave digit is drawn.
+    static void formatNoteName(char* buf, size_t n, int semitone, bool withOctave) {
+        static const char* const kNames[12] = {"C", "C#", "D", "D#", "E", "F",
+                                               "F#", "G", "G#", "A", "A#", "B"};
+        int pc = ((semitone % 12) + 12) % 12;
+        if (withOctave) {
+            int octave = (semitone - pc) / 12;
+            std::snprintf(buf, n, "%s%d", kNames[pc], octave);
+        } else {
+            std::snprintf(buf, n, "%s", kNames[pc]);
+        }
+    }
+
     void drawBody(NVGcontext* vg, float y, const char* body) {
         nvgFontSize(vg, bodyPx(module->dispFontsize));
         nvgTextAlign(vg, NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE);

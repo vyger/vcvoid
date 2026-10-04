@@ -222,5 +222,18 @@ inline bool showStateBubbles(Circuit& c, EngineState& s, int count, int index) {
     return true;
 }
 
+// NoteName layout (issue #22, Group C): the `notebuttons` selection, as a note
+// number counted in semitones from C, under the ordinary derived header. The
+// payload stays a number; "C#" vs "Db" and the glyphs are the screen's choice.
+inline bool showNoteName(Circuit& c, EngineState& s, int semitone,
+                         bool withOctave) {
+    DisplayState* d = claimCircuitScreen(c, s, c.autoHeaderText);
+    if (!d) return false;
+    d->layout = DisplayLayout::NoteName;
+    d->note.semitone = (int16_t)semitone;
+    d->note.withOctave = withOctave;
+    return true;
+}
+
 } // namespace ui
 } // namespace droid

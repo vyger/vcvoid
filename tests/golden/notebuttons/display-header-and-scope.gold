@@ -1,0 +1,85 @@
+# notebuttons: where the DB8E title comes from, select-gating and suppression
+# (issue #22, Group C).
+#
+# notebuttons.md "Display": "The title of the display is derived from the
+# target of the `output` parameter or, if that is not patched, from
+# `semitone`. You can use `header` to use your own title instead."
+#
+#   * D1: no `output`, `semitone = O2` -> the title falls back to "Output O2";
+#   * D2: an explicit `header` wins over both;
+#   * D3: `output` AND `semitone` patched -> `output` wins ("NOTE"), not
+#     `semitone`'s "Output O3";
+#   * `display = 0` suppresses a circuit that would otherwise show: if it
+#     leaked, it would land on the default screen D1 and put its D (2) there;
+#   * an unselected overlay must not own the screen: D3's circuit is selected
+#     only while I1 is high, and its note appears once it is selected.
+tickrate 100
+patch <<<
+[b32]
+[db8e]
+[db8e]
+[db8e]
+
+# D1: title falls back to the `semitone` target.
+[notebuttons]
+    button1  = B1.1
+    button2  = B1.2
+    semitone = O2
+    display  = 1
+
+# Suppressed: never writes anywhere.
+[notebuttons]
+    button3  = B1.3
+    semitone = O4
+    display  = 0
+
+# D2: an explicit header.
+[notebuttons]
+    button6  = B1.6
+    output   = _N2
+    header   = "Root"
+    display  = 2
+
+# D3: `output` beats `semitone` for the title; select-gated by I1.
+[notebuttons]
+    button10 = B1.10
+    output   = _NOTE
+    semitone = O3
+    select   = I1
+    display  = 3
+
+[copy]
+    input  = _N2
+    output = O5
+
+[copy]
+    input  = _NOTE
+    output = O6
+>>>
+@0 expectdisplay D1 off
+@0 expectdisplay D2 off
+@0 expectdisplay D3 off
+# C# (1) on D1, titled from `semitone`'s register.
+@1 set B1.2 1
+@1 expectdisplay D1 note 1
+@1 expectdisplay D1 header "Output O2"
+@2 set B1.2 0
+# The suppressed circuit's press: D1 keeps C#.
+@3 set B1.3 1
+@3 expectdisplay D1 note 1
+@4 set B1.3 0
+# F (5) on D2 under the patch's own title.
+@5 set B1.6 1
+@5 expectdisplay D2 note 5
+@5 expectdisplay D2 header "Root"
+@6 set B1.6 0
+# D3's circuit is not selected: its button is ignored and the screen stays dark.
+@7 set B1.10 1
+@7 expectdisplay D3 off
+@8 set B1.10 0
+# Selected now: the press lands and shows A (9), titled from `output`.
+@9 set I1 1
+@10 set B1.10 1
+@10 expectdisplay D3 note 9
+@10 expectdisplay D3 header "NOTE"
+@11 set B1.10 0

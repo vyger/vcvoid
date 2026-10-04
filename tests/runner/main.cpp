@@ -71,6 +71,19 @@ static bool evalExpectDisplay(const Engine& e, const gold::Event& ev,
                         int(ev.value), int(ev.value2));
         return true;
     }
+    // The NoteName layout (notebuttons, issue #22 Group C): the note number and
+    // whether it carries an octave — never its spelling.
+    if (ev.field == "note") {
+        if (d->layout != droid::DisplayLayout::NoteName)
+            return fail(" note: display layout is %d, not NoteName",
+                        int(d->layout));
+        bool wantOct = ev.value2 != 0.0f;
+        if (int(d->note.semitone) != int(ev.value) || d->note.withOctave != wantOct)
+            return fail(" note = %d%s, expected %d%s",
+                        int(d->note.semitone), d->note.withOctave ? " octave" : "",
+                        int(ev.value), wantOct ? " octave" : "");
+        return true;
+    }
     if (ev.field == "font") {
         if (int(d->fontsize) != int(ev.value))
             return fail(" font = %d, expected %d", int(d->fontsize), int(ev.value));

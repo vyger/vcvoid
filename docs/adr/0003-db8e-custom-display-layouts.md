@@ -181,7 +181,7 @@ being built. None of these is implemented; #22 stays open for them.
 
 | Circuit | Tag | Payload | Notes |
 |---|---|---|---|
-| `notebuttons` | `NoteName` | `semitone` (int) | notebuttons.md: "automatically displays the selected note". Header is the `output` target, or `semitone`'s if `output` is unpatched — a *second* auto-header source, so #19's derivation needs a per-circuit fallback jack rather than a hard-coded `output`. The note *spelling* ("E♭1") is rendering: the payload is the number. |
+| `notebuttons` | `NoteName` | `semitone` (int), `withOctave` (bool) | **Shipped** (after this ADR's first cut). notebuttons.md: "automatically displays the selected note". Header is the `output` target, or `semitone`'s if `output` is unpatched — a *second* auto-header source, implemented as the per-circuit `Circuit::autoHeaderFallbackJack()` rather than a hard-coded `output`. The note *spelling* is rendering: the payload is the number. `withOctave` was added when building it: notebuttons' number is a bare pitch class 0..11, while encoquencer's will be a pitch, and the screen cannot tell `0` = "C" from `0` = "C0" without being told. |
 | `encoquencer` | `NoteName` / `Text` / `Value` | as above | encoquencer.md: the edited step's value, titled "CV"/"Number"/"Gate" or the patch's `cvname`/`gatename`. A gate step is the `Text` layout with "silent"/"play" (or "on"/"off" when `gatename` is set) — circuit-provided strings again, through the same `internTexts` seam. This is the circuit with *no* `header` jack, which the tag handles naturally: the title is per-edit, chosen by the circuit. |
 | `motoquencer` | `NoteName` / `Text` / `Value` | as above | Same family and the same payloads; the harder half is deciding what counts as "edit something in the sequencer" across the circuit's many controls, not the screen model. |
 | `calibrator` | `Graph` | `points[N]` (correction per octave), `cursorOctave`, `cursorValue`, `dottedBelow` | hardware.md §6.12 and calibrator.md: an envelope-like graph with the octave numbers along the bottom, a cross at the current input pitch, and a dotted segment where the correction is exactly zero. All of that is numbers; the curve, the ticks and the cross are drawing. `forcedisplay = 1` makes it write every tick instead of only on a nudge. |
@@ -234,5 +234,6 @@ before the renderer catches up without drawing nonsense.
 - No per-layout formatting in the engine. "E♭1", "3.2 cents", "CHANGED" and the
   17-character header cut all live at the screen, where #19 put the header cut.
 - No modelled DB8E firmware version or downgrade toggle.
-- No layouts beyond `button` and `recorder`. The six sketched above are real
-  work — measurement, not mechanism — and #22 stays open for them.
+- No layouts beyond `button` and `recorder` in the first cut (`notebuttons`
+  followed). The rest sketched above are real work — measurement, not
+  mechanism — and #22 stays open for them.

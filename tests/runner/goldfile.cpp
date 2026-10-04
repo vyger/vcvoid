@@ -216,12 +216,37 @@ GoldFile parse(const std::string& path) {
                     ev.value = float(cnt);
                     ev.value2 = float(idx);
                 }
+                else if (ev.field == "note") {
+                    // The NoteName layout (notebuttons, issue #22 Group C): the
+                    // note number in semitones from C, then an optional word
+                    // `octave` asserting the number carries one. Without it the
+                    // check also asserts there is NO octave (a pitch class).
+                    int st;
+                    if (!(ls >> st)) {
+                        g.parseError = "'expectdisplay note' expects an integer "
+                            "semitone at line " + std::to_string(lineNo);
+                        return g;
+                    }
+                    std::string word;
+                    bool oct = false;
+                    if (ls >> word) {
+                        if (word != "octave") {
+                            g.parseError = "'expectdisplay note' takes only the word "
+                                "'octave' after the semitone, at line " +
+                                std::to_string(lineNo);
+                            return g;
+                        }
+                        oct = true;
+                    }
+                    ev.value = float(st);
+                    ev.value2 = oct ? 1.0f : 0.0f;
+                }
                 else if (ev.field == "off") {
                     // no operand
                 }
                 else {
                     g.parseError = "'expectdisplay' unknown field '" + ev.field +
-                        "' (want header|text|value|mode|font|bubbles|off) at line " +
+                        "' (want header|text|value|mode|font|bubbles|note|off) at line " +
                         std::to_string(lineNo);
                     return g;
                 }

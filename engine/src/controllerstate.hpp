@@ -146,6 +146,7 @@ enum class DisplayLayout : uint8_t {
     Value   = 0,   // header + a number (+ numbermode/fontsize): [display], Groups A/B
     Text    = 1,   // header + one interned text: [display], recorder
     Bubbles = 2,   // header + a chain of `count` bubbles, `index` filled: button
+    NoteName = 3,  // header + a note name: notebuttons
 };
 
 // Per-DB8E symbolic screen content. NOT pixels: a header plus one tagged layout
@@ -170,6 +171,13 @@ struct DisplayState {
     // Bubbles (button.md: a chain of `count` bubbles joined by short segments,
     // the one at `index` filled solid). Parameters, not geometry.
     struct { uint8_t count = 0, index = 0; } bubbles;
+    // NoteName (notebuttons.md: "automatically displays the selected note").
+    // The NUMBER of the note, counted in semitones from C; the spelling ("D#",
+    // "E") is the screen's business. `withOctave` says whether the number also
+    // carries an octave (a pitch) or is a bare pitch class 0..11, as
+    // notebuttons' is — the screen must not invent an octave the circuit has
+    // not got.
+    struct { int16_t semitone = 0; bool withOctave = false; } note;
     const void* owner = nullptr;  // opaque circuit identity for linger arbitration
     uint8_t ownerTier = 0;        // tier of the last accepted write (see enum above)
     uint64_t lingerUntilTick = 0;
