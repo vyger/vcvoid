@@ -249,6 +249,39 @@ Stateful circuits (`algoquencer`, `motoquencer`, `pot`, `button`,
 - Guard load/save buttons with a `button` circuit's `longpress` output
   (≥1.5 s hold) to avoid accidental overwrites.
 
+## Hold computed presses into `button` / `buttongroup` / `pot` for ≥ 50 ms
+
+The manual says these three circuits are "executed at a lower speed". On
+hardware, in a heavy patch, the master **drops** a computed trigger into one
+of them when the trigger is shorter than that slower pass. A real finger on a
+button always lasts long enough, so the bug only shows when a patch presses
+them itself. That covers `buttonN`/`button` from a cable, and also `clear`,
+`loadpreset` and `savepreset` fed by a trigger cable.
+
+Measured on a MASTER18 (vcvoid #87, 2026-10-04):
+- With a patch of about 100 kB RAM and running sequencers, short computed
+  presses missed about a third to a half of the time.
+- A 10 ms press still missed. Every press held 50 ms or more landed, 24 of 24.
+- **Delaying** a short press did not help; only **lengthening** it does.
+- With a light patch, nothing was missed.
+
+vcvoid runs every circuit every cycle, so Rack never shows the miss. Stretch
+the press with `gatetool` (or `gatelength` on a `triggerdelay`):
+
+```droid
+[gatetool]
+    inputtrigger = _COMMIT
+    gatelength = 0.05
+    outputgate = _COMMIT_HELD
+
+[buttongroup]
+    button1 = _COMMIT_HELD * _IS_1
+    ...
+```
+
+Do this for every computed trigger that presses one of these three circuits,
+whether or not the patch is heavy today. Patches grow.
+
 ## Tap tempo
 
 Circuits with a `taptempo` input (`burst`, `contour`, `gatetool`, `lfo`, …)

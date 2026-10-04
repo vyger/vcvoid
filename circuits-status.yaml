@@ -169,7 +169,15 @@ circuits:
       screen dark. See docs/adr/0003-db8e-custom-display-layouts.md. 15
       goldens. Not goldened: double-click/longpress timing vs hardware, the
       bubble GEOMETRY (Rack-side, verified by eye),
-      longpress+doubleclick combination."
+      longpress+doubleclick combination. HARDWARE (issue #87, measured
+      2026-10-04): the manual says this circuit is 'executed at a lower
+      speed'; under a heavy patch the master drops computed triggers into
+      it that are shorter than that slower pass (between 10 and 50 ms
+      there), delayed or not, while presses held 50 ms or more always
+      land. The engine runs every circuit every cycle and never drops one
+      -- a deliberate SPEC-GAP, since the pass interval depends on load
+      and was not measured. Patches should hold computed presses for >= 50
+      ms (droid-patch skill)."
   buttongroup:
     status: done
     difficulty: moderate
@@ -201,7 +209,16 @@ circuits:
       savepreset > loadpreset. display/header not modelled. Known corner
       (manual silent, unpinned): a preset mask loaded after maxactive shrank
       is not re-clamped. 8 goldens. Not goldened vs hardware: 25 ms burst
-      window, longpress timing, below-min deselect alternative reading."
+      window, longpress timing, below-min deselect alternative reading.
+      HARDWARE (issue #87, measured 2026-10-04): the manual says this
+      circuit is 'executed at a lower speed'; under a heavy patch the
+      master drops computed triggers into it that are shorter than that
+      slower pass (between 10 and 50 ms there), delayed or not, while
+      presses held 50 ms or more always land. The engine runs every
+      circuit every cycle and never drops one -- a deliberate SPEC-GAP,
+      since the pass interval depends on load and was not measured.
+      Patches should hold computed presses for >= 50 ms (droid-patch
+      skill)."
   calibrator:
     status: done
     difficulty: hard
@@ -1552,7 +1569,15 @@ circuits:
       seeds to the band's center (band+0.5)/discrete; presets store the raw
       0..1 value. (6) preset precedence clearall > clear > savepreset >
       loadpreset; SD persistence a headless no-op. 8 goldens. Not goldened:
-      LED-gauge color/position, DB8E display, UI slowdown timing."
+      LED-gauge color/position, DB8E display, UI slowdown timing. HARDWARE
+      (issue #87, measured 2026-10-04): the manual says this circuit is
+      'executed at a lower speed'; under a heavy patch the master drops
+      computed triggers into it that are shorter than that slower pass
+      (between 10 and 50 ms there), delayed or not, while presses held 50
+      ms or more always land. The engine runs every circuit every cycle
+      and never drops one -- a deliberate SPEC-GAP, since the pass
+      interval depends on load and was not measured. Patches should hold
+      computed presses for >= 50 ms (droid-patch skill)."
   quantizer:
     status: done
     difficulty: easy
