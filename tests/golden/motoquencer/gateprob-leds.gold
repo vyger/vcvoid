@@ -1,0 +1,120 @@
+# motoquencer, fader mode 2: the gate-probability LED codes on the step plates
+# (issue #84). motoquencer.md "Repeats, ratchets and randomize", right under the
+# gate-probability table:
+#
+#   "The LEDs below the faders indicate the current setting with different color
+#    and blink codes:
+#     - Gates that are played always are blue with a constant light.
+#     - Random gates for 50%, 25% and 12% are in the same blue but blink in
+#       various speeds.
+#     - Gates of setting 1 (conditional random) are blinking fast.
+#     - Gates depending on the turn (3, 5 and 6) are in cyan color and light
+#       steadily in the bars (turns) where they are on and blink in the other
+#       bars."
+#
+# This file covers the BLUE half (always + the three random rates + the
+# conditional notch); gateprob-leds-turns.gold covers the cyan turn-based half.
+# `buttoncolor` plays no part: these codes are the manual's fixed blue 1.2 and
+# cyan 0.2, and they replace whatever the buttonmode would have painted for as
+# long as fader mode 2 is the lane on the faders.
+#
+# SPEC-GAP: the manual gives no blink rates ("various speeds" / "fast"). vcvoid
+# blinks at half duty, 2 Hz at 50%, 4 Hz at 25%, 6 Hz at 12% (faster = less
+# likely) and 8 Hz -- the fastest code -- for the conditional notch 1. The phase
+# is free-running off engine time, so at tickrate 100 one 2 Hz cycle is 50 ticks
+# and every lane is in phase. The on/off phases asserted below:
+#
+#   tick |  6  |  9  | 13  | 19  | 25  | 44  | 50
+#   -----+-----+-----+-----+-----+-----+-----+----
+#   50%  | on  | on  | on  | on  | off | off | on
+#   25%  | on  | on  | off | off | on  | off | on
+#   12%  | on  | off | off | on  | off | off | on
+#   cond | on  | off | on  | off | on  | off | on
+tickrate 100
+patch <<<
+[m4]
+[motoquencer]
+    clock       = I1
+    fadermode   = I2
+    numsteps    = 4
+    numfaders   = 4
+    defaultgate = 1
+    cv          = O1
+    gate        = O2
+>>>
+# Fader mode 2. Every step starts at the top notch 8 ("played always"), so all
+# four plates are steady blue -- not the buttonmode-0 gate colour 0.1.
+@0 set I2 2
+@1 expect F1.led 1 tol 1e-6
+@1 expect F1.color 1.2 tol 1e-6
+@1 expect F2.color 1.2 tol 1e-6
+@1 expect F3.color 1.2 tol 1e-6
+@1 expect F4.color 1.2 tol 1e-6
+# Dial the four interesting notches, one per lane (the lane IS the gateprob
+# fader in this mode, so a move writes the step's probability):
+#   F1 -> notch 1 (idx 0, conditional random)
+#   F2 -> notch 2 (idx 1, random 12%)
+#   F3 -> notch 4 (idx 3, random 25%)
+#   F4 -> notch 7 (idx 6, random 50%)
+@2 move F1 0
+@3 move F2 0.1428571
+@4 move F3 0.4285714
+@5 move F4 0.8571429
+# All four are the same blue, and all four happen to be in their ON phase at
+# tick 6 -- only the RATE tells them apart.
+@6 expect F1.led 1 tol 1e-6
+@6 expect F1.color 1.2 tol 1e-6
+@6 expect F2.led 1 tol 1e-6
+@6 expect F2.color 1.2 tol 1e-6
+@6 expect F3.led 1 tol 1e-6
+@6 expect F4.led 1 tol 1e-6
+# The rates separate. A blinked-off plate drops its brightness to 0 and keeps
+# its colour, so `.color` stays blue while `.led` goes dark.
+@9 expect F1.led 0 tol 1e-6
+@9 expect F1.color 1.2 tol 1e-6
+@9 expect F2.led 0 tol 1e-6
+@9 expect F3.led 1 tol 1e-6
+@9 expect F4.led 1 tol 1e-6
+@13 expect F1.led 1 tol 1e-6
+@13 expect F2.led 0 tol 1e-6
+@13 expect F3.led 0 tol 1e-6
+@13 expect F4.led 1 tol 1e-6
+@19 expect F1.led 0 tol 1e-6
+@19 expect F2.led 1 tol 1e-6
+@19 expect F3.led 0 tol 1e-6
+@19 expect F4.led 1 tol 1e-6
+@25 expect F1.led 1 tol 1e-6
+@25 expect F2.led 0 tol 1e-6
+@25 expect F3.led 1 tol 1e-6
+@25 expect F4.led 0 tol 1e-6
+# Every rate is off together once per 2 Hz cycle...
+@44 expect F1.led 0 tol 1e-6
+@44 expect F2.led 0 tol 1e-6
+@44 expect F3.led 0 tol 1e-6
+@44 expect F4.led 0 tol 1e-6
+# ...and back on together at the top of the next one.
+@50 expect F1.led 1 tol 1e-6
+@50 expect F2.led 1 tol 1e-6
+@50 expect F3.led 1 tol 1e-6
+@50 expect F4.led 1 tol 1e-6
+# The white played-step marker still beats the code, exactly as it beats every
+# buttonmode colour: clock once and lane 1 goes white while lane 2 keeps its
+# blue (tick 51 is an ON phase for both).
+@51 set I1 1
+@51 expect F1.color -1 tol 1e-6
+@51 expect F1.led 1 tol 1e-6
+@51 expect F2.color 1.2 tol 1e-6
+@52 set I1 0
+# Leave fader mode 2 and the plates go straight back to the buttonmode: mode 0
+# paints every gate-on step with `buttoncolor`'s default 0.1, and nothing
+# blinks any more (step 1 is still the played step, hence white).
+@53 set I2 0
+@54 expect F1.color -1 tol 1e-6
+@54 expect F2.led 1 tol 1e-6
+@54 expect F2.color 0.1 tol 1e-6
+@54 expect F3.color 0.1 tol 1e-6
+# ...including at a tick that WOULD have been a blink-off phase in mode 2.
+@69 expect F2.led 1 tol 1e-6
+@69 expect F2.color 0.1 tol 1e-6
+@69 expect F3.led 1 tol 1e-6
+@69 expect F4.led 1 tol 1e-6

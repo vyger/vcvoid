@@ -1,0 +1,105 @@
+# motoquencer, fader mode 2: the CYAN turn-based gate-probability codes (#84).
+# motoquencer.md, under the gate-probability table: "Gates depending on the turn
+# (3, 5 and 6) are in cyan color and light steadily in the bars (turns) where
+# they are on and blink in the other bars."
+#
+# Notch 6 (gateprob idx 5) plays every EVEN turn, notch 5 (idx 4) every ODD turn
+# -- the same per-turn counter the gate decision uses (SeqCore::turnNotchPlays
+# serves both, so the plate and the audible result can never disagree). The turn
+# counter starts at 1, so the odd-turn step plays on the first run.
+#
+# SPEC-GAP: the off-turn blink rate is not in the manual. vcvoid uses the
+# SLOWEST code, 2 Hz at half duty -- the cyan colour already separates these
+# notches from the random ones, so the blink only has to say "not this bar". At
+# tickrate 100 that is 50 ticks: on for ticks 0..24 of each cycle, off for
+# 25..49.
+#
+# The clock runs every 4 ticks from tick 5, so a turn is 16 ticks:
+#   turn 1 (odd)  ticks  5..20   turn 3 (odd)  ticks 37..52
+#   turn 2 (even) ticks 21..36   turn 4 (even) ticks 53..68
+# and the assertions below sit on ticks where step 3 is the played one, leaving
+# lanes 1, 2 and 4 free of the white marker.
+tickrate 100
+patch <<<
+[m4]
+[motoquencer]
+    clock       = I1
+    fadermode   = I2
+    numsteps    = 4
+    numfaders   = 4
+    defaultgate = 1
+    cv          = O1
+    gate        = O2
+>>>
+# Fader mode 2; dial step 1 to notch 6 (idx 5, every EVEN turn) and step 2 to
+# notch 5 (idx 4, every ODD turn). Steps 3 and 4 stay at the top notch 8, so
+# they keep the steady blue and make the colour difference visible.
+@0 set I2 2
+@1 move F1 0.7142857
+@2 move F2 0.5714286
+# Both turn-based lanes are cyan, not blue -- before a single clock, on turn 1
+# (odd): lane 2 plays this turn (steady), lane 1 does not (blinking, currently
+# in its on phase, so both read lit here -- the colour is the point).
+@3 expect F1.color 0.2 tol 1e-6
+@3 expect F2.color 0.2 tol 1e-6
+@3 expect F3.color 1.2 tol 1e-6
+@3 expect F4.color 1.2 tol 1e-6
+# Run the clock: 4 ticks per step.
+@5 set I1 1
+@6 set I1 0
+@9 set I1 1
+@10 set I1 0
+@13 set I1 1
+@14 set I1 0
+@17 set I1 1
+@18 set I1 0
+# --- turn 2 (even) ---
+@21 set I1 1
+@22 set I1 0
+@25 set I1 1
+@26 set I1 0
+@29 set I1 1
+@30 set I1 0
+# Tick 30: step 3 plays (white), and the 2 Hz blink is in its OFF phase. Turn 2
+# is even, so lane 1 lights steadily and lane 2 -- off its turn -- is dark.
+@30 expect F1.led 1 tol 1e-6
+@30 expect F1.color 0.2 tol 1e-6
+@30 expect F2.led 0 tol 1e-6
+@30 expect F2.color 0.2 tol 1e-6
+@30 expect F3.color -1 tol 1e-6
+@30 expect F4.led 1 tol 1e-6
+@30 expect F4.color 1.2 tol 1e-6
+@33 set I1 1
+@34 set I1 0
+# --- turn 3 (odd) ---
+@37 set I1 1
+@38 set I1 0
+@41 set I1 1
+@42 set I1 0
+@45 set I1 1
+@46 set I1 0
+# Tick 46: step 3 plays again, blink still in its off phase, but the turn is now
+# ODD -- the exact mirror of tick 30.
+@46 expect F1.led 0 tol 1e-6
+@46 expect F1.color 0.2 tol 1e-6
+@46 expect F2.led 1 tol 1e-6
+@46 expect F2.color 0.2 tol 1e-6
+@46 expect F4.led 1 tol 1e-6
+@49 set I1 1
+@50 set I1 0
+# --- turn 4 (even) ---
+@53 set I1 1
+@54 set I1 0
+@57 set I1 1
+@58 set I1 0
+@61 set I1 1
+@62 set I1 0
+# Tick 62: step 3 plays, turn 4 is even, and the blink is in its ON phase -- so
+# the off-turn lane 2 is lit too. Half the cycle on, half off: that is what
+# makes it read as a blink rather than as dark.
+@62 expect F1.led 1 tol 1e-6
+@62 expect F2.led 1 tol 1e-6
+@62 expect F2.color 0.2 tol 1e-6
+# A few ticks later the same lane 2 is dark again while lane 1 holds steady.
+@75 expect F1.led 1 tol 1e-6
+@75 expect F2.led 0 tol 1e-6
