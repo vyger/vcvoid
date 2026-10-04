@@ -65,6 +65,10 @@ int main(int argc, char **argv)
     QSettings::setDefaultFormat(QSettings::IniFormat);
     QSettings::setPath(QSettings::IniFormat, QSettings::UserScope,
                        QDir::tempPath() + "/droidcheck-settings");
+    // That store outlives the process, so a previous --ram run would leave
+    // deduplicate_jacks on and every later problem check would judge memory as
+    // if sharing were enabled. Start each run from the Forge's own defaults.
+    QSettings().clear();
 
     ImageCache imageCache;     // registers the_image_cache
     DroidFirmware firmware;    // registers the_firmware (loads :droidfirmware.json)
@@ -140,6 +144,11 @@ int main(int argc, char **argv)
                 out << "RAM " << base << " " << (shared ? "shared" : "plain")
                     << " " << ram << "\n";
             }
+            // Back to the Forge defaults (sharing off) for the problem check
+            // below, which must keep meaning what a default Forge reports.
+            QSettings settings;
+            settings.clear();
+            settings.sync();
         }
 
         patch.updateProblems();
