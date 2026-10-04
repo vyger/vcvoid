@@ -59,6 +59,14 @@ struct LoadOptions {
     // reports the honest footprint.
     bool ignoreMemoryLimits = false;
 
+    // Model the Forge's deploy preference "Detect and share duplicate values
+    // for inputs" (settings key compression/deduplicate_jacks, issue #88). With
+    // it on, an input jack whose value already occurred earlier in the patch is
+    // deployed as a reference to the first occurrence and costs no RAM, and the
+    // texts inside it are not charged either. Off by default, matching the
+    // Forge's own default — see ram.cpp.
+    bool shareInputValues = false;
+
     // Allow vcvoid-only EXPERIMENTAL circuits (#12) to load. Off by default:
     // an experimental circuit does not exist on DROID hardware and is unknown
     // to the Forge, so a patch using one is refused unless the user opts in.

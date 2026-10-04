@@ -1,5 +1,6 @@
 #include "harness.hpp"
 #include "src/loader.hpp"
+#include "src/ram.hpp"
 using namespace droid;
 
 // RAM-accounting expectations are cross-checked against the Droid Forge's
@@ -267,4 +268,139 @@ TEST(deployed_size_abbreviation) {
           stripPatch("[copy]\ni=I1\no=O1\n").size());
     CHECK(deployedPatchSize("[display]\n header = \"Loud  Volume\"\n") ==
           stripPatch("[display]\nhr=\"Loud  Volume\"\n").size());
+}
+
+// ---------------------------------------------------------------------------
+// Shared input values (issue #88) — the Forge's deploy preference "Detect and
+// share duplicate values for inputs" (compression/deduplicate_jacks). Rules in
+// patch/jackdeduplicator.cpp + Patch::updateMemoryProblems/usedRAM; mirrored in
+// ram.cpp. tools/ramcheck.sh holds BOTH modes against the Forge over patches/.
+// ---------------------------------------------------------------------------
+
+static unsigned ramShared(const std::string& text, bool expectOk = true) {
+    CompiledPatch cp;
+    LoadOptions opts;
+    opts.shareInputValues = true;
+    auto r = compilePatch(text, MasterType::Master16, cp, opts);
+    CHECK(r.ok == expectOk);
+    return cp.ramUsed;
+}
+
+// The canonical key of the first `input`-hint jack of circuit `idx`.
+static std::string inputKey(const std::string& text, size_t idx = 0) {
+    CompiledPatch cp;
+    auto r = compilePatch(text, MasterType::Master16, cp);
+    CHECK(r.ok);
+    for (auto& pp : cp.circuits[idx].params)
+        if (pp.def->ramHint == gen::RamHint::Input)
+            return canonicalInputValue(pp, cp.texts);
+    return "<no input jack>";
+}
+
+// Off is the default — the Forge's own default, and every number pinned above
+// stays exactly as it was.
+TEST(ram_sharing_off_by_default) {
+    LoadOptions dflt;
+    CHECK(dflt.shareInputValues == false);
+    CHECK(ramOf("[copy]\n input = I1 * 0.5\n output = O1\n") == 924);
+}
+
+TEST(ram_shared_duplicate_input) {
+    // Two identical A*B inputs. Plain: 864 + 2*(24 + 16 + 4) = 952, constants
+    // {0,1,0.5,-0.5}=4 -> stuff 16  => 968.
+    const char* patch = "[copy]\n input = I1 * 0.5\n output = O1\n"
+                        "[copy]\n input = I1 * 0.5\n output = O2\n";
+    CHECK(ramOf(patch) == 968);
+    // Shared: the second input jack is deployed as a reference and costs 0.
+    CHECK(ramShared(patch) == 968 - 16);
+}
+
+// Only jacks with ramhint `input` are sharable. bernoulli's `input` is a
+// trigger_input (20 bytes) and `distribution` a plain input — two identical
+// circuits must share the second distribution and nothing else.
+TEST(ram_shared_only_plain_inputs) {
+    const char* patch = "[bernoulli]\n input = I1\n distribution = 0.3\n output1 = O1\n"
+                        "[bernoulli]\n input = I1\n distribution = 0.3\n output1 = O2\n";
+    // each: base 32 + trigger_input 20 + simple input 8 + output 4 = 64
+    // constants {0,1,0.3,-0.3}=4 -> stuff 16;  864 + 128 + 16 = 1008
+    CHECK(ramOf(patch) == 1008);
+    // Only the 8-byte `distribution` repeat is saved; the repeated trigger
+    // input still costs its full 20 bytes.
+    CHECK(ramShared(patch) == 1008 - 8);
+}
+
+// A shared repeat also stops charging for the texts inside it: savedTexts
+// shrinks the stuff block (countTexts() - savedTexts).
+TEST(ram_shared_texts_not_counted) {
+    const char* patch = "[display]\n text = \"hello\"\n"
+                        "[display]\n text = \"hello\"\n";
+    CHECK(ramOf(patch) == 1024);   // 864 + 2*(56+8), texts 2 -> stuff 32
+    // Shared: second text jack 8 -> 0, and numTexts 2 -> 1, so the stuff block
+    // drops from ALIGN_UP(8+12,16)=32 to ALIGN_UP(8+4+4,16)=16.
+    CHECK(ramShared(patch) == 864 + 64 + 56 + 16);
+}
+
+// Sharing spans the WHOLE patch, not one circuit: the Forge builds a single
+// JackDeduplicator and passes it to every circuit in turn.
+TEST(ram_shared_across_circuits) {
+    // Three copies of one value: two of them become references.
+    const char* patch = "[copy]\n input = I1 * 0.5\n output = O1\n"
+                        "[lfo]\n hz = I1 * 0.5\n square = O2\n"
+                        "[copy]\n input = I1 * 0.5\n output = O3\n";
+    CHECK(ramOf(patch) - ramShared(patch) == 32);   // 2 x 16
+}
+
+// The key is JackAssignmentInput::valueToCanonicalString(): the atoms present,
+// in SLOT order. It is syntactic, so two spellings share only when they parse
+// into the same slots — `X - REG` is form6 (A=-1, B=REG, C=X), which is why
+// our own A/B order for it has to be swapped back (parser.cpp subtractForm).
+TEST(ram_shared_canonical_keys) {
+    CHECK(inputKey("[copy]\n input = I1\n output = O1\n") == "I1");
+    CHECK(inputKey("[copy]\n input = I1 * 0.5\n output = O1\n") == "I1 * 0.5");
+    CHECK(inputKey("[copy]\n input = I1 + 0.5\n output = O1\n") == "I1 + 0.5");
+    CHECK(inputKey("[p2b8]\n[copy]\n input = P1.2 * 9 + 1\n output = O1\n") ==
+          "P1.2 * 9 + 1");
+    // Registers and cables are lowercased by the Forge's parser; a cable keeps
+    // its leading underscore.
+    CHECK(inputKey("[copy]\n input = _Foo\n output = O1\n"
+                   "[copy]\n input = I1\n output = _Foo\n") == "_foo");
+    // A text is quoted; a number is not — `"1"` and `1` never share.
+    CHECK(inputKey("[display]\n text = \"hi\"\n") == "\"hi\"");
+    // `X - REG` and a literal `-1 * REG + X` are the SAME key...
+    CHECK(inputKey("[copy]\n input = I2 - I1\n output = O1\n") == "-1 * I1 + I2");
+    CHECK(inputKey("[copy]\n input = -1 * I1 + I2\n output = O1\n") == "-1 * I1 + I2");
+    // ...but `REG * -1 + X` is not, because the Forge keys on slot order.
+    CHECK(inputKey("[copy]\n input = I1 * -1 + I2\n output = O1\n") == "I1 * -1 + I2");
+    // Voltage/percent/on-off spellings fold to their number before keying, so
+    // they share with the plain number.
+    CHECK(inputKey("[copy]\n input = 2.5V\n output = O1\n") == "0.25");
+    CHECK(inputKey("[copy]\n input = 0.25\n output = O1\n") == "0.25");
+    CHECK(inputKey("[copy]\n input = on\n output = O1\n") == "1");
+}
+
+// The payoff the issue is about: a patch the budget refuses with sharing off
+// loads with it on, because the deployed jack table is what the master gets.
+TEST(ram_shared_rescues_over_budget_patch) {
+    std::string patch;
+    for (int i = 0; i < 2850; i++) patch += "[copy]\n input = I1*0.5\n";
+    CHECK(deployedPatchSize(patch) < kMaxPatchSize);   // not a size refusal
+
+    CompiledPatch cp;
+    auto plain = compilePatch(patch, MasterType::Master16, cp);
+    CHECK(!plain.ok);
+    bool mem = false;
+    for (auto& e : plain.errors)
+        if (e.message.find("exceeds the available memory") != std::string::npos) mem = true;
+    CHECK(mem);
+    // The refusal names the way out.
+    bool hinted = false;
+    for (auto& e : plain.errors)
+        if (e.message.find("Share duplicate input values") != std::string::npos) hinted = true;
+    CHECK(hinted);
+
+    LoadOptions opts;
+    opts.shareInputValues = true;
+    auto shared = compilePatch(patch, MasterType::Master16, cp, opts);
+    CHECK(shared.ok);
+    CHECK(shared.ramUsed < plain.ramUsed);
 }

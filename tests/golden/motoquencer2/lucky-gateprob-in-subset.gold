@@ -1,0 +1,48 @@
+# motoquencer2: "I Feel Lucky" stays inside the active notch subset. luckygateprob
+# rerolls each target step's gate probability with `luckyamount` acting as an
+# inverted floor (amount 1 -> always 7, amount 0 -> floor 1), so at amount 0 the
+# plain circuit can draw ANY of 1..7 — random chances included. Under
+# `probabilitymode = 2` it must draw only from the four offered values (2, 4, 5, 7),
+# or a reroll could smuggle a hidden random chance into a track that asked for trig
+# conditions only.
+#
+# Seeded pin (like motoquencer/lucky-seeded.gold). With seed 1 the four draws are
+# the engine's first four uniforms, 0.558488 / 0.173574 / 0.147250 / 0.101457, and
+# a four-notch lane takes dent int(U*4) = 2 / 0 / 0 / 0, i.e. stored 5 / 2 / 2 / 2:
+#   dent 2 -> 5 = every even turn -> 2/3 = 0.666667
+#   dent 0 -> 2 = every 4th turn  -> 0.0
+# The eight-notch lane (probabilitymode 0) takes dent 1 + int(U*7) from the same
+# draws = 4 / 2 / 2 / 1 — and 1 is "12% random", exactly the kind of value this
+# mode must not produce (lucky-gateprob-mode0.gold pins that side). Widening back
+# to 0 therefore reads 5 / 2 / 2 / 2 off the eight-notch grid, every one of them a
+# member of the trig set. Regenerate by capturing the "got" values if the RNG draw
+# order ever changes.
+experimental
+seed 1
+tickrate 100
+patch <<<
+[m4]
+[motoquencer2]
+    numfaders       = 4
+    fadermode       = 2
+    probabilitymode = I3
+    clock           = I1
+    luckygateprob   = I2
+    luckyamount     = 0
+    cv              = O1
+>>>
+@0 set I3 2
+# tick1: fire luckygateprob -> four fresh values, all from the trig subset; the
+# reroll re-commands the motors, so the dents are visible immediately.
+@1 set I2 1
+@1 expect F1 0.666667 tol 1e-4
+@1 expect F2 0.0 tol 1e-4
+@1 expect F3 0.0 tol 1e-4
+@1 expect F4 0.0 tol 1e-4
+@2 set I2 0
+# tick3: widen to all eight notches — every stored value must be 2, 4, 5 or 7.
+@3 set I3 0
+@3 expect F1 0.714286 tol 1e-4
+@3 expect F2 0.285714 tol 1e-4
+@3 expect F3 0.285714 tol 1e-4
+@3 expect F4 0.285714 tol 1e-4

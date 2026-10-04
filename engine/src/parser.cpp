@@ -169,6 +169,7 @@ std::string canonicalize(const std::vector<std::string>& toks, ParamLine& p,
                 p.c = p.a;
                 p.a = cAtom;
                 p.b = Atom::num(-1.0f, true);
+                p.subtractForm = true;   // slot order differs from the Forge's
             }
         } else {
             p.c = cAtom;

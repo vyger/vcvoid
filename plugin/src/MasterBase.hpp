@@ -97,6 +97,30 @@ struct DroidMasterBase : Module {
     // Set on the engine thread by onSampleRateChange; consumed by the widget's
     // step() on the UI thread, which is the only thread allowed to reload.
     std::atomic<bool> timingDirty{false};
+    // --- engine heartbeat (issue #83) ---------------------------------------
+    // Incremented once per process() call, at the very top, before every
+    // early-out: the question it answers is "is anything stepping this module
+    // at all", not "is the engine ticking". Written only by the audio thread,
+    // read by the widget's step() (and nobody else), so relaxed ordering is
+    // all it needs — a heartbeat that is one frame stale is indistinguishable
+    // from one sampled a frame earlier.
+    //
+    // Rack runs its CPU-clocked fallback thread ONLY when the rack holds no
+    // primary Audio module; an Audio module with no device selected steps
+    // nothing at all, and then chainPhysical (which process() fills) stays
+    // empty and the chain check reports a controller mismatch that is not
+    // there. engineStalled is the UI thread's verdict on this counter
+    // (vcvoid::status::StallMonitor), published here so statusReport() — and
+    // through it the context-menu card, the ring and the UAT bridge - can read
+    // it from any thread.
+    std::atomic<uint64_t> processHeartbeat{0};
+    std::atomic<bool> engineStalled{false};
+    // Who SHOULD be stepping us, sampled by the widget's step() from
+    // APP->engine->getMasterModule(): true when an audio module holds Rack's
+    // engine clock, false when Rack's CPU-clocked fallback thread owns it
+    // (Engine.hpp). Only meaningful alongside engineStalled, where it decides
+    // which of the two the card tells the reader to go and look at.
+    std::atomic<bool> engineClockHeldByModule{false};
     // Experimental (#13): load patches over the hardware limits (RAM budget,
     // 64 000-byte size cap — the latter measured the way the master measures
     // it, with abbreviated parameter names, see droid::deployedPatchSize and
@@ -108,6 +132,13 @@ struct DroidMasterBase : Module {
     // Off by default so a patch built here stays hardware-compatible; same
     // threading note as ignoreHwMemoryLimits above.
     bool allowExperimentalCircuits = false;
+    // Issue #88: measure RAM the way the Forge deploys with "Detect and share
+    // duplicate values for inputs" on — repeated input values become one jack
+    // table entry, so a patch can fit that otherwise would not. OFF by default,
+    // matching the Forge's own default: the reported budget should be the one
+    // the user sees in the Forge unless they changed it there too. Persisted;
+    // same threading note as the two flags above.
+    bool shareInputValues = false;
 
     // --- visible error state (issue #46) ---------------------------------
     // A master that refuses to run used to look exactly like one that is
@@ -169,6 +200,9 @@ struct DroidMasterBase : Module {
         }
         // chainError is UI-thread-only (written by the widget's step()), so it
         // is deliberately read outside the lock, like the menu already does.
+        r.engineStalled = engineStalled.load(std::memory_order_relaxed);
+        r.engineClockHeldByModule =
+            engineClockHeldByModule.load(std::memory_order_relaxed);
         r.chainError = chainError;
         r.chainFix = chainFix;
         r.chainFixBlocker = chainFixBlocker;
@@ -609,6 +643,7 @@ public:
         droid::LoadOptions lopts;
         lopts.ignoreMemoryLimits = ignoreHwMemoryLimits;
         lopts.allowExperimental = allowExperimentalCircuits;
+        lopts.shareInputValues = shareInputValues;
         auto fresh = std::make_unique<droid::Engine>(
             masterType_, effectiveRate);
         droid::LoadResult r = fresh->load(text, lopts);
@@ -726,8 +761,12 @@ public:
                              std::istreambuf_iterator<char>());
                 return true;
             });
+            // The budget is only meaningful alongside the mode it was measured
+            // in, so the status line names the mode whenever it is not the
+            // Forge's default (#88).
             patchStatus = system::getFilename(path) +
-                string::f(" — ok, %u bytes RAM", r.ramUsed);
+                string::f(" — ok, %u bytes RAM%s", r.ramUsed,
+                          shareInputValues ? " (shared inputs)" : "");
             if (!r.warnings.empty()) {
                 patchStatus += string::f(" — %d warning(s)", (int)r.warnings.size());
                 for (const auto& w : r.warnings)
@@ -809,6 +848,11 @@ public:
     }
 
     void process(const ProcessArgs& args) override {
+        // Engine heartbeat (issue #83): first thing, ahead of every early-out
+        // below, so "Rack is stepping me" is reported even on frames that do
+        // no engine work.
+        processHeartbeat.fetch_add(1, std::memory_order_relaxed);
+
         // UAT probe sample: every audio frame, ahead of the tick-divider gate
         // below, so a probe's timing resolution is the audio rate, not the
         // (divided-down) engine tick rate. outputs[]/inputs[] hold their last
@@ -1412,6 +1456,8 @@ public:
             json_boolean(ignoreHwMemoryLimits));
         json_object_set_new(root, "allowExperimentalCircuits",
             json_boolean(allowExperimentalCircuits));
+        json_object_set_new(root, "shareInputValues",
+            json_boolean(shareInputValues));
         json_object_set_new(root, "showRegisterLabels",
             json_boolean(registerLabels.show));
         json_object_set_new(root, "circuitStateStore", storeToJson(storeCopy));
@@ -1444,6 +1490,10 @@ public:
         // on Rack reopen instead of failing with the gate error (#12).
         if (json_t* j = json_object_get(root, "allowExperimentalCircuits"))
             allowExperimentalCircuits = json_boolean_value(j);
+        // Likewise for the shared-input budget (#88): a patch that only fits
+        // with sharing on must come back the same way, not as out of memory.
+        if (json_t* j = json_object_get(root, "shareInputValues"))
+            shareInputValues = json_boolean_value(j);
         if (json_t* j = json_object_get(root, "showRegisterLabels"))
             registerLabels.show = json_boolean_value(j);
         // Load the saved circuit state BEFORE the patch load below, so that
@@ -1573,6 +1623,10 @@ struct DroidMasterBaseWidget : ModuleWidget {
     // ISSUE-5: while the chainOk debounce is holding a still-invalid chain, keep
     // revalidating every frame so the tolerance window advances in real time.
     bool chainRevalPending = false;
+    // issue #83: watches the module's process() heartbeat against wall-clock
+    // time, so a rack nothing is stepping says so instead of reporting the
+    // empty chain that a stopped process() leaves behind. UI thread only.
+    vcvoid::status::StallMonitor stallMonitor;
     // Register-label distribution (issue #26): what we last published, so the
     // string work only runs when the patch or the physical chain changed.
     uint32_t lastLabelGen = 0;
@@ -1884,13 +1938,72 @@ struct DroidMasterBaseWidget : ModuleWidget {
         // engine keeps its previous rate until a frame runs — acceptable.
         if (m->timingDirty.exchange(false))
             m->applyTiming(APP->engine->getSampleRate());
+        // Is anything stepping the engine (issue #83)? The UI thread keeps
+        // running when the audio engine does not, so this is the one place
+        // that can tell. Do it BEFORE the chain revalidation below, which it
+        // gates: chainPhysical is assembled by process(), so a chain scanned
+        // while nothing is stepping reports "chain has nothing" no matter what
+        // is plugged in.
+        //
+        // A bypassed module is not stepped either, and is not stalled — Rack
+        // calls processBypass() instead, on purpose. Reset rather than
+        // suppress, so unbypassing starts the startup grace afresh instead of
+        // reporting a stall accumulated while bypassed.
+        bool stalled;
+        if (m->isBypassed()) {
+            stallMonitor.reset();
+            stalled = false;
+        } else {
+            stalled = stallMonitor.update(
+                m->processHeartbeat.load(std::memory_order_relaxed),
+                system::getTime());
+        }
+        if (stalled != m->engineStalled.load(std::memory_order_relaxed)) {
+            // Who owns Rack's engine clock, sampled on the edge (UI thread —
+            // getMasterModule() carries no documented off-thread contract, and
+            // this is the one frame the answer is needed on). It decides the
+            // card's sentence: a module holding the clock and not running it
+            // is a dead audio device, no module holding it means Rack's own
+            // fallback thread is the one that stopped.
+            m->engineClockHeldByModule.store(
+                APP->engine->getMasterModule() != nullptr,
+                std::memory_order_relaxed);
+            m->engineStalled.store(stalled, std::memory_order_relaxed);
+            // Note what is deliberately NOT done here: the stale chain verdict
+            // is not cleared. chainError/chainFix are written under the
+            // master's engineMutex and read by the bridge's HTTP thread under
+            // the same lock, so blanking them from this edge would add a
+            // second, unsynchronised writer to a std::string the other thread
+            // may be copying. The verdict is suppressed where it is REPORTED
+            // instead (status::chainErrorToReport), which needs no writer at
+            // all. The only state this edge touches is its own.
+            if (stalled) {
+                chainRevalPending = false;   // widget-local
+            } else {
+                // Leaving the stall: the chain signature process() tracks may
+                // not have changed across it, so nothing else would ask for a
+                // revalidation. Ask for one — unforced, so the ISSUE-5
+                // tolerance window absorbs the frames the relay needs to
+                // republish the chain. chainDebounce is UI-thread-only, like
+                // chainRevalPending.
+                m->chainDebounce.invalidFrames = 0;
+                m->chainDirty.store(true);
+            }
+            m->statusDirty.store(true);
+        }
+
         // UI-thread chain revalidation: recompute chainError/chainOk against the
         // current patch's declared controllers whenever the chain or patch changed.
         // chainRevalPending keeps us revalidating every frame while the ISSUE-5
         // debounce is holding a still-invalid chain, so the tolerance window
         // advances in real time (a static wrong chain still errors within it).
-        bool force = m->chainForce.exchange(false);
-        if (m->chainDirty.exchange(false) || chainRevalPending || force) {
+        // `stalled` short-circuits the whole block, and the request flags are
+        // left SET so they are consumed on the frame the engine comes back
+        // (a patch loaded during a stall keeps its chainForce): the inputs the
+        // check reads are produced by process(), so while it is not running
+        // there is nothing to revalidate against.
+        bool force = !stalled && m->chainForce.exchange(false);
+        if (!stalled && (m->chainDirty.exchange(false) || chainRevalPending || force)) {
             {
                 std::lock_guard<std::mutex> lock(m->engineMutex);
                 if (m->engine) {
@@ -1967,6 +2080,7 @@ struct DroidMasterBaseWidget : ModuleWidget {
     void appendStatusCard(Menu* menu, DroidMasterBase* m,
                           const std::string& patchPath,
                           const std::string& stateStatus, unsigned ramUsed,
+                          bool ramShared,
                           const std::vector<std::string>& declared,
                           const std::vector<std::string>& physical) {
         vcvoid::status::Report rep = m->statusReport();
@@ -2025,7 +2139,12 @@ struct DroidMasterBaseWidget : ModuleWidget {
         std::string shortName = vcvoid::status::elideMiddle(fileName, 32);
         if (!fileName.empty()) {
             std::string line = shortName;
-            if (ramUsed) line += string::f(" · %u bytes RAM", ramUsed);
+            // #88: name the accounting mode next to the figure when it is not
+            // the Forge's default, so "97 496 bytes" can never be read as the
+            // number the Forge would show with its own preferences.
+            if (ramUsed)
+                line += string::f(" · %u bytes RAM%s", ramUsed,
+                                  ramShared ? " (shared)" : "");
             if (!stateStatus.empty()) line += " · " + stateStatus;
             addWrapped(line);
         }
@@ -2107,7 +2226,26 @@ struct DroidMasterBaseWidget : ModuleWidget {
             // off. Flag it so the failure is diagnosable from the UI.
             midiWarn = m->engine && m->engine->patchUsesMidi() && !m->engine->midiAvailable();
         }
-        appendStatusCard(menu, m, patchPath, stateStatus, ramUsed, declared, physical);
+        appendStatusCard(menu, m, patchPath, stateStatus, ramUsed, m->shareInputValues,
+                         declared, physical);
+        // #88: the Forge's deploy preference "Detect and share duplicate values
+        // for inputs". It changes nothing about how the patch RUNS — only how
+        // much RAM it is charged, and therefore whether an over-budget patch is
+        // refused — so it belongs with the budget the card above reports, not
+        // with the Experimental switches. Off by default, like the Forge's own.
+        menu->addChild(createBoolMenuItem("Share duplicate input values", "",
+            [m]() { return m->shareInputValues; },
+            [m](bool v) {
+                m->shareInputValues = v;
+                // Re-evaluate immediately: the figure on the card, and whether
+                // an over-budget patch loads at all, both move with this.
+                std::string path;
+                {
+                    std::lock_guard<std::mutex> lock(m->engineMutex);
+                    path = m->patchPath;
+                }
+                if (!path.empty()) m->loadPatchFile(path);
+            }));
         menu->addChild(new MenuSeparator);
         menu->addChild(createMenuLabel("chain: " + chainLine));
         if (midiWarn)

@@ -50,3 +50,24 @@ Output binary: `build/droidcheck`. Neither `build/` nor `vendor/` is committed
 Exit code = number of patches that have at least one problem (`0` = all clean),
 so it works as a CI gate. Note that "deprecated circuit" counts as a problem —
 older community patches often trip this on the blue-7 firmware.
+
+### Parity oracles
+
+Two extra flags make droidcheck the reference for vcvoid's own
+re-implementations rather than just a validator:
+
+- `--labels` dumps the register labels the Forge's parser found
+  (`LABEL <file> …`) — the oracle for `engine/src/labels.cpp`, diffed by
+  `make labelcheck`.
+- `--ram` dumps the Forge's RAM figure per patch in both deploy modes
+  (`RAM <file> plain|shared <bytes>`), where *shared* is the preference
+  "Detect and share duplicate values for inputs"
+  (`compression/deduplicate_jacks`) — the oracle for `engine/src/ram.cpp`,
+  diffed by `make ramcheck`. The preference is written to a scratch
+  `QSettings` ini under the temp directory, never the real per-user store.
+  Because `Patch::usedRAM` charges the X7 only when the patch needs one while
+  the *budget* rule always reserves it on a MASTER, the flag adds that 864
+  bytes back, so both sides report the number the load decision is made on.
+
+Both flags are additive: a run still prints its normal OK/FAIL report, and the
+`LABEL`/`RAM` prefixes grep cleanly out of it.

@@ -4,7 +4,7 @@
 
 // The master's visible error state (issue #46), model half. Three things are
 // pinned here: the hardware LED blink codes, against the worked examples in
-// manual/basics.md §5.3; the five-state verdict that drives the ring, the
+// manual/basics.md §5.3; the verdict that drives the ring, the
 // matrix, the tooltip and the context-menu card; and the words that same
 // verdict is reported in over the UAT bridge (issue #49), end to end from the
 // real loader's error tags.
@@ -151,7 +151,7 @@ TEST(blink_line_past_the_codeable_range_falls_back_to_the_global_form) {
     for (int i = 0; i < 16; i++) CHECK(sameColor(b.led[i], kRed));
 }
 
-// --- the five states -----------------------------------------------------
+// --- the states ----------------------------------------------------------
 
 TEST(status_no_patch_is_a_grey_ring_and_a_dark_matrix) {
     Report r;
@@ -348,6 +348,176 @@ TEST(status_a_chain_error_outranks_warnings) {
     CHECK(s.state == State::ChainError);
 }
 
+// --- a stalled engine (issue #83) ----------------------------------------
+// Rack steps nothing while its primary Audio module has no device selected, so
+// the chain the master sees is empty and the chain check used to call that a
+// controller mismatch. StallMonitor is the UI-thread watcher that tells the
+// two apart; these pin both it and the verdict it feeds.
+
+TEST(stall_monitor_is_quiet_while_the_heartbeat_advances) {
+    StallMonitor sm;
+    uint64_t beat = 0;
+    double t = 100.0;
+    CHECK(!sm.update(beat, t));            // first call only takes a baseline
+    for (int i = 0; i < 200; i++) {        // 200 frames at 60 fps = 3.3 s
+        t += 1.0 / 60.0;
+        beat++;
+        CHECK(!sm.update(beat, t));
+    }
+    CHECK(!sm.stalled());
+}
+
+TEST(stall_monitor_trips_half_a_second_after_the_heartbeat_stops) {
+    StallMonitor sm;
+    double t = 0.0;
+    sm.update(1, t);
+    sm.update(2, t += 0.1);                // seen moving: the short limit applies
+    CHECK(!sm.update(2, t + 0.49));
+    CHECK(sm.update(2, t + kStallSeconds));
+    CHECK(sm.stalled());
+}
+
+TEST(stall_monitor_gives_a_never_stepped_module_a_longer_grace) {
+    // Opening an audio device takes a moment; a module that has not ticked
+    // ONCE yet is starting up, not stalled.
+    StallMonitor sm;
+    sm.update(0, 0.0);
+    CHECK(!sm.update(0, kStallSeconds + 0.01));
+    CHECK(!sm.update(0, kStallStartupSeconds - 0.01));
+    CHECK(sm.update(0, kStallStartupSeconds));
+}
+
+TEST(stall_monitor_recovers_on_the_next_heartbeat) {
+    StallMonitor sm;
+    sm.update(7, 0.0);
+    sm.update(8, 0.1);
+    CHECK(sm.update(8, 5.0));              // stalled for seconds
+    CHECK(!sm.update(9, 5.1));             // one beat is enough to clear it
+    CHECK(!sm.stalled());
+    // …and it re-arms with the SHORT limit, not the startup grace.
+    CHECK(sm.update(9, 5.1 + kStallSeconds));
+}
+
+TEST(stall_monitor_ignores_a_clock_that_goes_backwards) {
+    StallMonitor sm;
+    sm.update(1, 1000.0);
+    sm.update(2, 1000.1);
+    CHECK(!sm.update(2, 990.0));           // re-baselines instead of reporting
+    CHECK(!sm.update(2, 990.0 + 0.2));
+    CHECK(sm.update(2, 990.0 + kStallSeconds));
+}
+
+TEST(stall_monitor_reset_restores_the_startup_grace) {
+    StallMonitor sm;
+    sm.update(1, 0.0);
+    sm.update(2, 0.1);
+    CHECK(sm.update(2, 1.0));
+    sm.reset();                            // e.g. the module was bypassed
+    CHECK(!sm.stalled());
+    CHECK(!sm.update(2, 1.0));
+    CHECK(!sm.update(2, 1.0 + kStallSeconds));
+    CHECK(sm.update(2, 1.0 + kStallStartupSeconds));
+}
+
+TEST(status_a_stalled_engine_says_so_instead_of_a_chain_error) {
+    // The exact shape of the bug: a rack nothing is stepping. The chain scan
+    // has nothing to look at, so it reports a mismatch — which must never
+    // reach the card.
+    Report r;
+    r.havePatch = true;
+    r.loadOk = true;
+    r.engineStalled = true;
+    r.engineClockHeldByModule = true;
+    r.chainError = "controller 1: patch declares db8e, chain has nothing";
+    r.chainFix = "db8e";
+    Status s = evaluate(r);
+    CHECK(s.state == State::EngineStalled);
+    CHECK(s.message.find("chain") == std::string::npos);
+    CHECK(s.title == std::string(kEngineStalledTitle));
+    CHECK(s.ringVisible && sameColor(s.ring, kRingAmber));
+    CHECK(s.matrix == Matrix::Mirror);     // frozen where the last tick left it
+    CHECK(!s.blink.active);
+    CHECK(s.line == 0);
+}
+
+TEST(stall_message_names_the_clock_that_stopped) {
+    // Rack steps the rack from an audio module that has claimed the engine
+    // clock, or — only when no module has — from its own CPU-clocked fallback
+    // thread (Engine.hpp). The fix differs, so the sentence must too: naming
+    // the wrong one is the failure mode issue #83 is about. In particular
+    // "the Audio module has no device" is NOT the message for a stall, since
+    // a device-less audio module never claims the clock and the fallback
+    // thread keeps the rack running (checked live on Rack 2.6.6).
+    std::string held = engineStalledMessage(true);
+    std::string fallback = engineStalledMessage(false);
+    CHECK(held != fallback);
+    CHECK(held.find("audio device") != std::string::npos);
+    CHECK(held.find("Audio module") != std::string::npos);
+    CHECK(held.find("clock") != std::string::npos);
+    CHECK(fallback.find("No module holds the engine clock") != std::string::npos);
+    // And the verdict carries whichever one applies.
+    Report r;
+    r.havePatch = true;
+    r.loadOk = true;
+    r.engineStalled = true;
+    r.engineClockHeldByModule = true;
+    CHECK(evaluate(r).message == held);
+    r.engineClockHeldByModule = false;
+    CHECK(evaluate(r).message == fallback);
+}
+
+TEST(status_a_stalled_engine_outranks_warnings_too) {
+    Report r;
+    r.havePatch = true;
+    r.loadOk = true;
+    r.engineStalled = true;
+    r.warningCount = 2;
+    r.warningMessage = "circuit 'copy' is deprecated";
+    CHECK(evaluate(r).state == State::EngineStalled);
+}
+
+TEST(status_a_load_failure_outranks_a_stalled_engine) {
+    // The loader runs on the UI thread: its verdict is true whether or not
+    // anything is stepping, and it is the more actionable of the two.
+    Report r;
+    r.havePatch = true;
+    r.loadOk = false;
+    r.errorCount = 1;
+    r.errorLine = 7;
+    r.errorCode = ErrorCode::UnknownRegister;
+    r.errorMessage = "There is no register 'O9'";
+    r.engineStalled = true;
+    CHECK(evaluate(r).state == State::LoadFailed);
+    // …and a master with no patch at all has nothing to say about stalling.
+    Report empty;
+    empty.engineStalled = true;
+    CHECK(evaluate(empty).state == State::NoPatch);
+}
+
+TEST(stall_suppresses_the_chain_verdict_where_it_is_reported) {
+    // The rule the bridge's /status and /diagnostics apply to chainError (and
+    // to the chainFix that explains it). SUPPRESSED, not cleared: those fields
+    // belong to the widget, which writes them under the master's engineMutex
+    // while the bridge's HTTP thread copies them under the same lock — a
+    // stall that reached in and blanked them would be a second, unlocked
+    // writer racing that copy. So the reader drops the value instead.
+    const std::string err = "controller 1: patch declares db8e, chain has nothing";
+    CHECK(chainErrorToReport(true, err).empty());
+    CHECK(chainErrorToReport(false, err) == err);
+    CHECK(chainErrorToReport(true, "").empty());
+    CHECK(chainErrorToReport(false, "").empty());
+}
+
+TEST(status_a_live_engine_still_reports_its_chain_error) {
+    // The guard above must not swallow the real thing.
+    Report r;
+    r.havePatch = true;
+    r.loadOk = true;
+    r.engineStalled = false;
+    r.chainError = "controller 1: patch declares db8e, chain has nothing";
+    CHECK(evaluate(r).state == State::ChainError);
+}
+
 // --- fitting the words into the window (issue #46 review) ----------------
 // Rack sizes a tooltip and a menu to their widest line, so the card's sentences
 // are wrapped in the model. These pin the wrap rules the widget relies on.
@@ -446,10 +616,24 @@ TEST(wrap_a_long_status_line_becomes_several_tooltip_lines) {
 // The UAT bridge serialises this model rather than deriving a second verdict of
 // its own, so the vocabulary it promises is pinned here.
 
+// The bridge's /status and /diagnostics both answer with these words, and the
+// smoke test asserts on them literally.
+TEST(status_state_names_are_the_bridge_vocabulary) {
+    CHECK(std::string(stateName(State::NoPatch)) == "no-patch");
+    CHECK(std::string(stateName(State::LoadFailed)) == "load-failed");
+    CHECK(std::string(stateName(State::EngineStalled)) == "engine-stalled");
+    CHECK(std::string(stateName(State::Warnings)) == "warnings");
+    CHECK(std::string(stateName(State::ChainError)) == "chain-error");
+    CHECK(std::string(stateName(State::Running)) == "running");
+}
+
 TEST(status_severity_follows_the_state) {
     CHECK(severityFor(State::NoPatch) == Severity::Info);      // not an error
     CHECK(severityFor(State::LoadFailed) == Severity::Error);
     CHECK(severityFor(State::ChainError) == Severity::Error);
+    // #83: the host stopped stepping, which is nothing the patch or the module
+    // did and nothing either can fix — loud enough to notice, not an error.
+    CHECK(severityFor(State::EngineStalled) == Severity::Warning);
     CHECK(severityFor(State::Warnings) == Severity::Warning);
     CHECK(severityFor(State::Running) == Severity::Ok);
     CHECK(std::string(severityName(Severity::Ok)) == "ok");

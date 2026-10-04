@@ -83,6 +83,17 @@ controllers"**, which names what it will add and places them in the right
 order (one undo removes them again); it only ever adds, so if a module of the
 wrong type is in the way the item is greyed out and says why.
 
+**Out of memory?** The master's menu reports the patch's RAM next to its name,
+counted exactly as the DROID master counts it. The Forge can deploy a patch with
+duplicate input values *shared* — one jack-table entry serving every input
+written the same way — which on a big generated patch saves ten kilobytes or
+more. If the Forge takes your patch but vcvoid calls it out of memory, that is
+the difference: tick **"Share duplicate input values"** in the master's menu,
+the same preference the Forge calls *"Detect and share duplicate values for
+inputs"*. It changes nothing about how the patch runs, only what it is charged,
+and it is off by default to match the Forge. The figure then reads
+"… bytes RAM (shared)".
+
 **Patch state:** like the hardware, a master remembers buttons, fader positions,
 sequences and presets — but per patch, so switching patches never mixes them up.
 The master's menu shows where the current state came from; details in
@@ -96,12 +107,15 @@ exist *only here*, not in DROID firmware and not in the Forge. A patch using one
 **"Allow experimental circuits"** in the master's context menu (under
 *Experimental*) to load such a patch. The setting is saved with your Rack patch.
 
-Today there are three: [`trigseq`](manual/circuits/experimental/trigseq.md), a
+Today there are four: [`trigseq`](manual/circuits/experimental/trigseq.md), a
 declarative trigger sequencer that plays a rhythm you write as text
 (`pattern = "x...x.x."`); [`midihirescc`](manual/circuits/experimental/midihirescc.md),
-14-bit MIDI CC output; and [`crossfader2`](manual/circuits/experimental/crossfader2.md),
+14-bit MIDI CC output; [`crossfader2`](manual/circuits/experimental/crossfader2.md),
 a `crossfader` with a smooth cubic curve and a loop mode, for drawing an LFO
-waveform on eight motor faders. See
+waveform on eight motor faders; and
+[`motoquencer2`](manual/circuits/experimental/motoquencer2.md), a `motoquencer`
+whose gate-probability fader can be narrowed to just the random chances or just
+the trig conditions. See
 [the experimental index](manual/circuits/experimental/index.md).
 
 ### Claude Code

@@ -10,6 +10,12 @@ struct ParamLine {
     int line = 0;
     Atom a, b, c;        // canonical A*B+C
     bool simple = false; // single atom, no operators
+    // The source was the `X - REG` shorthand. We store it as A=REG, B=-1, C=X;
+    // the Forge's form6 stores the same expression as A=-1, B=REG, C=X. The
+    // arithmetic is identical, but the Forge's shared-value key is built from
+    // the atoms IN SLOT ORDER, so RAM accounting has to know to swap A and B
+    // back when it builds that key (ram.cpp, issue #88).
+    bool subtractForm = false;
 };
 
 struct CircuitSection {

@@ -113,6 +113,12 @@ cd tools/droidcheck
 - `make sizecheck` — patch-size measurement parity: the engine's deployed
   (abbreviated) size vs `tools/inicompress.py`, over every patch in `patches/`.
   Part of `make test`; skips itself when the Forge checkout is missing.
+- `make ramcheck` — RAM-accounting parity (issue #88): `engine/src/ram.cpp` vs
+  the Forge's own `Patch::usedRAM` (`droidcheck --ram`), over every patch in
+  `patches/`, in BOTH deploy modes — the preference "Detect and share duplicate
+  values for inputs" off and on. Part of `make test`; skips itself when
+  droidcheck is unbuilt, and names any patch our loader refuses outright (the
+  deliberately broken UAT fixtures), which is not comparable.
 - `make labelcheck` — register-label extraction parity: our
   `engine/src/labels.cpp` vs the Forge's own parser (`droidcheck --labels`),
   over every patch in `patches/`. Part of `make test`; skips itself when
