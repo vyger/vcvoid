@@ -76,16 +76,27 @@ trap cleanup EXIT
 
 # do_http METHOD PATH [JSON-BODY] -> sets HTTP_CODE, HTTP_BODY. Never aborts
 # under set -e; connection failures surface as HTTP_CODE=000.
+#
+# One curl process per call cannot reuse a connection, so each call still
+# costs one ephemeral port. What matters for issue #97 is that we stay on
+# HTTP/1.1 WITHOUT `Connection: close`: the bridge then keeps the socket open
+# and curl is the side that closes when it exits, so the 30s TIME_WAIT lands
+# on the client's socket instead of piling up on the server against :2601.
+# Don't add --http1.0 or a `Connection: close` header here.
 do_http() {
     local method="$1" path="$2" body="${3:-}" resp
     if [ -n "$body" ]; then
-        resp=$(curl -s -m 15 -w '\n%{http_code}' -X "$method" \
+        resp=$(curl -s --http1.1 -m 15 -w '\n%{http_code}' -X "$method" \
                -H 'Content-Type: application/json' -d "$body" "$BASE$path") || resp=$'\n000'
     else
-        resp=$(curl -s -m 15 -w '\n%{http_code}' -X "$method" "$BASE$path") || resp=$'\n000'
+        resp=$(curl -s --http1.1 -m 15 -w '\n%{http_code}' -X "$method" "$BASE$path") || resp=$'\n000'
     fi
     HTTP_CODE=$(printf '%s' "$resp" | tail -n1)
     HTTP_BODY=$(printf '%s' "$resp" | sed '$d')
+    if [ "$HTTP_CODE" = "000" ]; then
+        echo "--- HTTP 000 on $method $path: lsof -nP -iTCP:2601 ---" >&2
+        lsof -nP -iTCP:2601 >&2 || echo "(lsof found nothing or is unavailable)" >&2
+    fi
 }
 
 assert_code() {
@@ -204,6 +215,18 @@ for _ in $(seq 1 60); do
 done
 [ "$HTTP_CODE" = "200" ] || fail "master $MASTER_ID never registered (last HTTP $HTTP_CODE)"
 echo "ok: master registered"
+
+# --- precondition: Rack is actually stepping the rack (issue #83) ------------
+# Rack runs its CPU-clocked fallback thread only when there is NO primary Audio
+# module; an Audio module that is present with no device selected steps nothing
+# at all. Every timing-, chain- and register-dependent assertion below then
+# fails for a reason that has nothing to do with this build, so ask the master
+# — which now knows — once, here, and say what to do about it.
+do_http GET "/master/$MASTER_ID/status"
+if [ "$(echo "$HTTP_BODY" | jq -r '.engineStalled // false')" = "true" ]; then
+    fail "the Rack engine is not running: nothing has stepped master $MASTER_ID for ~0.5 s. Select a device on Rack's Audio module (or delete the Audio module, which hands Rack back to its CPU clock), then re-run."
+fi
+echo "ok: engine is stepping (.engineStalled false)"
 
 # --- diagnostics: no-patch, before this run loads anything --------------------
 # (issue #46: the structured record the panel's error display derives from.)

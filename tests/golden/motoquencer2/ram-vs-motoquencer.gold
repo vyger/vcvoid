@@ -1,0 +1,12 @@
+# Companion to ram.gold: the identical lines under the real [motoquencer]
+# (base 1184) must report exactly 4 bytes less than [motoquencer2] (base 1188).
+#   x7 864 + m4 312 + base 1184 + clock 40 + output 4 + constants 16 = 2420
+experimental
+expect_ram 2420
+patch <<<
+[m4]
+[motoquencer]
+    clock = I1
+    cv    = O1
+>>>
+@0 expect O1 0 tol 1e-4

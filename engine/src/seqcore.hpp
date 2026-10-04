@@ -52,6 +52,9 @@
 //     holdcv.
 //   * gate probability: the full musical table (always / random 50-25-12% /
 //     even / odd / every-4th / conditional) with a per-turn counter + engine RNG.
+//     The EXPERIMENTAL motoquencer2 can narrow which of the eight the fader lane
+//     offers (probabilityModeRaw / probMode_ below); the stored values, the table
+//     itself and the playing rule are identical in every mode.
 //   * pitch accumulator (accumulatorrange) — the four accumulator fader
 //     positions (idx 4..7 of randomize-CV) shifting the note per turn.
 //   * per-step CV randomization (randomize-CV idx 1..7, and only 1..3 once the
@@ -286,11 +289,19 @@ public:
         if (!chainMain_) {
             chainRawFm_ = (int)std::lround(in("fadermode").value(s));
             chainRawBm_ = (int)std::lround(in("buttonmode").value(s));
+            chainProbMode_ = probabilityModeRaw(s);
         }
         const SeqCore* main = chainMain_ ? chainMain_ : this;
         bool faderOwner, buttonOwner;
         int  fadermode  = resolveChainMode(main->chainRawFm_, inChain, 7, faderOwner);
         int  buttonmode = resolveChainMode(main->chainRawBm_, inChain, 3, buttonOwner);
+        // `probabilitymode` follows the same rule as the two modes above: the
+        // gate-probability lane is ONE menu the whole chain shares, so it is read
+        // off the chain main only and a member's own input is ignored. Unlike
+        // fadermode there is no `+10` addressing — the lane's notch set is not a
+        // per-member choice — so the main's value is used verbatim. Cached per
+        // tick into probMode_, which every reader of the lane consults.
+        probMode_ = clampi(main->chainProbMode_, 0, 2);
 
         // --- presets / clear (always run) -----------------------------------
         bool recall = handlePresets(s);
@@ -347,10 +358,15 @@ public:
         bulkEdit_ = in("bulkedit").value(s) >= kHigh;
         bulkStampFrom_ = -1;
 
-        // recall the motors when the visible page/mode changed
-        if (page != shownPage_ || fadermode != shownMode_) recall = true;
+        // recall the motors when the visible page/mode changed. A changed
+        // `probabilitymode` moves the notch grid under the gate-probability lane,
+        // so it recalls too: the stored values do not move, but each fader has to
+        // travel to its value's position in the NEW notch set.
+        if (page != shownPage_ || fadermode != shownMode_ ||
+            probMode_ != shownProbMode_) recall = true;
         shownPage_ = page;
         shownMode_ = fadermode;
+        shownProbMode_ = probMode_;
 
         // --- fader + touch editing (only while showing) ---------------------
         if (showFaders || showButtons)
@@ -404,6 +420,13 @@ public:
     // puts the eight gate-probability settings in the 25-cell RING instead
     // (blue / light green / magenta by position, a different scheme entirely).
     virtual bool plateFollowsFaderLane() const { return false; }
+
+    // Which notches the gate-probability lane offers, supplied by the circuit
+    // rather than read here: only the EXPERIMENTAL motoquencer2 has the
+    // `probabilitymode` input, and the hardware circuits must stay bit-for-bit
+    // what they were, so motoquencer / encoquencer inherit this 0 (all eight
+    // notches) and every table below collapses to its original form.
+    virtual int probabilityModeRaw(EngineState& s) { (void)s; return 0; }
 
     // --- persistent state (DROIDSTA.BIN contract) ---------------------------
     // The dialed sequence (all per-step parameters) + the 4 presets + slot + the
@@ -522,7 +545,7 @@ protected:
     }
 
     // The sequencer peer immediately before this one in patch order, or nullptr
-    // if there is none or it is not a motoquencer/encoquencer.
+    // if there is none or it is not one of the sequencer circuits.
     SeqCore* prevSeqPeer() const {
         if (!peers_ || peerIndex_ <= 0) return nullptr;
         return asSeq((*peers_)[peerIndex_ - 1]);
@@ -532,8 +555,8 @@ protected:
     static SeqCore* asSeq(Circuit* c) {
         if (!c || !c->def) return nullptr;
         std::string n = c->def->name;
-        return (n == "motoquencer" || n == "encoquencer") ? static_cast<SeqCore*>(c)
-                                                          : nullptr;
+        return (n == "motoquencer" || n == "encoquencer" || n == "motoquencer2")
+                   ? static_cast<SeqCore*>(c) : nullptr;
     }
 
     int pages() const {
@@ -607,12 +630,48 @@ protected:
         return n < 1 ? 1 : n;
     }
 
+    // ---- gate-probability notch subsets (probabilitymode) ------------------
+    // The stored value is always the same 0..7 `gateprob` index, so presets,
+    // saved state, the LED codes and probabilityPlays() never change. What
+    // `probabilitymode` changes is only which of the eight the FADER can reach:
+    // the tables below list the reachable stored indices bottom notch first,
+    // which is the order storedPos / setLaneValue / nudgeLaneValue already use
+    // (index 0 at the bottom, 7 = "always" at the top).
+    //
+    //   mode 0  all eight, i.e. the identity — motoquencer's behaviour verbatim
+    //   mode 1  the random chances: conditional, 12%, 25%, 50%, always
+    //   mode 2  the trig conditions: every 4th, every odd, every even, always
+    static const uint8_t* probTable(int mode, int& count) {
+        static const uint8_t kAll[8]    = {0, 1, 2, 3, 4, 5, 6, 7};
+        static const uint8_t kRandom[5] = {0, 1, 3, 6, 7};
+        static const uint8_t kTrig[4]   = {2, 4, 5, 7};
+        switch (mode) {
+            case 1:  count = 5; return kRandom;
+            case 2:  count = 4; return kTrig;
+            default: count = 8; return kAll;
+        }
+    }
+    // The notch a stored gate-probability value sits at under the active mode.
+    // A value OUTSIDE the mode's subset (dialled in another mode, restored from
+    // state, or written by a preset) is never rewritten — it keeps playing — so
+    // its fader shows the nearest reachable notch instead; on a tie the lower
+    // index wins, deterministically.
+    int probNotchOf(int stored) const {
+        int n; const uint8_t* t = probTable(probMode_, n);
+        int best = 0, bestd = 8;
+        for (int i = 0; i < n; i++) {
+            int d = (int)t[i] - stored; if (d < 0) d = -d;
+            if (d < bestd) { bestd = d; best = i; }
+        }
+        return best;
+    }
+
     // Notch count for a fadermode (pitch depends on the scale).
     int notchesFor(EngineState& s, int fm) {
         switch (fm) {
             case 0: return pitchNotches(s);
             case 1: return 8;
-            case 2: return 8;
+            case 2: { int n; probTable(probMode_, n); return n; }
             case 3: return 16;
             case 4: return 4;
             case 5: return 8;
@@ -632,7 +691,9 @@ protected:
                 return fc::notchRest(idx, N);
             }
             case 1: return cur_.randcv[step] / 7.0f;
-            case 2: return cur_.gateprob[step] / 7.0f;
+            // In mode 0 this is the plain gateprob/7 (notch i rests at i/7).
+            case 2: { int n; probTable(probMode_, n);
+                      return fc::notchRest(probNotchOf(cur_.gateprob[step]), n); }
             case 3: return (cur_.repeats[step] - 1) / 15.0f;
             case 4: return cur_.gatepat[step] / 3.0f;
             case 5: return (cur_.ratchets[step] - 1) / 7.0f;
@@ -797,8 +858,14 @@ protected:
             }
             case 1: { int v = snapIdx(8); bool ch = v != cur_.randcv[step];
                       cur_.randcv[step] = (uint8_t)v; snapped = v / 7.0f; return ch; }
-            case 2: { int v = snapIdx(8); bool ch = v != cur_.gateprob[step];
-                      cur_.gateprob[step] = (uint8_t)v; snapped = v / 7.0f; return ch; }
+            // The gate-probability lane snaps to the notches `probabilitymode`
+            // leaves reachable; in mode 0 the table is the identity over 8 and
+            // this is the plain snapIdx(8) / v/7 it always was.
+            case 2: { int n; const uint8_t* t = probTable(probMode_, n);
+                      int notch = snapIdx(n); int v = t[notch];
+                      bool ch = v != cur_.gateprob[step];
+                      cur_.gateprob[step] = (uint8_t)v;
+                      snapped = fc::notchRest(notch, n); return ch; }
             case 3: { int v = snapIdx(16); bool ch = (v + 1) != cur_.repeats[step];
                       int was = stepLength(step);
                       cur_.repeats[step] = (uint8_t)(v + 1);
@@ -823,6 +890,26 @@ protected:
     // entry point the skins call for a fader that moved).
     // Returns true if the stored value actually changed (drives gate auto-on).
     bool applyEdit(EngineState& s, int fm, int step, float pos, float& snapped) {
+        // A gate probability outside the notches `probabilitymode` currently
+        // offers keeps its value and is merely DISPLAYED at the nearest reachable
+        // notch (probNotchOf). The surface hands that commanded position back on
+        // the following tick, so without this guard the readback alone would
+        // rewrite the step to the notch it is only shown at — the opposite of the
+        // promise that narrowing the lane never touches a step until its fader is
+        // moved. While the fader is still inside that notch, nothing moved and
+        // there is nothing to edit. In mode 0 the displayed notch IS the stored
+        // value, so this is exactly the "unchanged value" case that already
+        // returned false, and motoquencer's behaviour is untouched. The machine
+        // writers (luckyfaders, the bulkedit stamp) call setLaneValue directly and
+        // are deliberately NOT guarded: they mean to write a value.
+        if (fm == 2) {
+            int n; probTable(probMode_, n);
+            int notch = fc::notchIndex(clampf(pos, 0.0f, 1.0f), n);
+            if (notch == probNotchOf(cur_.gateprob[step])) {
+                snapped = fc::notchRest(notch, n);
+                return false;
+            }
+        }
         BulkBypass bypass(*this);            // constantlength is off under bulkedit
         bool changed = setLaneValue(s, fm, step, pos, snapped);
         if (changed) bulkStamp(s, fm, step);
@@ -1215,8 +1302,17 @@ protected:
             case 11:  // luckygateprob: random gateprob with amount as an inverted floor:
                 for (int i : T) {                 // amount 1 -> always 7, amount 0 -> floor 1.
                     int minv = clampi((int)std::lround(1.0f + amount * 6.0f), 1, 7);
-                    int span = 7 - minv;
-                    cur_.gateprob[i] = (uint8_t)clampi(minv + (span > 0 ? (int)(U() * (span + 1)) : 0), 1, 7);
+                    // Draw among the notches `probabilitymode` leaves reachable at
+                    // or above the floor, so lucky can never put back a value the
+                    // lane has hidden (7 = always is in every subset, so the
+                    // candidate list is never empty). In mode 0 the table is the
+                    // identity over 0..7, `lo` lands exactly on minv and this is
+                    // the plain minv + U()*(8-minv) it has always been.
+                    int n; const uint8_t* t = probTable(probMode_, n);
+                    int lo = 0; while (lo < n - 1 && t[lo] < minv) lo++;
+                    int span = (n - 1) - lo;
+                    int notch = lo + (span > 0 ? (int)(U() * (span + 1)) : 0);
+                    cur_.gateprob[i] = t[clampi(notch, lo, n - 1)];
                 }
                 break;
             case 12:  // luckyrepeats: random repeats 1..round(1+amount*15).
@@ -1395,7 +1491,16 @@ protected:
             }
             case 1: { int v = nudgeIdx(cur_.randcv[step], 7); bool ch = v != cur_.randcv[step];
                       cur_.randcv[step] = (uint8_t)v; return ch; }
-            case 2: { int v = nudgeIdx(cur_.gateprob[step], 7); bool ch = v != cur_.gateprob[step];
+            // An encoder detent moves one NOTCH of the active subset, starting
+            // from where the stored value shows (probNotchOf). Mode 0: the table
+            // is the identity, so this is nudgeIdx(gateprob, 7) unchanged — and
+            // that is the only case reachable today, since `probabilitymode`
+            // exists on motoquencer2 (an M4 circuit) and there is no encoder
+            // counterpart. Written for the subset anyway so the lane's three
+            // writers (fader, encoder, lucky) cannot disagree if one lands.
+            case 2: { int n; const uint8_t* t = probTable(probMode_, n);
+                      int v = t[nudgeIdx(probNotchOf(cur_.gateprob[step]), n - 1)];
+                      bool ch = v != cur_.gateprob[step];
                       cur_.gateprob[step] = (uint8_t)v; return ch; }
             case 3: { int v = nudgeIdx(cur_.repeats[step] - 1, 15); bool ch = (v + 1) != cur_.repeats[step];
                       int was = stepLength(step);
@@ -2177,6 +2282,11 @@ protected:
     bool linkToNext_ = false;
     int  chainRawFm_ = 0;
     int  chainRawBm_ = 0;   // likewise the chain-wide buttonmode
+    int  chainProbMode_ = 0;   // likewise the chain-wide probabilitymode (#85)
+    // The gate-probability notch subset in force this tick, resolved from the
+    // chain main's `probabilitymode` (0 = all eight, i.e. plain motoquencer).
+    int  probMode_ = 0;
+    int  shownProbMode_ = 0;   // the subset the motors were last commanded for
     // Transport events published by the chain main and mirrored by its members
     // (see transportLinked). Monotonic counters rather than one-tick flags, so a
     // member cannot miss one; accEvtReset_ says whether the latest accumulator
