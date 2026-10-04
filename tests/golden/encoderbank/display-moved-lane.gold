@@ -1,0 +1,57 @@
+# encoderbank: the DB8E shows the lane you just turned (issue #22, Group B).
+# Spec: encoderbank.md "Display" — the circuit "automatically updates the
+# display whenever you turn one of the encoders. It then shows the updated
+# value of `outputX` of that encoder."
+#
+# The title is the AUTOMATIC header of that lane's own output target, derived
+# the same way the scalar circuits' is (issue #19): a cable drops its leading
+# underscore, an `O` register becomes "Output O<n>". fadermatrix.md states the
+# rule for the whole bank family: "The title in the display is derived from the
+# target of the `outputN` parameter."
+#
+#   lane 1 -> _ATTACK    -> header "ATTACK"
+#   lane 2 -> O2         -> header "Output O2"
+#   lane 3 -> _GAIN      -> header "GAIN"
+#
+# outputscale/outputoffset are left at their defaults so the displayed value is
+# the plain virtual value: 96 detents = one full turn = 1.0.
+tickrate 100
+patch <<<
+[e4]
+[db8e]
+
+[encoderbank]
+    firstencoder = E1.1
+    smooth       = 0
+    output1      = _ATTACK
+    output2      = O2
+    output3      = _GAIN
+
+# Cables need a reader or the patch will not load.
+[mixer]
+    input1 = _ATTACK
+    input2 = _GAIN
+    output = O1
+>>>
+# Merely loading the patch leaves the screen dark.
+@0 expectdisplay D1 off
+# Turn encoder 1 half a turn: the screen takes lane 1's value and lane 1's title.
+@1 turn E1.1 48
+@1 expectdisplay D1 value 0.5 tol 1e-6
+@1 expectdisplay D1 header "ATTACK"
+# Nothing moves: the screen holds.
+@2 expectdisplay D1 value 0.5 tol 1e-6
+@2 expectdisplay D1 header "ATTACK"
+# Turn encoder 2: the screen switches to lane 2, value AND title.
+@3 turn E1.2 24
+@3 expectdisplay D1 value 0.25 tol 1e-6
+@3 expectdisplay D1 header "Output O2"
+# ... and to lane 3.
+@4 turn E1.3 96
+@4 expectdisplay D1 value 1.0 tol 1e-6
+@4 expectdisplay D1 header "GAIN"
+# Back to lane 1 (which has not moved since @1): a further turn re-takes the
+# screen with its own title, not lane 3's.
+@5 turn E1.1 24
+@5 expectdisplay D1 value 0.75 tol 1e-6
+@5 expectdisplay D1 header "ATTACK"

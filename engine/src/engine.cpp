@@ -34,33 +34,72 @@ const std::string& Engine::textForNumber(float v) const {
 // name. Still a SPEC-GAP: targets other than an `O` register or a cable (a
 // gate, an `N` normalization) are unmeasured and get no header rather than a
 // guessed wording.
-static int deriveAutoHeader(const CompiledCircuit& cc, std::vector<std::string>& texts) {
+//
+// Issue #22 extends the same derivation to the bank circuits (encoderbank,
+// faderbank, fadermatrix), which show the value of the element you just moved
+// and therefore need one title PER ELEMENT. fadermatrix.md states the rule
+// outright — "The title in the display is derived from the target of the
+// `outputN` parameter. If that goes into a cable, the name of that cable is
+// used as the title" — and the same paragraph settles what an explicit
+// `header` means: it overrides, for the whole bank ("there is just one
+// `header` input. If that is always the same, it's probably not very
+// helpful"). encoderbank.md/faderbank.md carry the identical `header` jack
+// text, so all three banks follow the one rule.
+static int headerTextForTarget(const Atom& target, std::vector<std::string>& texts) {
+    if (target.kind == Atom::Kind::Cable) {
+        std::string n = target.cable;
+        if (!n.empty() && n[0] == '_') n.erase(0, 1);
+        return internText(n, texts);
+    }
+    if (target.kind == Atom::Kind::Register && target.reg.type == 'O')
+        return internText("Output " + toString(target.reg), texts);
+    return 0;
+}
+
+// True for an `output` jack: the scalar `output` plus fadermatrix's row jacks
+// `output1`..`output4`. (`button1`.., `ledvalue1`.. and friends are not titles.)
+static bool isOutputJackName(const char* n) {
+    if (std::strncmp(n, "output", 6) != 0) return false;
+    for (const char* r = n + 6; *r; r++)
+        if (*r < '0' || *r > '9') return false;
+    return true;
+}
+
+// Fills in Circuit::autoHeaderText (scalar) and Circuit::autoHeaderTexts (one
+// per array-output element, issue #22). `c` must already have allocateSlots()
+// run, since the per-element table is indexed by output slot.
+static void deriveAutoHeaders(const CompiledCircuit& cc, Circuit& c,
+                              std::vector<std::string>& texts) {
     // Only circuits that can actually show a header get one derived: otherwise
     // every `[copy] output = O1` in every patch would intern a dead string.
     bool canDisplay = false;
     for (unsigned j = 0; j < cc.def->numJacks && !canDisplay; j++)
         canDisplay = !std::strcmp(cc.def->jacks[j].name, "header");
-    if (!canDisplay) return 0;
+    if (!canDisplay) return;
 
-    const Atom* target = nullptr;
+    // An explicit `header` always wins — for the WHOLE circuit, banks included
+    // (fadermatrix.md: "You can use `header` to override this. But there is
+    // just one `header` input"). Nothing to derive, element-wise or otherwise.
+    for (const auto& p : cc.params)
+        if (p.def && !std::strcmp(p.def->name, "header")) return;
+
+    const Atom* scalar = nullptr;
     for (const auto& p : cc.params) {
-        if (!p.def) continue;
-        // An explicit `header` always wins; nothing to derive.
-        if (!std::strcmp(p.def->name, "header")) return 0;
-        // Scalar `output` only: a bank's output1..N names one element, not the
-        // circuit, and picking the first would mislabel the whole bank (#22).
-        if (!p.def->isInput && p.def->count == 1 && !std::strcmp(p.def->name, "output"))
-            target = &p.a;
+        if (!p.def || p.def->isInput || !isOutputJackName(p.def->name)) continue;
+        if (p.def->count == 1 && !std::strcmp(p.def->name, "output")) {
+            scalar = &p.a;   // the plain-value circuits: one title for the circuit
+            continue;
+        }
+        // A bank element (`output3`, `output24`): the title names THAT element,
+        // because that is what the screen is showing when it moves.
+        int t = headerTextForTarget(p.a, texts);
+        if (!t) continue;
+        if (c.autoHeaderTexts.empty()) c.autoHeaderTexts.assign(c.outputs.size(), 0);
+        int slot = c.slotIndex(p.def, p.arrayIndex);
+        if (slot >= 0 && slot < (int)c.autoHeaderTexts.size())
+            c.autoHeaderTexts[size_t(slot)] = t;
     }
-    if (!target) return 0;
-    if (target->kind == Atom::Kind::Cable) {
-        std::string n = target->cable;
-        if (!n.empty() && n[0] == '_') n.erase(0, 1);
-        return internText(n, texts);
-    }
-    if (target->kind == Atom::Kind::Register && target->reg.type == 'O')
-        return internText("Output " + toString(target->reg), texts);
-    return 0;
+    if (scalar) c.autoHeaderText = headerTextForTarget(*scalar, texts);
 }
 
 // Migration signature (issue #42): what this circuit is WIRED TO, as a stable
@@ -187,7 +226,7 @@ LoadResult Engine::load(const std::string& patchText, const LoadOptions& opts) {
             !std::strcmp(n, "midihirescc")) usesMidi_ = true;
         auto c = makeCircuit(cc.def->name);
         c->allocateSlots(cc.def);
-        c->autoHeaderText = deriveAutoHeader(cc, texts_);
+        deriveAutoHeaders(cc, *c, texts_);
         for (auto& p : cc.params) {
             int slot = c->slotIndex(p.def, p.arrayIndex);
             if (p.def->isInput)

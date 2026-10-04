@@ -1,0 +1,46 @@
+# encoderbank: an explicit `header` covers the WHOLE bank (issue #22, Group B).
+#
+# The per-element automatic title is only the SMART DEFAULT. fadermatrix.md
+# settles what the explicit input means, and it is the same single `header`
+# jack on all three bank circuits: "You can use `header` to override this. But
+# there is just one `header` input. If that is always the same, it's probably
+# not very helpful." So the override is deliberately bank-wide — every lane
+# shows its own value under the one caption — and the engine derives no
+# per-element titles at all when `header` is set.
+#
+# `display = 0` suppression still applies to the bank as a whole (second
+# circuit, on its own encoders: it never touches the screen).
+tickrate 100
+patch <<<
+[e4]
+[e4]
+[db8e]
+
+[encoderbank]
+    firstencoder = E1.1
+    smooth       = 0
+    header       = "FILTER"
+    output1      = O1
+    output2      = O2
+
+[encoderbank]
+    firstencoder = E2.1
+    smooth       = 0
+    display      = 0
+    output1      = O3
+    output2      = O4
+>>>
+@0 expectdisplay D1 off
+@1 turn E1.1 48
+@1 expectdisplay D1 value 0.5 tol 1e-6
+@1 expectdisplay D1 header "FILTER"
+# A different lane: new value, same caption.
+@2 turn E1.2 24
+@2 expectdisplay D1 value 0.25 tol 1e-6
+@2 expectdisplay D1 header "FILTER"
+# The suppressed bank leaves the screen on the first bank's last reading.
+@3 turn E2.1 96
+@3 turn E2.2 96
+@3 expectdisplay D1 value 0.25 tol 1e-6
+@3 expectdisplay D1 header "FILTER"
+@3 expect O3 1.0 tol 1e-6

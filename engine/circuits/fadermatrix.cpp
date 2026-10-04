@@ -29,7 +29,10 @@
 //
 // SPEC-GAPs / conventions: shared with motorfader/fadercore (instant motor,
 // haptics + LEDs panel-only, startvalue as a raw 0..1 position quantized through
-// the notches). 6 presets store all 16 cells at once.
+// the notches). 6 presets store all 16 cells at once. The DB8E display tier
+// (hardware.md §6.12) is per CELL (issue #22) — see the write at the end of
+// tick(); this circuit's manual page is where the rule is stated for the whole
+// bank family.
 #include "../src/registry.hpp"
 #include "../src/uihelpers.hpp"
 #include "../src/fadercore.hpp"
@@ -91,9 +94,34 @@ public:
                 }
                 wasFader_[r][c] = onFader ? faderI : -1;
 
-                out(kOutputName[r], c + 1).set(s, fc::outputOf(value_[r][c], notches));
+                cellValue_[r * n_ + c] = fc::outputOf(value_[r][c], notches);
+                out(kOutputName[r], c + 1).set(s, cellValue_[r * n_ + c]);
                 out(kButtonName[r], c + 1).set(s, button ? 1.0f : 0.0f);
             }
+
+        // --- DB8E screen (issue #22) -----------------------------------------
+        // fadermatrix.md is the one manual page that spells the bank rule out:
+        // the display "updates ... whenever you move one of the faders. The
+        // title in the display is derived from the target of the `outputN`
+        // parameter. If that goes into a cable, the name of that cable is used
+        // as the title." And on the explicit input: "You can use `header` to
+        // override this. But there is just one `header` input" — so an explicit
+        // header covers the whole matrix, and only the AUTOMATIC title is per
+        // cell. Cells are scanned row-major, so the flat index is r*n+c and the
+        // header comes from output{r+1}{c+1}.
+        //
+        // Plain value-changed per cell, select-gated write with unconditional
+        // change detection — the same rules as the other two banks (see
+        // encoderbank.cpp). A cell that `rowcolumn` is not currently mapping
+        // cannot be moved by hand, but a preset recall still changes it, and
+        // motorfader's hardware measurement says a recall shows.
+        int cells = n_ * n_;
+        int cell = ui::firstChangedElement(disp_, cellValue_, cells);
+        if (circuitSelected && cell >= 0 &&
+            ui::showValueWithHeader(*this, s, cellValue_[cell],
+                                    autoHeaderForOutput(kOutputName[cell / n_],
+                                                        cell % n_ + 1)))
+            disp_[cell].accept(cellValue_[cell]);
     }
 
     // Persisted: every cell's value + all 6 preset banks + current slot.
@@ -234,6 +262,9 @@ private:
     int   n_ = 4;
     int   firstFader_ = 1;
     float value_[kMax][kMax] = {};
+    // Display bookkeeping, flat and row-major over the live n_ x n_ matrix.
+    float cellValue_[kMax * kMax] = {};
+    ui::DisplayBaseline disp_[kMax * kMax];
     float preset_[kPresets][kMax][kMax] = {};
     int   wasFader_[kMax][kMax];   // fader index each cell was on last tick (-1 = none)
     fc::RecallHold hold_[kMax][kMax];   // recall stays authoritative while held (#45)
