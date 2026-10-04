@@ -95,7 +95,8 @@ public:
     // not patched (issue #22, Group C). notebuttons.md: "The title of the
     // display is derived from the target of the `output` parameter or, if that
     // is not patched, from `semitone`." Default: no fallback, which is every
-    // circuit whose manual names only `output`.
+    // circuit whose manual names only `output`. A circuit with NO `header` jack
+    // that names one here gets a derived title too (encoquencer: `cv`).
     virtual const char* autoHeaderFallbackJack() const { return nullptr; }
 
     // Per-ELEMENT automatic DB8E headers for the bank circuits (issue #22):

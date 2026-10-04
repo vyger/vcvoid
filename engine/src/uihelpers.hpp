@@ -148,8 +148,15 @@ inline int firstChangedElement(DisplayBaseline* base, const float* values, int c
 // add their own payload. Returns the claimed DisplayState, or nullptr when the
 // write was suppressed (`display = 0`, no such DB8E) or refused — in which case
 // the caller must leave its baseline untouched so the write re-attempts.
+//
+// `fixedTitle` is for circuits that choose their title PER EDIT and have no
+// `header` jack at all — encoquencer: "Pitch", "Gate", the patch's
+// `cvname`/`gatename`, ... (issue #22, Group C). -1 (the default) is the
+// ordinary rule: an explicit `header` wins, else `autoHeaderText`. Any other
+// value is the title's text number (0 = none) and `header` is not consulted —
+// it must not be, since in() on a jack the circuit type lacks has no slot.
 inline DisplayState* claimCircuitScreen(Circuit& c, EngineState& s,
-                                        int autoHeaderText) {
+                                        int autoHeaderText, int fixedTitle = -1) {
     DisplayState* d = targetDisplay(c, s);
     if (!d) return nullptr;
     bool accepted = (d->owner == &c) ||
@@ -160,8 +167,11 @@ inline DisplayState* claimCircuitScreen(Circuit& c, EngineState& s,
     d->active = true;
     // An explicit `header` wins; otherwise the title the Engine derived from the
     // `output` target at load (0 = none).
-    d->headerText = c.in("header").connected() ? floorText(c.in("header").value(s))
-                                               : autoHeaderText;
+    if (fixedTitle >= 0)
+        d->headerText = fixedTitle;
+    else
+        d->headerText = c.in("header").connected() ? floorText(c.in("header").value(s))
+                                                   : autoHeaderText;
     d->owner = &c;
     d->ownerTier = kTierCircuit;
     d->lingerUntilTick = s.tick;   // no hold of its own
@@ -170,8 +180,9 @@ inline DisplayState* claimCircuitScreen(Circuit& c, EngineState& s,
 }
 
 inline bool showValueWithHeader(Circuit& c, EngineState& s, float value,
-                                int autoHeaderText, uint8_t numbermode = 0) {
-    DisplayState* d = claimCircuitScreen(c, s, autoHeaderText);
+                                int autoHeaderText, uint8_t numbermode = 0,
+                                int fixedTitle = -1) {
+    DisplayState* d = claimCircuitScreen(c, s, autoHeaderText, fixedTitle);
     if (!d) return false;
     d->layout = DisplayLayout::Value;
     d->value = value;
@@ -195,8 +206,9 @@ inline bool showCircuitValue(Circuit& c, EngineState& s, float value,
 // usual header. `textNumber` is normally a CIRCUIT-provided string interned at
 // load through Circuit::internTexts — recorder's Recording/Playback/Bypass —
 // since the point of this variant is words that are not in the patch.
-inline bool showCircuitText(Circuit& c, EngineState& s, int textNumber) {
-    DisplayState* d = claimCircuitScreen(c, s, c.autoHeaderText);
+inline bool showCircuitText(Circuit& c, EngineState& s, int textNumber,
+                            int fixedTitle = -1) {
+    DisplayState* d = claimCircuitScreen(c, s, c.autoHeaderText, fixedTitle);
     if (!d) return false;
     d->layout = DisplayLayout::Text;
     d->bodyText = textNumber;
@@ -226,12 +238,39 @@ inline bool showStateBubbles(Circuit& c, EngineState& s, int count, int index) {
 // number counted in semitones from C, under the ordinary derived header. The
 // payload stays a number; "C#" vs "Db" and the glyphs are the screen's choice.
 inline bool showNoteName(Circuit& c, EngineState& s, int semitone,
-                         bool withOctave) {
-    DisplayState* d = claimCircuitScreen(c, s, c.autoHeaderText);
+                         bool withOctave, int fixedTitle = -1) {
+    DisplayState* d = claimCircuitScreen(c, s, c.autoHeaderText, fixedTitle);
     if (!d) return false;
     d->layout = DisplayLayout::NoteName;
     d->note.semitone = (int16_t)semitone;
     d->note.withOctave = withOctave;
+    return true;
+}
+
+// GatePattern layout (issue #22, Group C): the sequencer's gate pattern for a
+// step, as its index 0..3 — measured on hardware (encoquencer): 0 = four
+// squares with the first filled, 1 = four filled squares, 2 = one long bar,
+// 3 = the words "tie to next". The pictures are the screen's business.
+inline bool showGatePattern(Circuit& c, EngineState& s, int pattern,
+                            int fixedTitle = -1) {
+    DisplayState* d = claimCircuitScreen(c, s, c.autoHeaderText, fixedTitle);
+    if (!d) return false;
+    d->layout = DisplayLayout::GatePattern;
+    d->gatePattern = (uint8_t)(pattern & 3);
+    return true;
+}
+
+// Range layout (issue #22, Group C): a sequencer's playing range as its first
+// and last step, 1-based — measured on hardware (encoquencer) as "1-2" under
+// "Playing range". Two numbers, not a string, so no text has to be interned
+// for every pair.
+inline bool showStepRange(Circuit& c, EngineState& s, int first, int last,
+                          int fixedTitle = -1) {
+    DisplayState* d = claimCircuitScreen(c, s, c.autoHeaderText, fixedTitle);
+    if (!d) return false;
+    d->layout = DisplayLayout::Range;
+    d->range.first = (uint8_t)first;
+    d->range.last = (uint8_t)last;
     return true;
 }
 
