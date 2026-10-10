@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Generate engine/gen/jacktables.gen.{hpp,cpp} from the Droid Forge's
-droidfirmware.json (vendored via tools/droidcheck), PLUS vcvoid's own
+droidfirmware.json (vendored via tools/droidcheck), PLUS voidbot's own
 experimental-circuit overlay (engine/experimental.json, same schema).
 Overlay circuits are emitted with experimental=true; firmware circuits with
 false. Deterministic output; generated files are committed. Rerun with
@@ -90,7 +90,7 @@ def main():
     circuits = sorted(fw["circuits"].items())
     assert len(circuits) == 76, f"expected 76 firmware circuits, got {len(circuits)}"
 
-    # vcvoid-only experimental circuits, appended after the firmware ones (the
+    # voidbot-only experimental circuits, appended after the firmware ones (the
     # assertion above deliberately covers the firmware half only). Load policy
     # — ordering and the firmware-collision check — lives in overlay.py, which
     # tools/droidcheck/build.sh imports too, so both consumers cannot disagree.
@@ -240,7 +240,7 @@ struct CircuitDef {{
     const char* name;
     unsigned ramSize;        // base RAM, bytes
     bool deprecated;
-    bool experimental;       // vcvoid-only circuit; not DROID firmware, not in the Forge
+    bool experimental;       // voidbot-only circuit; not DROID firmware, not in the Forge
     const JackDef* jacks;    // inputs first, then outputs
     unsigned numJacks;
 }};

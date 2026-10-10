@@ -18,7 +18,7 @@
 # cyan 0.2, and they replace whatever the buttonmode would have painted for as
 # long as fader mode 2 is the lane on the faders.
 #
-# SPEC-GAP: the manual gives no blink rates ("various speeds" / "fast"). vcvoid
+# SPEC-GAP: the manual gives no blink rates ("various speeds" / "fast"). voidbot
 # blinks at half duty, 2 Hz at 50%, 4 Hz at 25%, 6 Hz at 12% (faster = less
 # likely) and 8 Hz -- the fastest code -- for the conditional notch 1. The phase
 # is free-running off engine time, so at tickrate 100 one 2 Hz cycle is 50 ticks

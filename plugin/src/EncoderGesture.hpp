@@ -34,7 +34,7 @@
 // worst, never a spurious toggle (the level can only rise via step()'s
 // Pending-hold commit or release()'s pulse, both single transitions).
 
-namespace vcvoid {
+namespace voidbot {
 
 struct EncoderGesture {
     static constexpr float kTurnPx = 3.f;        // travel that classifies a turn
@@ -124,4 +124,4 @@ struct EncoderGesture {
     bool level() const { return held || pulseLeft > 0.f || externalHold; }
 };
 
-} // namespace vcvoid
+} // namespace voidbot

@@ -1,6 +1,6 @@
 ---
 name: droid-patch
-description: Write or edit a DROID patch file (droid.ini or any other .ini name) and validate it. USER-INVOCABLE ONLY — trigger exclusively when the user explicitly runs /droid-patch or directly asks in this turn to "write me a droid patch" / "edit this droid.ini" / equivalent. Never trigger proactively or infer this intent from surrounding work (e.g. touching the vcvoid engine/plugin code does not imply the user wants a patch written).
+description: Write or edit a DROID patch file (droid.ini or any other .ini name) and validate it. USER-INVOCABLE ONLY — trigger exclusively when the user explicitly runs /droid-patch or directly asks in this turn to "write me a droid patch" / "edit this droid.ini" / equivalent. Never trigger proactively or infer this intent from surrounding work (e.g. touching the voidbot engine/plugin code does not imply the user wants a patch written).
 ---
 
 # droid-patch
@@ -37,7 +37,7 @@ Before writing anything non-trivial, check:
 
 ## Experimental circuits — opt-in only, never by default
 
-`manual/circuits/experimental/` documents **vcvoid-only** circuits (today:
+`manual/circuits/experimental/` documents **voidbot-only** circuits (today:
 `trigseq`). They are NOT DROID: no firmware has them, the Forge rejects them,
 and a patch using one **will not run on hardware**.
 
@@ -110,7 +110,7 @@ text becomes the tooltip, is not length-constrained, and may be omitted.
 ### `[SHORT]` is 7-8 characters, hard
 
 `[SHORT]` is what the on-panel chip shows, and **only 7 or 8 characters
-reliably stay visible in both the Forge and vcvoid** — spaces included. Longer
+reliably stay visible in both the Forge and voidbot** — spaces included. Longer
 text is silently ellipsized, so the end of the name is simply lost on the
 panel. Treat 8 as the ceiling and prefer 7.
 
@@ -258,14 +258,14 @@ button always lasts long enough, so the bug only shows when a patch presses
 them itself. That covers `buttonN`/`button` from a cable, and also `clear`,
 `loadpreset` and `savepreset` fed by a trigger cable.
 
-Measured on a MASTER18 (vcvoid #87, 2026-10-04):
+Measured on a MASTER18 (voidbot #87, 2026-10-04):
 - With a patch of about 100 kB RAM and running sequencers, short computed
   presses missed about a third to a half of the time.
 - A 10 ms press still missed. Every press held 50 ms or more landed, 24 of 24.
 - **Delaying** a short press did not help; only **lengthening** it does.
 - With a light patch, nothing was missed.
 
-vcvoid runs every circuit every cycle, so Rack never shows the miss. Stretch
+voidbot runs every circuit every cycle, so Rack never shows the miss. Stretch
 the press with `gatetool` (or `gatelength` on a `triggerdelay`):
 
 ```droid

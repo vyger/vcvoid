@@ -80,7 +80,7 @@ struct DroidM4 : ChainModule {
     }
 
     void applyOwnLabels() override {
-        using namespace vcvoid::labels;
+        using namespace voidbot::labels;
         applyParamBank(this, FADER_PARAMS, 4, 'P', registerLabels, "Fader %d");
         applyParamBank(this, TOUCH_PARAMS, 4, 'B', registerLabels, "Touch plate %d",
                        true);
@@ -288,7 +288,7 @@ struct DroidM4Fader : VCVSlider {
     }
 };
 
-struct DroidM4Widget : VcvoidModuleWidget {
+struct DroidM4Widget : VoidbotModuleWidget {
     DroidM4Widget(DroidM4* module) {
         setModule(module);
         const auto* L = droid::layout::find("m4");

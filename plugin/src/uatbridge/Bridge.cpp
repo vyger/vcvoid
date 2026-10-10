@@ -23,11 +23,11 @@
 #include <sys/socket.h>
 #include <sys/time.h>
 #include <unistd.h>
-#define VCVOID_UAT_BRIDGE_SOCKETS 1
+#define VOIDBOT_UAT_BRIDGE_SOCKETS 1
 #endif
 
-#ifndef VCVOID_GIT_HASH
-#define VCVOID_GIT_HASH "unknown"
+#ifndef VOIDBOT_GIT_HASH
+#define VOIDBOT_GIT_HASH "unknown"
 #endif
 
 namespace uat {
@@ -78,10 +78,10 @@ static json_t* jerr(const char* msg) {
 }
 
 void Bridge::start() {
-#if !defined(VCVOID_UAT_BRIDGE_SOCKETS)
+#if !defined(VOIDBOT_UAT_BRIDGE_SOCKETS)
     return;   // no socket listener on this platform (see the includes above)
 #endif
-    const char* env = std::getenv("VCVOID_UAT_BRIDGE");
+    const char* env = std::getenv("VOIDBOT_UAT_BRIDGE");
     if (!env || !*env || g_bridge) return;
     g_bridge = new Bridge();
     // Rack's APP macro resolves a THREAD-LOCAL context (context.hpp: "You
@@ -156,7 +156,7 @@ std::string Bridge::handleMasterStatus(DroidMasterBase* m, int* code) {
         chain = m->chainPhysical;
         x7 = m->x7Present;
         // Suppressed while stalled: the scan that produced it never ran.
-        chainError = vcvoid::status::chainErrorToReport(stalled, m->chainError);
+        chainError = voidbot::status::chainErrorToReport(stalled, m->chainError);
         // Same diagnostic the context menu computes (MasterBase.hpp
         // appendContextMenu / ISSUE-3): a MIDI patch with no reachable MIDI
         // hardware runs silently. Reuse the engine's own predicates under the
@@ -197,7 +197,7 @@ std::string Bridge::handleMasterStatus(DroidMasterBase* m, int* code) {
     // next frame — so the reply used to describe the state BEFORE the load
     // (a failing patch over a running one replied "running").
     json_object_set_new(o, "state",
-        json_string(vcvoid::status::stateName(m->currentState())));
+        json_string(voidbot::status::stateName(m->currentState())));
     // …and the raw fact behind it, which `state` can outrank: a master with no
     // patch reports "no-patch" whether or not anything is stepping it, but
     // "is this Rack running at all" is a question a harness has to be able to
@@ -227,7 +227,7 @@ std::string Bridge::handleMasterStatus(DroidMasterBase* m, int* code) {
 // caller has to re-parse with its own regex.
 //
 // It is the PANEL's verdict, serialised: state, title, message, line and the
-// hardware error code all come out of vcvoid::status::evaluate (MasterStatus.hpp,
+// hardware error code all come out of voidbot::status::evaluate (MasterStatus.hpp,
 // issue #46), the same pure model that paints the ring, the blink code and the
 // context-menu card. There is deliberately no second derivation here — a test
 // that asserts on this record is asserting on what a human would see on the
@@ -252,12 +252,12 @@ std::string Bridge::handleMasterDiagnostics(DroidMasterBase* m, int* code) {
     }
     // statusReport() takes engineMutex itself, hence the separate block above —
     // exactly the arrangement handleMasterStatus already uses for currentState().
-    vcvoid::status::Status s = vcvoid::status::evaluate(m->statusReport());
-    vcvoid::status::CodeNames cn = vcvoid::status::codeNames(s.code);
+    voidbot::status::Status s = voidbot::status::evaluate(m->statusReport());
+    voidbot::status::CodeNames cn = voidbot::status::codeNames(s.code);
     json_t* o = json_object();
-    json_object_set_new(o, "state", json_string(vcvoid::status::stateName(s.state)));
+    json_object_set_new(o, "state", json_string(voidbot::status::stateName(s.state)));
     json_object_set_new(o, "severity",
-        json_string(vcvoid::status::severityName(vcvoid::status::severityFor(s.state))));
+        json_string(voidbot::status::severityName(voidbot::status::severityFor(s.state))));
     json_object_set_new(o, "code", json_string(cn.code));
     json_object_set_new(o, "codeColor", json_string(cn.color));
     json_object_set_new(o, "line", json_integer(s.line));
@@ -275,9 +275,9 @@ std::string Bridge::handleMasterDiagnostics(DroidMasterBase* m, int* code) {
     // is the same wrong answer in a different field.
     bool stalled = m->engineStalled.load(std::memory_order_relaxed);
     json_object_set_new(o, "chainFix",
-        json_string(vcvoid::status::chainErrorToReport(stalled, m->chainFix).c_str()));
+        json_string(voidbot::status::chainErrorToReport(stalled, m->chainFix).c_str()));
     json_object_set_new(o, "chainFixBlocker",
-        json_string(vcvoid::status::chainErrorToReport(stalled, m->chainFixBlocker).c_str()));
+        json_string(voidbot::status::chainErrorToReport(stalled, m->chainFixBlocker).c_str()));
     json_object_set_new(o, "patchPath", json_string(patchPath.c_str()));
     json_object_set_new(o, "stateLine", json_string(stateLine.c_str()));
     // The free-text line stays available so a failure report can quote exactly
@@ -421,7 +421,7 @@ std::string Bridge::handleMasterResetState(DroidMasterBase* m, int* code) {
 bool Bridge::checkParamTarget(int64_t moduleId, int paramId, int* code, std::string* body) {
     if (!uiAttached()) {
         *code = 503;
-        *body = "{\"error\":\"ui bridge not attached; add any vcvoid module or launch from the runbook template\"}";
+        *body = "{\"error\":\"ui bridge not attached; add any voidbot module or launch from the runbook template\"}";
         return false;
     }
     rack::engine::Module* mod = APP->engine->getModule(moduleId);
@@ -695,7 +695,7 @@ static json_t* probeStatsToJson(const ProbeStats& st) {
 // at UAT scale (one client, short probes).
 //
 // Two backends:
-//  - Registered vcvoid master: arms the ring buffer in DroidMasterBase
+//  - Registered voidbot master: arms the ring buffer in DroidMasterBase
 //    (armProbe/disarmProbe, MasterBase.hpp), which process() fills every
 //    audio frame under probeMutex_. Best timing fidelity (audio-rate).
 //  - Any other module: sampled right here on the HTTP thread, once per
@@ -782,10 +782,10 @@ std::string Bridge::handleProbe(const Request& req, int* code) {
         stats = computeProbeStats(samples, timestampsMs, rateHz);
     } else {
         // Foreign backend needs APP (thread-local context) — not yet applied
-        // if no vcvoid widget has stepped (installBridgeWidget notes it).
+        // if no voidbot widget has stepped (installBridgeWidget notes it).
         if (!rack::contextGet()) {
             *code = 503;
-            return "{\"error\":\"rack context not yet available; add a vcvoid module\"}";
+            return "{\"error\":\"rack context not yet available; add a voidbot module\"}";
         }
         rack::engine::Module* mod = APP->engine->getModule(moduleId);
         if (!mod) {
@@ -846,7 +846,7 @@ std::string Bridge::handleProbe(const Request& req, int* code) {
 template <class F>
 static std::string uiCall(F fn, int* code) {
     static const char* kUnattached =
-        "{\"error\":\"ui bridge not attached; add any vcvoid module or launch from the runbook template\"}";
+        "{\"error\":\"ui bridge not attached; add any voidbot module or launch from the runbook template\"}";
     Bridge* b = Bridge::instance();
     if (!b || !b->uiAttached()) {
         *code = 503;
@@ -1505,7 +1505,7 @@ std::string Bridge::handleRackQuit(int* code) {
 // that is otherwise only reproducible with an audio device that dies on cue --
 // which is why this verb exists.
 //
-// Freezing hands the clock to the vcvoid master itself. A master never calls
+// Freezing hands the clock to the voidbot master itself. A master never calls
 // stepBlock(), so the engine stops exactly as it does when an audio device
 // stops calling back: no module's process() runs, and nothing else about the
 // rack changes. Unfreezing restores the module that held the clock before
@@ -1545,7 +1545,7 @@ std::string Bridge::handleRackEngineClock(const Request& req, int* code) {
     }
     if (freeze && victimId < 0) {
         *code = 503;
-        return "{\"error\":\"no vcvoid master in the rack to park the engine clock on\"}";
+        return "{\"error\":\"no voidbot master in the rack to park the engine clock on\"}";
     }
     // The victim is re-resolved by id on the UI thread rather than captured as
     // a pointer: the module can be deleted between this HTTP thread and the
@@ -1964,7 +1964,7 @@ std::string Bridge::handlePing(int* code) {
     // 2 -> 3: added POST /master/{id}/add-missing-controllers and the
     // chainFix/chainFixBlocker fields on /diagnostics (issue #69).
     json_object_set_new(o, "bridgeVersion", json_integer(3));
-    json_object_set_new(o, "gitHash", json_string(VCVOID_GIT_HASH));
+    json_object_set_new(o, "gitHash", json_string(VOIDBOT_GIT_HASH));
     return dumpAndFree(o);
 }
 
@@ -2060,7 +2060,7 @@ std::string Bridge::dispatch(const Request& req, bool keepAlive) {
 }
 
 void Bridge::listenLoop() {
-#if defined(VCVOID_UAT_BRIDGE_SOCKETS)
+#if defined(VOIDBOT_UAT_BRIDGE_SOCKETS)
     int srv = socket(AF_INET, SOCK_STREAM, 0);
     int yes = 1;
     setsockopt(srv, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof yes);
@@ -2148,7 +2148,7 @@ void Bridge::listenLoop() {
         if (dropped && !(served && pending.empty())) {
             // Noisy only for real drops: a keep-alive client that just goes
             // away after being served is the normal end of a connection.
-            INFO("vcvoid: uatbridge dropped a stalled/incomplete HTTP connection "
+            INFO("voidbot: uatbridge dropped a stalled/incomplete HTTP connection "
                  "(%zu byte(s) received, errno=%d)", pending.size(), errno);
         }
         if (served && !dropped && !writeFailed) {
@@ -2163,7 +2163,7 @@ void Bridge::listenLoop() {
         }
         close(cli);
     }
-#endif  // VCVOID_UAT_BRIDGE_SOCKETS
+#endif  // VOIDBOT_UAT_BRIDGE_SOCKETS
 }
 
 } // namespace uat

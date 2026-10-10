@@ -2798,7 +2798,7 @@ Note: If you get your *start animation* with just white LEDs instead of colored 
 | green | **Internal patch cable misused**: One of your internal patch cables (see page [60](basics.md)) is not properly used: **1. No input:** One patch cable is only used as output. **2. No output:** One patch cable is only used as input. **3. Double output:** One patch cable is used twice as an output. |
 | magenta | **1. Invalid header of circuit**: DROID was expecting an opening square bracket `[`, but found something else. **2. Invalid parameter line**: DROID was expecting something like `clock = I7`, but found something completely different. Parameters always start with a letter. This is followed by an equals sign. **3. Invalid parameter value**: Your parameter has an invalid value. Please checkout this manual about allowed values for parameters and their exact syntax. |
 
-> **vcvoid note (not DROID).** The emulation reproduces these blink codes on the
+> **voidbot note (not DROID).** The emulation reproduces these blink codes on the
 > **master**'s 4 × 4 matrix: the same colours, the same tens/ones/white-hundreds
 > line encoding. Two deliberate differences, and one addition:
 >
@@ -2810,7 +2810,7 @@ Note: If you get your *start animation* with just white LEDs instead of colored 
 >   patch, red = not running, amber = running with warnings), a hover tooltip,
 >   and a context-menu card with the message, the offending line, and actions to
 >   reload the patch, open it in an editor, or copy the errors. A few of
->   vcvoid's checks are stricter than the hardware's and map onto the nearest
+>   voidbot's checks are stricter than the hardware's and map onto the nearest
 >   code in the tables above; the full mapping is in
 >   `plugin/src/MasterStatus.hpp`. See issue #46.
 

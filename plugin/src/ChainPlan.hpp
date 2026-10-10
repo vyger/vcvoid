@@ -31,7 +31,7 @@
 #include <string>
 #include <vector>
 
-namespace vcvoid {
+namespace voidbot {
 namespace chainplan {
 
 // One module to create, and where to put it.
@@ -117,4 +117,4 @@ inline Plan compute(const std::vector<std::string>& declared, bool wantX7,
 }
 
 } // namespace chainplan
-} // namespace vcvoid
+} // namespace voidbot

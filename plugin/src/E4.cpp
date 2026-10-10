@@ -21,7 +21,7 @@ struct DroidE4 : ChainModule {
     // Per-encoder click/turn/push classifier (EncoderGesture.hpp): the widget
     // feeds it press/move/release on the UI thread; process() steps its
     // timers and fillUpstream publishes its level() as the push bit.
-    vcvoid::EncoderGesture gest[4];
+    voidbot::EncoderGesture gest[4];
     // Select-gated ring image (issue #15): flags bit0 active / bit1 bipolar /
     // bit2 fill / bit3 legacy encoquencer gauge; value, DROID colours, and the
     // select-gated white `led`-param overlay — see chain.hpp DownstreamBlock.
@@ -94,7 +94,7 @@ struct E4RingWidget : Widget {
     }
 };
 
-struct DroidE4Widget : VcvoidModuleWidget {
+struct DroidE4Widget : VoidbotModuleWidget {
     DroidE4Widget(DroidE4* module) {
         setModule(module);
         dw::setupPanel(this, "e4", "E4", 692.f, 2915.f);   // ArtMap unused: geometry below is hand-scaled (sx/sy)

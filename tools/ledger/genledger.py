@@ -73,7 +73,7 @@ def load_existing():
 def main():
     existing = load_existing()
     rows = []
-    # Firmware circuits first, then vcvoid-only experimental ones (#12). Both
+    # Firmware circuits first, then voidbot-only experimental ones (#12). Both
     # live in one circuits: map so status tooling keeps working; the
     # `experimental: true` field is what distinguishes them, so a firmware
     # completion count stays computable.

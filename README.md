@@ -1,13 +1,13 @@
-# vcvoid
+# voidbot
 
 > **Not affiliated with, or endorsed by, Der Mann mit der Maschine.** "DROID" is
 > a trademark of Der Mann mit der Maschine. This is an independent, fan-made
 > emulation. See [Trademark & attribution](#trademark--attribution).
 
-**vcvoid is a [VCV Rack 2](https://vcvrack.com/) plugin that emulates the
+**voidbot is a [VCV Rack 2](https://vcvrack.com/) plugin that emulates the
 [DROID](https://shop.dermannmitdermaschine.de/) modular CV processing system.**
 
-vcvoid runs *real* `droid.ini` patch files — the same text patches you write in
+voidbot runs *real* `droid.ini` patch files — the same text patches you write in
 the [DROID Forge](https://github.com/Zarkuun/droidforge) or edit by hand for
 the physical hardware — inside VCV Rack, reproducing the behavior of the DROID
 master and its controllers/expanders. Point the virtual master at a patch file
@@ -20,18 +20,18 @@ hardware-bound and out of scope (`firefacecontrol`, `outputcalibrator`,
 `sinfonionlink`).
 
 ### Why?
-`vcvoid` can be super useful for droid patch development and testing: bring up [DROID Forge](https://github.com/Zarkuun/droidforge) in one half of your window and [VCV Rack 2](https://vcvrack.com/) in the other, and see the effects of your patch edits in real-time on a real-ish patch before you load it into hardware.
+`voidbot` can be super useful for droid patch development and testing: bring up [DROID Forge](https://github.com/Zarkuun/droidforge) in one half of your window and [VCV Rack 2](https://vcvrack.com/) in the other, and see the effects of your patch edits in real-time on a real-ish patch before you load it into hardware.
 It's also quite helpful if you don't yet have a droid hardware system and are curious about it. Patch up your dream sequencer and play with it in [VCV Rack 2](https://vcvrack.com/). It should be noted though, that there is nothing like playing live with a real hands-on droid system (especially with m4s!)
 
 ## Screenshots
 
 <p align="center">
-  <img src="docs/screenshots/rack.png" alt="vcvoid modules (master, P2B8, B32, two M4s) running a motor-fader performance sequencer patch in VCV Rack, driving VCV VCOs/VCFs and a Befaco Percall" width="760">
+  <img src="docs/screenshots/rack.png" alt="voidbot modules (master, P2B8, B32, two M4s) running a motor-fader performance sequencer patch in VCV Rack, driving VCV VCOs/VCFs and a Befaco Percall" width="760">
 </p>
 
 ## Modules
 
-The plugin appears in Rack under the brand **vcvoid** and provides 14 modules:
+The plugin appears in Rack under the brand **voidbot** and provides 14 modules:
 
 | Module | What it is |
 |--------|------------|
@@ -52,7 +52,7 @@ The plugin appears in Rack under the brand **vcvoid** and provides 14 modules:
 
 ## Using the modules
 
-1. Add a **master** (or **master18**) module from the `vcvoid` brand.
+1. Add a **master** (or **master18**) module from the `voidbot` brand.
 2. Load a `droid.ini` patch via the master's context menu.
 3. Chain controllers and expanders to the **right** of the master. Chain
    position = controller number, exactly like the hardware ribbon chain
@@ -87,7 +87,7 @@ wrong type is in the way the item is greyed out and says why.
 counted exactly as the DROID master counts it. The Forge can deploy a patch with
 duplicate input values *shared* — one jack-table entry serving every input
 written the same way — which on a big generated patch saves ten kilobytes or
-more. If the Forge takes your patch but vcvoid calls it out of memory, that is
+more. If the Forge takes your patch but voidbot calls it out of memory, that is
 the difference: tick **"Share duplicate input values"** in the master's menu,
 the same preference the Forge calls *"Detect and share duplicate values for
 inputs"*. It changes nothing about how the patch runs, only what it is charged,
@@ -101,7 +101,7 @@ The master's menu shows where the current state came from; details in
 
 ### Experimental circuits
 
-vcvoid can also run a small number of **experimental circuits** — circuits that
+voidbot can also run a small number of **experimental circuits** — circuits that
 exist *only here*, not in DROID firmware and not in the Forge. A patch using one
 **will not run on DROID hardware**, so they are refused by default: enable
 **"Allow experimental circuits"** in the master's context menu (under
@@ -133,16 +133,16 @@ tempo and scale
 The skill writes the `.ini` file against the structured manual in `manual/`
 and validates it with the same checks the DROID Forge uses (via
 [`tools/droidcheck`](tools/droidcheck/)) before handing it to you — ready to
-load into a vcvoid master, or onto real hardware.
+load into a voidbot master, or onto real hardware.
 
-**G8 jacks:** On the hardware, each G8 jack is bidirectional. In vcvoid, each
+**G8 jacks:** On the hardware, each G8 jack is bidirectional. In voidbot, each
 jack position has split hit-boxes — the **top half** clicks for the input,
 **bottom half** for the output. Hover tooltips read `G.n gate in` and
 `G.n gate out` to clarify which half is active.
 
 ## Installing
 
-vcvoid is not distributed through the VCV Library; install it by building from
+voidbot is not distributed through the VCV Library; install it by building from
 source. Building requires the
 [VCV Rack SDK](https://vcvrack.com/manual/Building#Setting-up-your-development-environment)
 and a C++17 toolchain. macOS is the tested platform; the code should be
@@ -157,7 +157,7 @@ make install RACK_DIR=/path/to/Rack-SDK   # build + copy into Rack's user plugin
 
 `RACK_DIR` defaults to `../../Rack-SDK`; pass it explicitly if the SDK lives
 elsewhere. After `make install`, launch VCV Rack and the modules appear under
-the `vcvoid` brand.
+the `voidbot` brand.
 
 ## Development
 
@@ -183,7 +183,7 @@ make crosscheck   # validate golden patches against the DROID Forge (parity orac
 
 ## License
 
-vcvoid is licensed **GPL-3.0-or-later**. See [LICENSE](LICENSE).
+voidbot is licensed **GPL-3.0-or-later**. See [LICENSE](LICENSE).
 
 ## Trademark & attribution
 
@@ -195,10 +195,10 @@ vcvoid is licensed **GPL-3.0-or-later**. See [LICENSE](LICENSE).
   licensed [Zarkuun/droidforge](https://github.com/Zarkuun/droidforge) faceplate
   renders (© Der Mann mit der Maschine) **with the author's permission**, on the
   condition that the DROID name and DROID/DMMDM branding are removed — hence the
-  vcvoid wordmark and de-branded panels. The wordmark uses Share Tech Mono (OFL).
+  voidbot wordmark and de-branded panels. The wordmark uses Share Tech Mono (OFL).
   The faceplate author (@Zarkuun) confirmed on 2026-10-03: "I am completely
   fine with this. Please go ahead!"
-  ([issue #1](https://github.com/vyger/vcvoid/issues/1#issuecomment-5966521569)).
+  ([issue #1](https://github.com/vyger/voidbot/issues/1#issuecomment-5966521569)).
 - The **`manual/`** tree is a restructured, machine-readable **derivative of the
   official DROID manual** (firmware blue-7, © Der Mann mit der Maschine). It is
   reproduced here as documentation-of-record for building a faithful emulation —

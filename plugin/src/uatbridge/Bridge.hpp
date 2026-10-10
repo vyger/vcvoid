@@ -2,7 +2,7 @@
 // UAT bridge singleton — localhost HTTP control surface for headless Rack UAT.
 // HTTP thread parses and dispatches; Rack state is touched only via
 // engineMutex-guarded reads, thread-safe Engine calls, or the UI queue
-// drained by BridgeWidget. Env-gated: VCVOID_UAT_BRIDGE.
+// drained by BridgeWidget. Env-gated: VOIDBOT_UAT_BRIDGE.
 #include <atomic>
 #include <chrono>
 #include <functional>
@@ -58,7 +58,7 @@ private:
     std::string handlePing(int* code);
     std::string handleMasterStatus(DroidMasterBase* m, int* code);
     // Issue #46/#49: one structured record of the master's condition — the
-    // panel's own verdict (vcvoid::status::evaluate, ../MasterStatus.hpp)
+    // panel's own verdict (voidbot::status::evaluate, ../MasterStatus.hpp)
     // serialised, so a test asserts on what a human would see.
     std::string handleMasterDiagnostics(DroidMasterBase* m, int* code);
     std::string handleMasterRegisters(DroidMasterBase* m, const Request& req, int* code);

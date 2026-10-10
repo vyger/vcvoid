@@ -1,4 +1,4 @@
-// trigseq — declarative trigger sequencer. EXPERIMENTAL: vcvoid only, not a
+// trigseq — declarative trigger sequencer. EXPERIMENTAL: voidbot only, not a
 // DROID firmware circuit (see docs/adr/0001-experimental-circuits.md). Spec:
 // manual/circuits/experimental/trigseq.md.
 //

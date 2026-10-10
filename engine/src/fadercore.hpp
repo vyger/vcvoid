@@ -82,7 +82,7 @@ inline Result evaluate(float pos, int notches, bool touched) {
 // does not physically travel to the recalled value until the hand comes off —
 // yet the virtual value is the recalled one immediately (that is what makes the
 // documented toggle trick, `button = _T` + `clear = _T` on one fader, work). In
-// vcvoid the panel echoes the unchanged physical position back into the engine
+// voidbot the panel echoes the unchanged physical position back into the engine
 // every frame while the fader counts as held (plugin/src/MasterBase.hpp feeds
 // moveFader under the touch gate), and read back as the source on the next tick
 // that stale position silently undid the recall.

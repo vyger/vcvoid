@@ -28,7 +28,7 @@
 // (issue #88). See the note at the call site for the one correction applied to
 // Patch::usedRAM so that both sides measure the same thing.
 //
-// --experimental allows vcvoid-only EXPERIMENTAL circuits (#12). They are
+// --experimental allows voidbot-only EXPERIMENTAL circuits (#12). They are
 // merged into the embedded firmware description at build time so the Forge
 // model can parse them, but WITHOUT this flag each use is reported as a
 // problem — a clean default run must keep meaning "the real Forge would accept
@@ -176,7 +176,7 @@ int main(int argc, char **argv)
                 << (problems.count() + experimentalUses.count()) << " problem(s)\n";
             for (const QString &name : experimentalUses)
                 out << "        [experimental] Circuit '" << name
-                    << "' is experimental (vcvoid only, not available on DROID "
+                    << "' is experimental (voidbot only, not available on DROID "
                        "hardware). Pass --experimental to allow it.\n";
             for (auto *p : problems) {
                 const CursorPosition &pos = p->getCursorPosition();

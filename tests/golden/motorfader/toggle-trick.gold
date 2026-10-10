@@ -10,7 +10,7 @@
 # The recall must STAY. On hardware the motor is disabled while a finger is on
 # the fader/plate, so the fader does not physically follow the recall until the
 # hand comes off — yet the virtual value is the recalled one from the recall tick
-# onward. vcvoid's panel echoes the (unchanged) physical position into the engine
+# onward. voidbot's panel echoes the (unchanged) physical position into the engine
 # every frame while the fader counts as held (plugin/src/MasterBase.hpp feeds
 # moveFader under the touch gate), which is what `move F1 <same position>` below
 # models: that echo must NOT overwrite the recall.

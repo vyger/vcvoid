@@ -42,7 +42,7 @@
 // reload starts with nothing held, so a patch can never come back with a
 // mystery button stuck down.
 
-namespace vcvoid {
+namespace voidbot {
 
 // One button's hold state, and the decision table for what the engine sees.
 //
@@ -111,4 +111,4 @@ struct HoldArbiter {
     }
 };
 
-} // namespace vcvoid
+} // namespace voidbot

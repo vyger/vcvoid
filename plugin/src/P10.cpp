@@ -24,13 +24,13 @@ struct DroidP10 : ChainModule {
     void applyDownstream(const droid::chain::DownstreamBlock&, float) override {}   // no LEDs
 
     void applyOwnLabels() override {
-        vcvoid::labels::applyParamBank(this, POT_PARAMS, 10, 'P', registerLabels, "P%d");
+        voidbot::labels::applyParamBank(this, POT_PARAMS, 10, 'P', registerLabels, "P%d");
     }
 
     void process(const ProcessArgs& args) override { relay(args.sampleTime); }
 };
 
-struct DroidP10Widget : VcvoidModuleWidget {
+struct DroidP10Widget : VoidbotModuleWidget {
     DroidP10Widget(DroidP10* module) {
         setModule(module);
         // Layout -> render px through the faceplate art (dw::ArtMap): the

@@ -2051,7 +2051,7 @@ circuits:
     verification: headless
     spec_gap: false
     depends_on: []
-    notes: "EXPERIMENTAL (vcvoid only, #20) — not DROID firmware, refused at
+    notes: "EXPERIMENTAL (voidbot only, #20) — not DROID firmware, refused at
       load unless LoadOptions.allowExperimental. Declared in
       engine/experimental.json (Forge schema; feeds both jackgen and
       droidcheck). Exists because firmware midiout sends cc1..8 through
@@ -2081,7 +2081,7 @@ circuits:
       (default 500/s), with NO initial send: baseline seeded silently on the
       first tick, so a never-moving input is never transmitted (midiout's
       initial send exists alongside delayinitialccs, whose hardware-boot
-      rationale vcvoid does not reproduce). USB-only, no trs jack: a DIN cable
+      rationale voidbot does not reproduce). USB-only, no trs jack: a DIN cable
       carries 3125 B/s (midiout.md:386) and one pair is 6 bytes. No
       select/selectat (they gate only buttons/LEDs in midiout; none here). No
       MIDI hardware -> silent no-op, patch still loads. Golden coverage: pair
@@ -2098,7 +2098,7 @@ circuits:
     verification: headless
     spec_gap: false
     depends_on: [crossfader]
-    notes: "EXPERIMENTAL (vcvoid only, #78) — not DROID firmware, refused at
+    notes: "EXPERIMENTAL (voidbot only, #78) — not DROID firmware, refused at
       load unless LoadOptions.allowExperimental. Declared in
       engine/experimental.json. crossfader plus `loop` (gate: S = N segments
       instead of N-1, fade 1.0 back at input1) and `curve` (integer: 0 =
@@ -2124,7 +2124,7 @@ circuits:
     verification: headless
     spec_gap: false
     depends_on: [motoquencer]
-    notes: "EXPERIMENTAL (vcvoid only, #85) — not DROID firmware, refused at
+    notes: "EXPERIMENTAL (voidbot only, #85) — not DROID firmware, refused at
       load unless LoadOptions.allowExperimental. Declared in
       engine/experimental.json, where it `extends` the firmware's motoquencer
       rather than copying its 112 jacks (tools/jackgen/overlay.py resolves it
@@ -2157,7 +2157,7 @@ circuits:
     verification: headless
     spec_gap: false
     depends_on: []
-    notes: "EXPERIMENTAL (vcvoid only, #12) — not DROID firmware, refused at
+    notes: "EXPERIMENTAL (voidbot only, #12) — not DROID firmware, refused at
       load unless LoadOptions.allowExperimental. Declared in
       engine/experimental.json (Forge schema; feeds both jackgen and
       droidcheck). Text-driven: `pattern` is read ONCE from the input's literal

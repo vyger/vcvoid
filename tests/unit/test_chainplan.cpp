@@ -7,7 +7,7 @@
 // all-or-nothing, it tolerates surplus hardware, and non-controllers (G8, X7,
 // the bling pass-through) never shift the controller numbering.
 
-using namespace vcvoid::chainplan;
+using namespace voidbot::chainplan;
 using namespace droid::chain;
 
 static std::vector<std::string> decl(std::initializer_list<const char*> l) {

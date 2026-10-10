@@ -1,96 +1,96 @@
 {
-  "slug": "vcvoid",
-  "name": "vcvoid",
+  "slug": "voidbot",
+  "name": "voidbot",
   "version": "2.0.0",
   "license": "GPL-3.0-or-later",
-  "brand": "vcvoid",
+  "brand": "voidbot",
   "author": "vyger",
   "authorEmail": "vygerofficial@gmail.com",
-  "pluginUrl": "https://github.com/vyger/vcvoid",
-  "sourceUrl": "https://github.com/vyger/vcvoid",
+  "pluginUrl": "https://github.com/vyger/voidbot",
+  "sourceUrl": "https://github.com/vyger/voidbot",
   "description": "Unofficial emulation of the DROID CV processing system — runs droid.ini patches. Not affiliated with or supported by Der Mann mit der Maschine.",
   "modules": [
     {
       "slug": "master",
-      "name": "vcvoid master",
+      "name": "voidbot master",
       "description": "Runs DROID patches (droid.ini) — unofficial emulation of the DROID master; not affiliated with or supported by Der Mann mit der Maschine",
       "tags": ["Utility", "Logic", "Sequencer", "Hardware clone"]
     },
     {
       "slug": "master18",
-      "name": "vcvoid master18",
+      "name": "voidbot master18",
       "description": "Runs DROID patches — MASTER18 emulation (8 CV outs, 2 gate ins, 4 gate outs, USB + 2×TRS MIDI, VCO tuner)",
       "tags": ["Utility", "Logic", "Sequencer", "Hardware clone"]
     },
     {
       "slug": "p2b8",
-      "name": "vcvoid p2b8",
+      "name": "voidbot p2b8",
       "description": "P2B8 controller — 2 pots, 8 buttons with LEDs (chain right of the master)",
       "tags": ["Expander", "Hardware clone"]
     },
     {
       "slug": "p4b2",
-      "name": "vcvoid p4b2",
+      "name": "voidbot p4b2",
       "description": "P4B2 controller — 4 pots, 2 buttons with LEDs",
       "tags": ["Expander", "Hardware clone"]
     },
     {
       "slug": "p10",
-      "name": "vcvoid p10",
+      "name": "voidbot p10",
       "description": "P10 controller — 10 pots",
       "tags": ["Expander", "Hardware clone"]
     },
     {
       "slug": "s10",
-      "name": "vcvoid s10",
+      "name": "voidbot s10",
       "description": "S10 controller — 2 rotary + 8 toggle switches",
       "tags": ["Expander", "Hardware clone"]
     },
     {
       "slug": "p8s8",
-      "name": "vcvoid p8s8",
+      "name": "voidbot p8s8",
       "description": "P8S8 controller — 8 sliders with LEDs, 8 toggle switches",
       "tags": ["Expander", "Hardware clone"]
     },
     {
       "slug": "b32",
-      "name": "vcvoid b32",
+      "name": "voidbot b32",
       "description": "B32 controller — 32 buttons with LEDs",
       "tags": ["Expander", "Hardware clone"]
     },
     {
       "slug": "e4",
-      "name": "vcvoid e4",
+      "name": "voidbot e4",
       "description": "E4 controller — 4 endless encoders with push + value rings",
       "tags": ["Expander", "Hardware clone"]
     },
     {
       "slug": "m4",
-      "name": "vcvoid m4",
+      "name": "voidbot m4",
       "description": "M4 controller — 4 motor faders with touch + RGB LEDs",
       "tags": ["Expander", "Hardware clone"]
     },
     {
       "slug": "g8",
-      "name": "vcvoid g8",
+      "name": "voidbot g8",
       "description": "G8 gate expander — 8 gate ins, 8 gate outs (5 V)",
       "tags": ["Expander", "Hardware clone"]
     },
     {
       "slug": "db8e",
-      "name": "vcvoid db8e",
+      "name": "voidbot db8e",
       "description": "DB8E controller — 8 buttons, encoder, 128x64 display",
       "tags": ["Expander", "Hardware clone"]
     },
     {
       "slug": "x7",
-      "name": "vcvoid x7",
+      "name": "voidbot x7",
       "description": "X7 expander — USB + TRS MIDI, 4 gate outputs (first in chain, right of the master)",
       "tags": ["Expander", "Hardware clone"]
     },
     {
       "slug": "bling",
-      "name": "vcvoid bling",
+      "name": "voidbot bling",
       "description": "1 HP blind panel — chain pass-through",
       "tags": ["Blank", "Expander", "Hardware clone"]
     }

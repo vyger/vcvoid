@@ -2,7 +2,7 @@
 # UAT bridge smoke: exercises every bridge endpoint against a known patch.
 # Run it as `make smoke` from the repo root (the canonical invocation; every
 # env override below still applies, e.g. `make smoke SKIP_HASH=1`).
-# Requires: plugin make install'd (build carries VCVOID_GIT_HASH), jq.
+# Requires: plugin make install'd (build carries VOIDBOT_GIT_HASH), jq.
 #
 # SCOPE: contract-level checks only -- status codes, response shapes and
 # classifications that must hold within a second or two of the call that causes
@@ -22,10 +22,10 @@
 #             POST /rack/save gets a real patch path.
 #
 # Preconditions:
-#   * At least one vcvoid module must exist in the rack. The bridge's UI
-#     queue attaches from a vcvoid module widget's step() -- a truly empty
+#   * At least one voidbot module must exist in the rack. The bridge's UI
+#     queue attaches from a voidbot module widget's step() -- a truly empty
 #     rack cannot service POST /modules (503) and the script fails fast.
-#     A vcvoid master is required (MASTER_ID override or autosave discovery);
+#     A voidbot master is required (MASTER_ID override or autosave discovery);
 #     the p2b8 is self-assembled via POST /modules when missing.
 #   * Master jacks I1/I2 must have NO VCV cables patched in: O3==0 relies on
 #     I2 reading 0, and the O4 probe relies on I1 falling back to its N1
@@ -154,14 +154,14 @@ else
     else
         echo "mode: launch ($RACK, autosave)"
     fi
-    VCVOID_UAT_BRIDGE=1 "$RACK" ${LAUNCH_PATCH:+"$LAUNCH_PATCH"} &
+    VOIDBOT_UAT_BRIDGE=1 "$RACK" ${LAUNCH_PATCH:+"$LAUNCH_PATCH"} &
     RACK_PID=$!          # cleanup() (EXIT trap) kills it as the failure fallback
     LAUNCHED=1
     for _ in $(seq 1 60); do
         curl -sf -m 2 "$BASE/ping" >/dev/null 2>&1 && break
         sleep 1
     done
-    curl -sf -m 2 "$BASE/ping" >/dev/null 2>&1 || fail "bridge never came up (Rack launch or VCVOID_UAT_BRIDGE gate)"
+    curl -sf -m 2 "$BASE/ping" >/dev/null 2>&1 || fail "bridge never came up (Rack launch or VOIDBOT_UAT_BRIDGE gate)"
 fi
 
 # --- ping: identity + stale-build gate --------------------------------------
@@ -191,7 +191,7 @@ fi
 # fall back to the autosave only if the UI queue is not attached yet.
 MASTER_ID="${MASTER_ID:-}"
 if [ -z "$MASTER_ID" ]; then
-    # /modules 503s until a vcvoid widget attaches the UI queue -- with the
+    # /modules 503s until a voidbot widget attaches the UI queue -- with the
     # launch template's master that is within the first frames, so poll.
     for _ in $(seq 1 30); do
         do_http GET /modules
@@ -199,12 +199,12 @@ if [ -z "$MASTER_ID" ]; then
         sleep 1
     done
     if [ "$HTTP_CODE" = "200" ]; then
-        MASTER_ID=$(echo "$HTTP_BODY" | jq -r '[.[] | select(.plugin=="vcvoid" and .slug=="master")][0].id // empty')
+        MASTER_ID=$(echo "$HTTP_BODY" | jq -r '[.[] | select(.plugin=="voidbot" and .slug=="master")][0].id // empty')
     elif [ -f "$AUTOSAVE" ]; then
-        MASTER_ID=$(jq -r '[.modules[]? | select(.plugin=="vcvoid" and .model=="master")][0].id // empty' "$AUTOSAVE")
+        MASTER_ID=$(jq -r '[.modules[]? | select(.plugin=="voidbot" and .model=="master")][0].id // empty' "$AUTOSAVE")
     fi
 fi
-[ -n "$MASTER_ID" ] || fail "no vcvoid master found. Precondition: the rack must already contain a master (the bridge cannot bootstrap a truly empty rack -- add one by hand), or set MASTER_ID"
+[ -n "$MASTER_ID" ] || fail "no voidbot master found. Precondition: the rack must already contain a master (the bridge cannot bootstrap a truly empty rack -- add one by hand), or set MASTER_ID"
 echo "ok: MASTER_ID=$MASTER_ID"
 
 echo "waiting for master $MASTER_ID to register with the bridge ..."
@@ -246,7 +246,7 @@ P2B8_ID="${P2B8_ID:-}"
 if [ -z "$P2B8_ID" ]; then
     do_http GET /modules
     assert_code 200 "GET /modules"
-    P2B8_ID=$(echo "$HTTP_BODY" | jq -r '[.[] | select(.plugin=="vcvoid" and .slug=="p2b8")][0].id // empty')
+    P2B8_ID=$(echo "$HTTP_BODY" | jq -r '[.[] | select(.plugin=="voidbot" and .slug=="p2b8")][0].id // empty')
 fi
 if [ -z "$P2B8_ID" ]; then
     # Place it flush on the master's right edge: expander adjacency is what
@@ -254,7 +254,7 @@ if [ -z "$P2B8_ID" ]; then
     read -r MX MY MW < <(echo "$HTTP_BODY" | jq -r --argjson id "$MASTER_ID" \
         '.[] | select(.id==$id) | "\(.x) \(.y) \(.width)"')
     PX=$(jq -n "$MX + $MW")
-    do_http POST /modules "{\"plugin\":\"vcvoid\",\"slug\":\"p2b8\",\"x\":$PX,\"y\":$MY}"
+    do_http POST /modules "{\"plugin\":\"voidbot\",\"slug\":\"p2b8\",\"x\":$PX,\"y\":$MY}"
     assert_code 200 "POST /modules p2b8 (self-assemble)"
     P2B8_ID=$(echo "$HTTP_BODY" | jq -r .id)
     [ -n "$P2B8_ID" ] && [ "$P2B8_ID" != "null" ] && [ "$P2B8_ID" != "-1" ] \

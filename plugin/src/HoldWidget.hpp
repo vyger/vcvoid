@@ -66,8 +66,8 @@ static_assert(kHoldMod != GLFW_MOD_ALT,
 // The one arbiter for the whole rack — the hold is a rack-wide gesture (you
 // hold CTRL on the p2b8 and chord it with a button on the b32, or with an
 // encoder push on the e4), so it cannot live per widget or per module.
-inline vcvoid::HoldArbiter& holdArbiter() {
-    static vcvoid::HoldArbiter a;
+inline voidbot::HoldArbiter& holdArbiter() {
+    static voidbot::HoldArbiter a;
     return a;
 }
 

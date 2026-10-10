@@ -17,7 +17,7 @@ fi
 TMP=$(mktemp -d)
 trap 'rm -rf "$TMP"' EXIT
 
-# --experimental: the vcvoid-only circuits are in droidcheck's firmware but are
+# --experimental: the voidbot-only circuits are in droidcheck's firmware but are
 # reported as problems without the flag, and a problem patch still measures
 # fine — we are comparing RAM, not validity. droidcheck's exit code is its count
 # of problem patches, so it cannot gate anything here; keep stderr instead.

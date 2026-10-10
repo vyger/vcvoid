@@ -68,7 +68,7 @@ struct DroidX7 : ChainModule {
     }
 
     void applyOwnLabels() override {
-        using namespace vcvoid::labels;
+        using namespace voidbot::labels;
         // The X7's gates are G9..G12 and its LEDs R49..R56 — the offsets live in
         // registerLabels, so the banks are numbered 1..4 locally.
         applyPortBank(this, Port::OUTPUT, GATE_OUTPUTS, 4, 'G', registerLabels,
@@ -196,7 +196,7 @@ struct DroidX7 : ChainModule {
     }
 };
 
-struct DroidX7Widget : VcvoidModuleWidget {
+struct DroidX7Widget : VoidbotModuleWidget {
     DroidX7Widget(DroidX7* module) {
         setModule(module);
         const auto* L = droid::layout::find("x7");

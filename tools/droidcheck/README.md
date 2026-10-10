@@ -53,7 +53,7 @@ older community patches often trip this on the blue-7 firmware.
 
 ### Parity oracles
 
-Two extra flags make droidcheck the reference for vcvoid's own
+Two extra flags make droidcheck the reference for voidbot's own
 re-implementations rather than just a validator:
 
 - `--labels` dumps the register labels the Forge's parser found

@@ -18,10 +18,10 @@ verification_note: "Headless: curve=0 must reproduce crossfader's goldens exactl
 
 # crossfader2 — Morph between 8 inputs, smoothly
 
-> **⚠️ EXPERIMENTAL — vcvoid only.**
+> **⚠️ EXPERIMENTAL — voidbot only.**
 > `crossfader2` is **not** a DROID circuit. It does not exist in any firmware,
 > the Droid Forge does not know it, and a patch using it **will not run on DROID
-> hardware**. vcvoid refuses to load such a patch until you enable
+> hardware**. voidbot refuses to load such a patch until you enable
 > **"Allow experimental circuits"** in the master module's context menu.
 > See [the experimental circuits index](index.md).
 

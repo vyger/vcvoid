@@ -10,7 +10,7 @@
 // Anchors (manual, hardware.md/architecture.md): empty master cycle ~180 us
 // (~5.5 kHz); a full ~110 000-byte patch ~500 us (2 kHz) -> linear fit
 // kUsPerRamByte = (500 - 180) / 110000.
-namespace vcvoid {
+namespace voidbot {
 
 constexpr float kBaseCycleUs   = 180.0f;
 constexpr float kUsPerRamByte  = 0.0029f;
@@ -25,4 +25,4 @@ inline float adaptiveTickHz(unsigned patchRamBytes) {
     return hz;
 }
 
-} // namespace vcvoid
+} // namespace voidbot

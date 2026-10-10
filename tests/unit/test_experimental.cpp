@@ -5,7 +5,7 @@
 #include <string>
 using namespace droid;
 
-// Experimental circuits (#12): circuits that exist only in vcvoid, declared in
+// Experimental circuits (#12): circuits that exist only in voidbot, declared in
 // engine/experimental.json and refused at load unless the module's
 // "Allow experimental circuits" option is on. See
 // docs/adr/0001-experimental-circuits.md.

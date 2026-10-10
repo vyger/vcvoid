@@ -37,14 +37,14 @@ struct DroidB32 : ChainModule {
     }
 
     void applyOwnLabels() override {
-        vcvoid::labels::applyParamBank(this, BUTTON_PARAMS, 32, 'B', registerLabels,
+        voidbot::labels::applyParamBank(this, BUTTON_PARAMS, 32, 'B', registerLabels,
                                        "B%d", true);
     }
 
     void process(const ProcessArgs& args) override { relay(args.sampleTime); }
 };
 
-struct DroidB32Widget : VcvoidModuleWidget {
+struct DroidB32Widget : VoidbotModuleWidget {
     DroidB32Widget(DroidB32* module) {
         setModule(module);
         // Layout -> render px through the faceplate art (dw::ArtMap): the
