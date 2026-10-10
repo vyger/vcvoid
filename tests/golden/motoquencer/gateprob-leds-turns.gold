@@ -8,7 +8,7 @@
 # serves both, so the plate and the audible result can never disagree). The turn
 # counter starts at 1, so the odd-turn step plays on the first run.
 #
-# SPEC-GAP: the off-turn blink rate is not in the manual. vcvoid uses the
+# SPEC-GAP: the off-turn blink rate is not in the manual. voidbot uses the
 # SLOWEST code, 2 Hz at half duty -- the cyan colour already separates these
 # notches from the random ones, so the blink only has to say "not this bar". At
 # tickrate 100 that is 50 ticks: on for ticks 0..24 of each cycle, off for

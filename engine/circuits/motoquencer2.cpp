@@ -1,4 +1,4 @@
-// motoquencer2 — EXPERIMENTAL (vcvoid only, #85): motoquencer plus one input,
+// motoquencer2 — EXPERIMENTAL (voidbot only, #85): motoquencer plus one input,
 // `probabilitymode`, which narrows the notches the gate-probability fader lane
 // (fadermode 2) offers. Spec: manual/circuits/experimental/motoquencer2.md.
 //

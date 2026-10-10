@@ -9,7 +9,7 @@
 // verdict is reported in over the UAT bridge (issue #49), end to end from the
 // real loader's error tags.
 
-using namespace vcvoid::status;
+using namespace voidbot::status;
 using droid::ErrorCode;
 
 // Which LEDs are lit, as the manual counts them: 1..8 for the input row pair,
@@ -532,7 +532,7 @@ TEST(wrap_short_text_is_unchanged) {
 }
 
 TEST(wrap_breaks_at_spaces_never_mid_word) {
-    std::string msg = "Circuit 'trigseq' is experimental (vcvoid only, not "
+    std::string msg = "Circuit 'trigseq' is experimental (voidbot only, not "
                       "available on DROID hardware). Enable \"Allow experimental "
                       "circuits\" in the module's context menu to load this patch.";
     std::vector<std::string> lines = wrapLines(msg);
@@ -597,7 +597,7 @@ TEST(wrap_a_long_status_line_becomes_several_tooltip_lines) {
     r.errorCount = 1;
     r.errorLine = 15;
     r.errorCode = ErrorCode::UnknownCircuit;
-    r.errorMessage = "Circuit 'trigseq' is experimental (vcvoid only, not "
+    r.errorMessage = "Circuit 'trigseq' is experimental (voidbot only, not "
                      "available on DROID hardware). Enable \"Allow experimental "
                      "circuits\" in the module's context menu to load this patch.";
     std::string tip = wrapText(oneLine(evaluate(r)));

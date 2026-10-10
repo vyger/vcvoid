@@ -7,7 +7,7 @@
 # instance's own gateprob values, not the main's.
 #
 # The fader and the button/LED surfaces are addressed independently, and the
-# plates belong to the BUTTON owner (buttoncolor-linked.gold). vcvoid therefore
+# plates belong to the BUTTON owner (buttoncolor-linked.gold). voidbot therefore
 # paints the gate-probability codes only on the instance that owns the faders in
 # mode 2: an instance holding the plates while someone ELSE holds the faders
 # keeps painting its buttonmode, which is the only thing it can honestly report

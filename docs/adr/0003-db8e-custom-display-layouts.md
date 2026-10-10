@@ -2,12 +2,12 @@
 
 Date: 2026-10-03
 Status: Accepted
-Issue: [#22](https://github.com/vyger/vcvoid/issues/22) (Group C)
+Issue: [#22](https://github.com/vyger/voidbot/issues/22) (Group C)
 
 ## Context
 
 `DisplayState` (`engine/src/controllerstate.hpp`) is the engine's symbolic model
-of one DB8E's 128×64 OLED. Since [#19](https://github.com/vyger/vcvoid/issues/19)
+of one DB8E's 128×64 OLED. Since [#19](https://github.com/vyger/voidbot/issues/19)
 it has been exactly one shape:
 
 > `header + (text | value + numbermode/fontsize)`
@@ -15,7 +15,7 @@ it has been exactly one shape:
 with `bool isText` picking between the two bodies. That shape covers the
 `[display]` circuit and the whole plain-value tier (`encoder`, `pot`,
 `motorfader`, `nudge`, `buttongroup`, `algoquencer`) plus — after
-[#89](https://github.com/vyger/vcvoid/pull/89) — the bank circuits, which pick
+[#89](https://github.com/vyger/voidbot/pull/89) — the bank circuits, which pick
 *which* value to show but still show a value.
 
 `manual/hardware.md` §6.12 says plainly that this is not the whole story:
@@ -195,7 +195,7 @@ evidence the tag is at the right altitude.
 ### Firmware versioning
 
 The DB8E's layout set is versioned (hardware.md §6.13). We do not model a DB8E
-firmware version — vcvoid's DB8E is always current, and faking an out-of-date
+firmware version — voidbot's DB8E is always current, and faking an out-of-date
 one would be a toggle nobody wants. What we *do* adopt is the behaviour that
 makes versioning safe: `plugin/src/DB8E.cpp` renders an explicit **"update
 firmware"** screen for any tag it does not recognise, rather than falling

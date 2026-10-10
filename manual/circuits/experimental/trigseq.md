@@ -18,10 +18,10 @@ verification_note: "Headless: clock the circuit and assert output/offbeats per s
 
 # trigseq — Declarative trigger sequencer
 
-> **⚠️ EXPERIMENTAL — vcvoid only.**
+> **⚠️ EXPERIMENTAL — voidbot only.**
 > `trigseq` is **not** a DROID circuit. It does not exist in any firmware, the
 > Droid Forge does not know it, and a patch using it **will not run on DROID
-> hardware**. vcvoid refuses to load such a patch until you enable
+> hardware**. voidbot refuses to load such a patch until you enable
 > **"Allow experimental circuits"** in the master module's context menu.
 > See [the experimental circuits index](index.md).
 

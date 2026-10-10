@@ -14,7 +14,7 @@ fi
 TMP=$(mktemp -d)
 trap 'rm -rf "$TMP"' EXIT
 
-# The Forge's parser throws on the vcvoid-only experimental circuits unless they
+# The Forge's parser throws on the voidbot-only experimental circuits unless they
 # are allowed, and a parse failure yields no labels at all — so always pass the
 # flag here. We are comparing label extraction, not circuit validity.
 # droidcheck's exit code is its count of problem patches, so it is nonzero in

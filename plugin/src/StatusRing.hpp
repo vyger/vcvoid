@@ -80,7 +80,7 @@ inline void drawStatusRing(NVGcontext* vg, rack::math::Vec boxSize, NVGcolor c) 
     nvgStroke(vg);
 }
 
-inline NVGcolor toNVG(const vcvoid::status::RGB& c) {
+inline NVGcolor toNVG(const voidbot::status::RGB& c) {
     return nvgRGBf(c.r, c.g, c.b);
 }
 

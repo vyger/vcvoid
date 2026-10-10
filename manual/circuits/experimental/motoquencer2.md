@@ -18,10 +18,10 @@ verification_note: "Headless: notch count and snap targets per mode, the stored 
 
 # motoquencer2 — Motor fader sequencer with a narrowed probability lane
 
-> **⚠️ EXPERIMENTAL — vcvoid only.**
+> **⚠️ EXPERIMENTAL — voidbot only.**
 > `motoquencer2` is **not** a DROID circuit. It does not exist in any firmware,
 > the Droid Forge does not know it, and a patch using it **will not run on DROID
-> hardware**. vcvoid refuses to load such a patch until you enable
+> hardware**. voidbot refuses to load such a patch until you enable
 > **"Allow experimental circuits"** in the master module's context menu.
 > See [the experimental circuits index](index.md).
 

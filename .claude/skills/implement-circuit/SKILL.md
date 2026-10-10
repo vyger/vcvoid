@@ -1,6 +1,6 @@
 ---
 name: implement-circuit
-description: Implement one DROID circuit in the vcvoid engine — goldens-first from the manual, full-suite verification, ledger update, atomic commit. EXPLICIT INVOCATION ONLY — this is an internal building block of the implementation system (docs/implementation-system.md), not a user-facing skill. Trigger only when the user runs /implement-circuit themselves or an implementation-system workflow (e.g. a /loop over it) invokes it. Never trigger it from conversational phrasing about circuits, bugs, or engine work. Argument: a circuit name, or "next" to pick from circuits-status.yaml.
+description: Implement one DROID circuit in the voidbot engine — goldens-first from the manual, full-suite verification, ledger update, atomic commit. EXPLICIT INVOCATION ONLY — this is an internal building block of the implementation system (docs/implementation-system.md), not a user-facing skill. Trigger only when the user runs /implement-circuit themselves or an implementation-system workflow (e.g. a /loop over it) invokes it. Never trigger it from conversational phrasing about circuits, bugs, or engine work. Argument: a circuit name, or "next" to pick from circuits-status.yaml.
 ---
 
 # implement-circuit
@@ -29,7 +29,7 @@ the ledger and makes commits, so never infer it from conversation.
   (this is the /loop termination signal). Experimental circuits carry no
   `rank`, so `next` never selects one — they are always named explicitly.
 - **Experimental circuits** (ledger `experimental: true`, e.g. `trigseq`) are
-  vcvoid-only: not DROID firmware, unknown to the Forge. Everything below still
+  voidbot-only: not DROID firmware, unknown to the Forge. Everything below still
   applies, with these differences — see
   `docs/adr/0001-experimental-circuits.md`:
   - spec lives at `manual/circuits/experimental/<name>.md` (frontmatter

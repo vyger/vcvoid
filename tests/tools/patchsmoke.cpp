@@ -49,7 +49,7 @@ int main(int argc, char** argv) {
             lopts.ignoreMemoryLimits = true;
             continue;
         }
-        // --experimental: allow vcvoid-only circuits (#12), matching the
+        // --experimental: allow voidbot-only circuits (#12), matching the
         // module's "Allow experimental circuits" setting and droidcheck's
         // flag of the same name. Applies to the patches that follow it.
         if (std::string(argv[i]) == "--experimental") {

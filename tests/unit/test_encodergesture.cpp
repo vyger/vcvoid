@@ -1,6 +1,6 @@
 #include "harness.hpp"
 #include "EncoderGesture.hpp"
-using vcvoid::EncoderGesture;
+using voidbot::EncoderGesture;
 
 // Deferred click/turn classification for the E4/DB8E encoders: a drag
 // necessarily begins with a mouse press, and the old

@@ -1,4 +1,4 @@
-// crossfader2 — EXPERIMENTAL (vcvoid only, #78): crossfader with a `loop` gate
+// crossfader2 — EXPERIMENTAL (voidbot only, #78): crossfader with a `loop` gate
 // and a `curve` selector. Spec: manual/circuits/experimental/crossfader2.md.
 // N = the highest patched input index (unpatched inputs read their 0 V default).
 // `fade` 0..1 maps to a position p = fade*S with S = N-1 segments, or S = N

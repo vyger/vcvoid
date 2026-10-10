@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Scripted UAT runner for vcvoid — executes docs/uat/runbook.md's machine-
+"""Scripted UAT runner for voidbot — executes docs/uat/runbook.md's machine-
 checkable steps deterministically against the UatBridge HTTP API.
 
 Python 3.9 stdlib only, no pip deps. See docs/uat/runbook.md ("How this run
@@ -81,7 +81,7 @@ class Bridge:
         self.runner = runner
         self.consecutive_503 = 0
         # 503s are EXPECTED while polling readiness after a (re)launch (the
-        # UI drain attaches from a vcvoid widget's step() within the first
+        # UI drain attaches from a voidbot widget's step() within the first
         # frames); the 3-consecutive-503 abort rail only arms once readiness
         # polling is done. Runner toggles this around discover_master().
         self.allow_503 = True
@@ -166,7 +166,7 @@ class Bridge:
         return self.get("/modules")
 
     def add_module(self, slug, x, y):
-        return self.post("/modules", {"plugin": "vcvoid", "slug": slug, "x": x, "y": y})
+        return self.post("/modules", {"plugin": "voidbot", "slug": slug, "x": x, "y": y})
 
     def remove_module(self, mid):
         return self.delete(f"/modules/{mid}")
@@ -425,7 +425,7 @@ class Runner:
             self.new_session()
         self.disable_app_nap()
         env = dict(os.environ)
-        env["VCVOID_UAT_BRIDGE"] = "1"
+        env["VOIDBOT_UAT_BRIDGE"] = "1"
         self.log_fh = open(self.log_path, "a")
         self.log(f"launching {rack_bin} {self.session_path} (log: {self.log_path})")
         self.proc = subprocess.Popen([rack_bin, self.session_path], env=env,
@@ -483,9 +483,9 @@ class Runner:
         ok, mods = wait_for(self._modules_ok, timeout=30, interval=1.0)
         if not ok:
             raise AbortRun("GET /modules never returned 200 after launch")
-        masters = [m for m in mods if m.get("plugin") == "vcvoid" and m.get("slug") == "master"]
+        masters = [m for m in mods if m.get("plugin") == "voidbot" and m.get("slug") == "master"]
         if not masters:
-            raise AbortRun("no vcvoid master found in /modules after launch")
+            raise AbortRun("no voidbot master found in /modules after launch")
         self.master_id = masters[0]["id"]
         ok, _ = wait_for(lambda: (self.bridge.status(self.master_id)[0] == 200, None),
                           timeout=30, interval=1.0)
@@ -509,7 +509,7 @@ class Runner:
                             f"(GET /modules: {code} {mods})")
 
     def set_row(self, slugs):
-        """Assemble a Rack row of the given vcvoid slugs, adjacent to the
+        """Assemble a Rack row of the given voidbot slugs, adjacent to the
         template master, reusing already-present modules of a matching slug
         and deleting anything no longer wanted. Duplicate slugs (e.g. two
         m4s) get suffixed keys m4, m4_2, ... in the returned/self.row map."""
@@ -591,7 +591,7 @@ class Runner:
     def probe_steady(self, module_id, port_id, kind, ms):
         """Probe with autosave-stall evidence: Rack's periodic (~15s) autosave
         serializes the whole rack on the UI thread and CAN hiccup the audio
-        engine — a Rack-core effect unrelated to vcvoid tick scheduling
+        engine — a Rack-core effect unrelated to voidbot tick scheduling
         (issue #7; no autosave-correlated stall actually observed yet), which
         would inflate periodStddevMs in whichever probe window it lands. If (and ONLY if) Rack2/log.txt shows a
         saveAutosave landed inside the probe window, discard the sample and
@@ -903,7 +903,7 @@ class Runner:
 
 
 FINAL_SIGNOFF_TEXT = """Not performed by this automated run; hand off to a human reviewer:
-- **1.x** Rack `log.txt` clean / vcvoid loads 14 models, panel appearance.
+- **1.x** Rack `log.txt` clean / voidbot loads 14 models, panel appearance.
 - **3.4/3.7** Master matrix LED ~3 Hz flash + red/blue color mirroring.
 - **5.3** No crash/stuck output switching sample rate live in Engine menu.
 - **5.4** Rack ctx-menu Duplicate of the master (clone/delete, no crash).

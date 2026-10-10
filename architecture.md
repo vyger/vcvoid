@@ -1,4 +1,4 @@
-# vcvoid — Architecture
+# voidbot — Architecture
 
 Goal: VCV Rack 2 modules that emulate the DROID hardware system — the master,
 its controllers, and the X7 — such that a real `droid.ini` patch loaded into
@@ -33,7 +33,7 @@ engine), see [docs/code-tour.md](docs/code-tour.md).
 ## Repository layout
 
 ```
-vcvoid/
+voidbot/
 ├── engine/                 # Pure C++17 DROID engine — zero Rack/Qt deps
 │   ├── src/                #   parser, loader, registers, cables, input math, kernel
 │   │                       #   loop, shared circuit cores (seqcore/encodercore/…)
@@ -215,9 +215,9 @@ default, both in the master's *Experimental* context-menu section:
 warnings, and `LoadOptions.allowExperimental` (#12) permits experimental
 circuits — see below.
 
-### Experimental circuits (vcvoid only)
+### Experimental circuits (voidbot only)
 
-An **experimental circuit** exists in vcvoid but in no DROID firmware, and the
+An **experimental circuit** exists in voidbot but in no DROID firmware, and the
 Forge does not know it. They are declared in `engine/experimental.json`
 using the Forge's own circuit schema, and that one file feeds both consumers:
 

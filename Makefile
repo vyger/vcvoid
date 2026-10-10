@@ -21,7 +21,7 @@ endif
 
 all: test
 
-# -DVCVOID_VERIFY_MEMO=1 is test-build-only: it turns on the dynamic
+# -DVOIDBOT_VERIFY_MEMO=1 is test-build-only: it turns on the dynamic
 # pointer=>content invariant check in Circuit::memoSlot (engine/src/circuit.cpp).
 # Golden runs + unit tests are the dynamic proof that the stable-pointer
 # invariant actually holds across every circuit; the shipped Rack plugin
@@ -30,11 +30,11 @@ all: test
 # would abort() a running Rack session instead of failing a test.
 $(BUILD)/unittests: $(ENGINE_SRC) $(UNIT_SRC) $(wildcard engine/src/*.hpp) $(wildcard engine/gen/*.hpp) $(wildcard tests/unit/*.hpp)
 	@mkdir -p $(BUILD)
-	$(CXX) $(CXXFLAGS) -DVCVOID_VERIFY_MEMO=1 $(ENGINE_SRC) $(UNIT_SRC) -o $@
+	$(CXX) $(CXXFLAGS) -DVOIDBOT_VERIFY_MEMO=1 $(ENGINE_SRC) $(UNIT_SRC) -o $@
 
 $(BUILD)/droidtest: $(ENGINE_SRC) $(RUNNER_SRC) $(wildcard engine/src/*.hpp) $(wildcard engine/gen/*.hpp)
 	@mkdir -p $(BUILD)
-	$(CXX) $(CXXFLAGS) -DVCVOID_VERIFY_MEMO=1 $(ENGINE_SRC) $(RUNNER_SRC) -o $@
+	$(CXX) $(CXXFLAGS) -DVOIDBOT_VERIFY_MEMO=1 $(ENGINE_SRC) $(RUNNER_SRC) -o $@
 
 unittests: $(BUILD)/unittests
 	$(BUILD)/unittests
@@ -135,7 +135,7 @@ eqcheck: $(BUILD)/eqcheck
 # build; the rest of the tree stays at -O1 for fast edit/test cycles. -DNDEBUG
 # is bench-only (drops any plain assert()s elsewhere in the tree) and, unlike
 # unittests/droidtest above, this rule deliberately does NOT define
-# VCVOID_VERIFY_MEMO: the bench should measure the same fast path the shipped
+# VOIDBOT_VERIFY_MEMO: the bench should measure the same fast path the shipped
 # Rack plugin runs (no pointer-invariant check on the hit path in
 # Circuit::memoSlot, circuit.cpp), while unittests/droidtest keep the check
 # active to prove the invariant on every golden.

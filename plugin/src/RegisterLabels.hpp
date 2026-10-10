@@ -16,7 +16,7 @@
 #include "src/labels.hpp"
 #include <string>
 
-namespace vcvoid {
+namespace voidbot {
 namespace labels {
 
 // One module's view of the patch's labels: the label set plus the register
@@ -177,4 +177,4 @@ inline void applyLightBank(rack::engine::Module* m, int firstLightId, int count,
 }
 
 } // namespace labels
-} // namespace vcvoid
+} // namespace voidbot

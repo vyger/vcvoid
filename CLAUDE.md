@@ -1,4 +1,4 @@
-# vcvoid
+# voidbot
 
 ## Project goal
 
@@ -126,17 +126,20 @@ cd tools/droidcheck
   `build/` is git-ignored, so pulling a Forge-side change leaves the old binary
   behind and it must be rebuilt with `tools/droidcheck/build.sh`.
 
-### Plugin identity: vcvoid
+### Plugin identity: voidbot
 
-The plugin's Rack identity is **vcvoid** (brand, plugin slug, module names —
+The plugin's Rack identity is **voidbot** (brand, plugin slug, module names —
 always lowercase; module slugs are bare hardware names like `master`, `m4`).
 The faceplate PNGs in `plugin/res/faceplates/` are one-time derivatives of the
 Forge renders with all DROID/DMMDM branding removed (creator's permission;
 wordmark in Share Tech Mono, OFL) — there is no import/regen script anymore.
 DROID stays as the factual name of the emulated system; the plugin is not
 affiliated with or supported by Der Mann mit der Maschine. This repo is
-**vcvoid** (`vyger/vcvoid`); the older private dev repo it was rebased from
-remains as the archive.
+**voidbot** (`vyger/voidbot`); the older private dev repo it was rebased from
+remains as the archive. The plugin was renamed from vcvoid to voidbot in
+October 2026 because the VCV Library rejected the "VCV"-prefixed name
+(trademark; VCVRack/library#983) — unofficial products may only say "for VCV
+Rack".
 
 ### Panel layout & visual tests
 
@@ -153,7 +156,7 @@ extractor, so chip geometry can be eyeballed without launching Rack.
 ### Register labels
 
 A patch names its jacks and controls with header comments — `# O1: [CLK] master
-clock` — which the Forge paints on the module faces and vcvoid shows as Rack
+clock` — which the Forge paints on the module faces and voidbot shows as Rack
 tooltips plus the same chips (see issue #26). Labels are recognised ONLY in the
 patch header (after the title comment, before the first circuit or `# -----`
 section separator), matching the Forge's parser exactly; a patch that opens
@@ -164,7 +167,7 @@ chip falls back to the label text, ellipsized to the ~9 characters that fit.
 ### Circuit state (per patch)
 
 Stateful circuits persist manual interaction (hardware.md §11.1, `DROIDSTA.BIN`).
-vcvoid keys that state to the **patch**, not the module: each master keeps an
+voidbot keys that state to the **patch**, not the module: each master keeps an
 *unbounded* store of snapshots, one per structural fingerprint (a hash of the
 ordered circuit-type list — `engine/src/patchstate.cpp`), serialised into the
 Rack patch. A load either **restores** an exact fingerprint hit, **migrates** a
@@ -209,7 +212,7 @@ Start at **`manual/README.md`**. Layout:
 | `manual/hardware.md` | 6–14 | All controllers, G8/X7 expanders, MASTER18, R2M/R2C bridge, internals, firmware upgrade, calibration/maintenance, specs. |
 | `manual/scales.md` | 15 | All 108 scales (0–107) with notes and scale-degree fills. |
 | `manual/circuits/` | 16 | **Core reference** — one file per circuit (76). Entry point: `manual/circuits/index.md`. |
-| `manual/circuits/experimental/` | — | **Not DROID.** vcvoid-only experimental circuits (`trigseq`), gated behind a per-module toggle. See [`docs/adr/0001-experimental-circuits.md`](docs/adr/0001-experimental-circuits.md). |
+| `manual/circuits/experimental/` | — | **Not DROID.** voidbot-only experimental circuits (`trigseq`), gated behind a per-module toggle. See [`docs/adr/0001-experimental-circuits.md`](docs/adr/0001-experimental-circuits.md). |
 | `manual/images/` | — | `page-NNN.png` full-page renders (`NNN` = PDF page); local-only, git-ignored, optional (derived from the source PDF). |
 
 ### Finding a circuit

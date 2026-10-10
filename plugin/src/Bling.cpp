@@ -68,7 +68,7 @@ struct DroidBling : ChainModule {
     }
 };
 
-struct DroidBlingWidget : VcvoidModuleWidget {
+struct DroidBlingWidget : VoidbotModuleWidget {
     DroidBlingWidget(DroidBling* module) {
         setModule(module);
         const auto* L = droid::layout::find("bling");

@@ -66,7 +66,7 @@ exists:
 
 ## Preconditions
 
-- Build + install: `cd plugin && make install` (bakes `VCVOID_GIT_HASH` into
+- Build + install: `cd plugin && make install` (bakes `VOIDBOT_GIT_HASH` into
   the binary; the bridge's `/ping` echoes it so a stale build can't silently
   pass).
 - Launch from the **rack template** `tests/smoketest_default.vcv` — a
@@ -82,7 +82,7 @@ exists:
   stale reuse impossible rather than merely unlikely:
   1. `SESSION=$(mktemp -t uat-session-XXXXXX).vcv`
      `cp tests/smoketest_default.vcv "$SESSION"`
-     `VCVOID_UAT_BRIDGE=1 "/Applications/VCV Rack 2 Free.app/Contents/MacOS/Rack" "$SESSION" &`
+     `VOIDBOT_UAT_BRIDGE=1 "/Applications/VCV Rack 2 Free.app/Contents/MacOS/Rack" "$SESSION" &`
      (or just run `tools/uatbridge-smoke.sh` — launch mode handles the
      scratch copy and doubles as the fast regression gate before the
      phases below). Relaunches *within* one run's persistence phases reuse
@@ -98,8 +98,8 @@ exists:
      modules per phase are self-assembled via `POST /modules` — see
      `tools/uatbridge-smoke.sh` for the working recipe.
      **The template exists because a truly-empty rack cannot bootstrap:**
-     the drain hook attaches from a vcvoid module widget's `step()` (the
-     HTTP thread cannot attach it), so zero vcvoid modules ⇒ every
+     the drain hook attaches from a voidbot module widget's `step()` (the
+     HTTP thread cannot attach it), so zero voidbot modules ⇒ every
      UI-thread route 503s, `POST /modules` included.
 - Audio device active in Rack (the engine must tick).
 
@@ -211,10 +211,10 @@ automated run.
    attached Rack running for the phases.
 2. ☐ First record the template master's id from `GET /modules` — that
    module is the run's lifeline and must NEVER be deleted: the bridge's UI
-   drain detaches with zero vcvoid modules in the rack, after which every
+   drain detaches with zero voidbot modules in the rack, after which every
    UI-thread route (including `POST /modules` itself) 503s until a
-   relaunch. Then instantiate each vcvoid slug in turn via
-   `POST /modules {"plugin":"vcvoid","slug":"<x>", "x":..,"y":..}`
+   relaunch. Then instantiate each voidbot slug in turn via
+   `POST /modules {"plugin":"voidbot","slug":"<x>", "x":..,"y":..}`
    for each of `master, master18, p2b8, p4b2, p10, s10, p8s8, b32, e4, m4,
    g8, db8e, x7, bling` → expect 200 + `{id}` each time, then
    `DELETE /modules/{id}` for **exactly the ids returned by those POSTs**
@@ -267,8 +267,8 @@ to `uat-core.ini` first.
 
 > **Autosave vs `periodStddevMs` asserts (defensive guard):** Rack's periodic
 > (~15 s) autosave serializes the whole rack on the UI thread and *can* hiccup
-> the audio engine — a Rack-core effect unrelated to vcvoid tick scheduling
-> (issue #7 fixed the vcvoid-side drops; no autosave-correlated stall has
+> the audio engine — a Rack-core effect unrelated to voidbot tick scheduling
+> (issue #7 fixed the voidbot-side drops; no autosave-correlated stall has
 > actually been observed yet). If a probe window straddles an autosave
 > (`saveAutosave` count in Rack2 `log.txt` increased during the probe),
 > discard the sample and re-probe once — the next autosave is ~15 s out.
@@ -283,7 +283,7 @@ to `uat-core.ini` first.
 2. ☐ `GET /probe?moduleId={id}&portId=3&kind=out&ms=2100` (O4) with
    I1 unpatched → `edges` in `4±1` for a 2 Hz retrigger (500 ms period,
    4.2 expected) over 2100 ms (N1 normalization feeding I1), **and**
-   `periodStddevMs < 3` (probe timestamps are frame-accurate for a vcvoid
+   `periodStddevMs < 3` (probe timestamps are frame-accurate for a voidbot
    master as of issue #5 — this is now a real absolute assert, not a relative
    "steadier than noise" check). Exact recipe in `tools/uatbridge-smoke.sh`.
 3. ☐ `POST /cables` wiring a Rack LFO (~8 Hz square) into master
@@ -476,7 +476,7 @@ g8-first row pins `chainError` and freezes the G8 gates).
    `.engineStalled` correctly stays `false`.
    **Repro**, from the bridge, no audio hardware needed:
    `POST /rack/engine-clock {"freeze": true}` parks the engine clock on the
-   vcvoid master, which never calls `stepBlock()` — the same shape as an audio
+   voidbot master, which never calls `stepBlock()` — the same shape as an audio
    device that stops calling back. Then:
    - within ~0.5 s every master goes **amber**; `GET /master/{id}/status` →
      `.state == "engine-stalled"`, `.engineStalled == true`,
@@ -655,7 +655,7 @@ human touchpoint for the release.
 1. Review the automated PASS/FAIL summary. Any FAIL blocks release.
 2. Run the consolidated sensory/manual spot-check — the qualities no bridge
    endpoint can verify, grouped by the step they relate to:
-   - **1.x** Rack `log.txt`: vcvoid loads 14 models, no errors/warnings.
+   - **1.x** Rack `log.txt`: voidbot loads 14 models, no errors/warnings.
      Panel appearance (already regression-checked by `tools/panelshots.sh` /
      `tools/check_panelshots.py`).
    - **3.4 / 3.7** Master matrix LED flash (~3 Hz) and color mirroring

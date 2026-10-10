@@ -1,4 +1,4 @@
-"""vcvoid's experimental-circuit overlay (engine/experimental.json), shared by
+"""voidbot's experimental-circuit overlay (engine/experimental.json), shared by
 its two consumers so the merge policy exists exactly once:
 
   * tools/jackgen/jackgen.py    — engine jack tables (engine/gen/jacktables.gen.*)
@@ -29,7 +29,7 @@ def _derive(name, spec, firmware_circuits):
 
     instead of copying X's whole jack list. The copy would be the larger
     fidelity risk of the two: a 100-jack transcription silently drifts the day
-    the Forge changes one of those jacks, and drift between vcvoid and the
+    the Forge changes one of those jacks, and drift between voidbot and the
     firmware is exactly what ADR 0001 exists to prevent. Deriving keeps the
     inherited jacks a pure function of the vendored firmware file; only the
     delta lives in the overlay.
@@ -70,7 +70,7 @@ def load(firmware_circuits, path=None):
 
     Sorted so codegen output is deterministic. A name that already exists in
     the firmware is a hard error rather than a silent override: the point of
-    the overlay is to ADD circuits vcvoid alone has, never to redefine a
+    the overlay is to ADD circuits voidbot alone has, never to redefine a
     hardware one (which would make a patch look hardware-valid when it is not).
 
     An entry carrying `extends` is derived from that firmware circuit's

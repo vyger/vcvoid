@@ -1374,7 +1374,7 @@ protected:
     // stored 0..7 gateprob index as 8 (top) -> 7, 7 -> 6, ..., 1 -> 0.
     //
     // SPEC-GAP (literal reading, deterministic): "various speeds" and "fast"
-    // are not numbers. vcvoid blinks at half duty on a ladder that reads as
+    // are not numbers. voidbot blinks at half duty on a ladder that reads as
     // "faster = less likely" — 2 Hz at 50%, 4 Hz at 25%, 6 Hz at 12% — and
     // reserves the fastest code, 8 Hz, for the conditional notch 1, which the
     // manual singles out as "blinking fast". The cyan off-turn blink is the

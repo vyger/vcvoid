@@ -18,10 +18,10 @@ verification_note: "Headless: assert pair adjacency with two slots moving on one
 
 # midihirescc — 14-bit (hi-res) MIDI CC output
 
-> **⚠️ EXPERIMENTAL — vcvoid only.**
+> **⚠️ EXPERIMENTAL — voidbot only.**
 > `midihirescc` is **not** a DROID circuit. It does not exist in any firmware,
 > the Droid Forge does not know it, and a patch using it **will not run on DROID
-> hardware**. vcvoid refuses to load such a patch until you enable
+> hardware**. voidbot refuses to load such a patch until you enable
 > **"Allow experimental circuits"** in the master module's context menu.
 > See [the experimental circuits index](index.md).
 
@@ -149,7 +149,7 @@ rate is 93 kB/s, which is a lot of MIDI for a receiver to parse; if a receiver
 starts lagging, lower `updaterate` before reducing the number of controllers —
 resolution in *time* is usually what you can spare.
 
-Measured in vcvoid (2026-08-02, eight controllers, rate swept 100 → 1600):
+Measured in voidbot (2026-08-02, eight controllers, rate swept 100 → 1600):
 **25,600 messages/second — 76.8 kB/s — carried without a single dropped or
 delayed update** through VCV Rack's internal loopback MIDI port, with the
 engine holding its full tick rate throughout.

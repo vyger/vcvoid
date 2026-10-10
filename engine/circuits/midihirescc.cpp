@@ -1,4 +1,4 @@
-// midihirescc — 14-bit (hi-res) MIDI CC output. EXPERIMENTAL: vcvoid only, not
+// midihirescc — 14-bit (hi-res) MIDI CC output. EXPERIMENTAL: voidbot only, not
 // a DROID firmware circuit (see docs/adr/0001-experimental-circuits.md). Spec:
 // manual/circuits/experimental/midihirescc.md.
 //
@@ -48,7 +48,7 @@
 //   * NO initial send: the baseline is seeded silently on the first tick, so a
 //     value that never moves is never transmitted. `midiout`'s initial send
 //     exists together with `delayinitialccs`, a jack whose reason (waiting for
-//     real hardware to finish booting) vcvoid does not reproduce.
+//     real hardware to finish booting) voidbot does not reproduce.
 //   * USB only. A classical MIDI cable carries 3125 bytes/s (midiout.md line
 //     386); one pair is 6 bytes, so DIN could not sustain hi-res updates for
 //     more than a couple of controllers. Offering a `trs` jack would be

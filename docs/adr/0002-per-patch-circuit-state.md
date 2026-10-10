@@ -2,7 +2,7 @@
 
 Date: 2026-09-12
 Status: Accepted
-Issue: [#42](https://github.com/vyger/vcvoid/issues/42)
+Issue: [#42](https://github.com/vyger/voidbot/issues/42)
 
 ## Context
 
@@ -15,7 +15,7 @@ state loads into the second `[button]` of the new patch. `manual/hardware.md`
 §11.1 documents this plainly, including its failure mode — "if you change the
 order of the circuits in your patch, circuits will get the *wrong* states".
 
-vcvoid reproduced that rule faithfully (`Engine::saveState` /
+voidbot reproduced that rule faithfully (`Engine::saveState` /
 `Engine::restoreState`), with the state blob living in the master module and
 serialised into the Rack patch. What it could not reproduce is the hardware's
 escape hatch: **one SD card per patch**. A Rack module has no card slot, so
@@ -140,7 +140,7 @@ class of mistake this ADR is fixing.
   patch's fingerprint on the first load — nothing is lost, and one reopen
   converts the save to the new shape.
 - `dataToJson` keeps writing `circuitState` alongside the store, holding the
-  currently loaded patch's snapshot, so a *downgrade* to an older vcvoid build
+  currently loaded patch's snapshot, so a *downgrade* to an older voidbot build
   finds exactly what it expects.
 - Saved snapshots have no per-circuit signature. An absent signature simply
   means "no migration identity", which falls back to the positional rule — the

@@ -29,7 +29,7 @@ mkdir -p "$BUILD"
 cd "$BUILD"
 
 # 1) Embed droidfirmware.json as a Qt resource (:droidfirmware.json), with
-#    vcvoid's experimental-circuit overlay merged in (#12) so the Forge model
+#    voidbot's experimental-circuit overlay merged in (#12) so the Forge model
 #    can PARSE them. Whether they are ACCEPTED is a runtime decision: without
 #    --experimental droidcheck reports them as problems, keeping the default
 #    run an honest "would the real Forge take this patch?" measurement. The

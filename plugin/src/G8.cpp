@@ -54,7 +54,7 @@ struct DroidG8 : ChainModule {
         }
     }
     void applyOwnLabels() override {
-        using namespace vcvoid::labels;
+        using namespace voidbot::labels;
         // Each physical jack is an input port AND an output port at the same
         // spot, so both carry the gate's label.
         applyPortBank(this, Port::INPUT, GATE_INPUTS, 8, 'G', registerLabels,
@@ -67,7 +67,7 @@ struct DroidG8 : ChainModule {
     void process(const ProcessArgs& args) override { relay(args.sampleTime); }
 };
 
-struct DroidG8Widget : VcvoidModuleWidget {
+struct DroidG8Widget : VoidbotModuleWidget {
     DroidG8Widget(DroidG8* module) {
         setModule(module);
         const auto* L = droid::layout::find("g8");

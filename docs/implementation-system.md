@@ -71,7 +71,7 @@ the ledger entry `blocked` with a reason — **never commit red**.
 1. **Select** — explicit circuit name, or `next`: the lowest-rank `todo`
    whose `depends_on` are all `done`. Mark `in-progress`.
 2. **Read the spec** — `manual/circuits/<name>.md` in full (or
-   `manual/circuits/experimental/<name>.md` for a vcvoid-only experimental
+   `manual/circuits/experimental/<name>.md` for a voidbot-only experimental
    circuit): prose, worked
    `droid` examples, Inputs/Outputs tables, `verification_note`, plus
    linked docs and referenced figures (the per-page renders under

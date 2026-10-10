@@ -1,14 +1,14 @@
-# vcvoid — domain glossary
+# voidbot — domain glossary
 
 The words this project uses, and what they mean *here*. DROID's own vocabulary
 (circuit, patch, register, controller, master) is defined by the hardware and
 documented in [`manual/`](manual/README.md); this file records the terms whose
-meaning is specific to vcvoid, plus the DROID terms we have found people
+meaning is specific to voidbot, plus the DROID terms we have found people
 routinely confuse.
 
-## vcvoid terms
+## voidbot terms
 
-**Experimental circuit** — a circuit implemented in vcvoid that does not exist
+**Experimental circuit** — a circuit implemented in voidbot that does not exist
 in any DROID firmware and is unknown to the Droid Forge. A patch using one will
 not run on hardware. Experimental circuits are declared in the overlay,
 documented under `manual/circuits/experimental/`, and refused at patch load
@@ -27,7 +27,7 @@ embedded firmware), so the two can never disagree about what exists.
 
 **Hi-res CC pair** — the two MIDI messages that carry one 14-bit continuous
 controller: a *coarse* byte on controller `n` and a *fine* byte on controller
-`n + 32`, defined for `n` = 0…31 only. In vcvoid the pair is also a unit of
+`n + 32`, defined for `n` = 0…31 only. In voidbot the pair is also a unit of
 emission: both bytes leave in one update, adjacent on the wire, never
 interleaved with another controller's. "MSB/LSB" is the same distinction in
 MIDI's own words. See
