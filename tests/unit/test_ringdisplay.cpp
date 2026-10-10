@@ -54,7 +54,7 @@ TEST(ring_jumps_on_menu_switch) {
     e.setValue("I1", 0.0f);
     e.tick();
     // Switch menus: the very next tick must show bank B's image (the hardware
-    // "jump to the right values" the bug report says vcvoid didn't do).
+    // "jump to the right values" the bug report says voidbot didn't do).
     e.setValue("I1", 1.0f);
     e.tick();
     RingDisplay rd = e.encoderRingInfo(1);

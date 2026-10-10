@@ -78,7 +78,7 @@ struct DroidMasterBase : Module {
     // this master's own UI-thread view — the widgets read it while drawing.
     droid::PatchLabels sharedLabels;              // engineMutex
     std::atomic<uint32_t> labelGen{0};
-    vcvoid::labels::ModuleLabels registerLabels;  // UI thread only
+    voidbot::labels::ModuleLabels registerLabels;  // UI thread only
     float targetHz = 6000.f;
     // Timing mode (issue #3). Adaptive (default for new masters) derives
     // targetHz from the loaded patch's RAM footprint (AdaptiveRate.hpp) on
@@ -86,7 +86,7 @@ struct DroidMasterBase : Module {
     // and load as Fixed at their saved targetHz (see dataFromJson).
     enum class TimingMode { Adaptive, Fixed };
     TimingMode timingMode = TimingMode::Adaptive;
-    float adaptiveHz = vcvoid::kMaxAdaptiveHz;   // last computed; UI thread
+    float adaptiveHz = voidbot::kMaxAdaptiveHz;   // last computed; UI thread
     int divider = 8;
     float effectiveRate = 6000.f;   // sampleRate / divider; the rate the engine runs at
     int frameCounter = 0;
@@ -104,7 +104,7 @@ struct DroidMasterBase : Module {
     // read on whatever thread calls loadPatchFile (bool torn read tolerable,
     // same as the timing fields).
     bool ignoreHwMemoryLimits = false;
-    // Experimental (#12): allow vcvoid-only circuits (e.g. trigseq) to load.
+    // Experimental (#12): allow voidbot-only circuits (e.g. trigseq) to load.
     // Off by default so a patch built here stays hardware-compatible; same
     // threading note as ignoreHwMemoryLimits above.
     bool allowExperimentalCircuits = false;
@@ -130,13 +130,13 @@ struct DroidMasterBase : Module {
     // drawLayer(); written only by publishStatus(), i.e. only on a UI frame —
     // anything that has just changed the verdict off the UI thread reports
     // currentState() instead (see below).
-    std::atomic<int> uiState{(int) vcvoid::status::State::NoPatch};
+    std::atomic<int> uiState{(int) voidbot::status::State::NoPatch};
     // What the MASTER's 4x4 matrix should do, and the blink-code colours when
     // that is Blink. Read by the AUDIO thread (DroidMaster::process), hence
     // atomics rather than the plain struct: 16 relaxed loads per tick frame is
     // nothing, and it makes the hand-off race-free instead of
     // "torn read costs one frame". Each entry is 0x00RRGGBB; 0 = dark.
-    std::atomic<int> matrixMode{(int) vcvoid::status::Matrix::Dark};
+    std::atomic<int> matrixMode{(int) voidbot::status::Matrix::Dark};
     std::atomic<uint32_t> matrixBlink[16] = {};
     // The one-line status ("LOAD ERROR · line 99 — Unknown register 'O9' …"),
     // UI thread only. Shown as the hover tooltip and appended to the matrix
@@ -145,8 +145,8 @@ struct DroidMasterBase : Module {
 
     // Everything the status model needs, copied out under the lock. Cheap
     // enough to call on a menu open or a hover; not called per frame.
-    vcvoid::status::Report statusReport() {
-        vcvoid::status::Report r;
+    voidbot::status::Report statusReport() {
+        voidbot::status::Report r;
         {
             std::lock_guard<std::mutex> lock(engineMutex);
             r.havePatch = !patchPath.empty();
@@ -179,9 +179,9 @@ struct DroidMasterBase : Module {
     // only — it writes std::strings and LightInfo descriptions that Rack's
     // tooltips read while drawing.
     void publishStatus() {
-        vcvoid::status::Status s = vcvoid::status::evaluate(statusReport());
+        voidbot::status::Status s = voidbot::status::evaluate(statusReport());
         for (int i = 0; i < 16; i++) {
-            const vcvoid::status::RGB& c = s.blink.led[i];
+            const voidbot::status::RGB& c = s.blink.led[i];
             uint32_t packed = (uint32_t(rack::math::clamp(c.r, 0.f, 1.f) * 255.f + 0.5f) << 16)
                             | (uint32_t(rack::math::clamp(c.g, 0.f, 1.f) * 255.f + 0.5f) << 8)
                             |  uint32_t(rack::math::clamp(c.b, 0.f, 1.f) * 255.f + 0.5f);
@@ -194,15 +194,15 @@ struct DroidMasterBase : Module {
         // Wrapped: the tooltip (and the matrix LEDs' descriptions, which append
         // it) are sized by Rack to their widest line, and a single-line
         // "Circuit '…' is experimental (…)" ran the tooltip off the window.
-        statusLine = vcvoid::status::wrapText(vcvoid::status::oneLine(s));
+        statusLine = voidbot::status::wrapText(voidbot::status::oneLine(s));
         applyOwnLabels();   // re-stamp the LED descriptions with the new line
     }
 
     // The last PUBLISHED state. Lock-free and cheap, for the per-frame readers
     // (the ring's drawLayer) — but it only moves when the widget's step()
     // consumes statusDirty, i.e. on the next UI frame.
-    vcvoid::status::State statusState() const {
-        return (vcvoid::status::State) uiState.load(std::memory_order_acquire);
+    voidbot::status::State statusState() const {
+        return (voidbot::status::State) uiState.load(std::memory_order_acquire);
     }
 
     // The state as of RIGHT NOW, recomputed instead of read back from the last
@@ -216,8 +216,8 @@ struct DroidMasterBase : Module {
     // itself, and reads the UI-thread-only chainError outside it exactly as
     // the bridge's status handler and the context menu already do (a chain
     // revalidation the load just armed lands on the next UI frame either way).
-    vcvoid::status::State currentState() {
-        return vcvoid::status::evaluate(statusReport()).state;
+    voidbot::status::State currentState() {
+        return voidbot::status::evaluate(statusReport()).state;
     }
 
     // Master type + I/O geometry (set once by the subclass constructor).
@@ -613,7 +613,7 @@ public:
             masterType_, effectiveRate);
         droid::LoadResult r = fresh->load(text, lopts);
         if (r.ok) {
-            adaptiveHz = vcvoid::adaptiveTickHz(r.ramUsed);
+            adaptiveHz = voidbot::adaptiveTickHz(r.ramUsed);
             if (timingMode == TimingMode::Adaptive) {
                 targetHz = adaptiveHz;
                 updateDivider(APP->engine->getSampleRate());
@@ -731,7 +731,7 @@ public:
             if (!r.warnings.empty()) {
                 patchStatus += string::f(" — %d warning(s)", (int)r.warnings.size());
                 for (const auto& w : r.warnings)
-                    WARN("vcvoid: patch warning: %s", w.c_str());
+                    WARN("voidbot: patch warning: %s", w.c_str());
             }
         } else {
             engine.reset();   // hardware stops on a bad patch; so do we
@@ -744,7 +744,7 @@ public:
                     r.errors[0].line, r.errors[0].message.c_str());
             else
                 patchStatus = "LOAD ERROR: load failed";
-            WARN("vcvoid: %s", patchStatus.c_str());
+            WARN("voidbot: %s", patchStatus.c_str());
         }
         // A fresh patch declares its own controller chain; revalidate it against
         // whatever is physically connected (ok/bad regardless of load result).
@@ -789,7 +789,7 @@ public:
     // UI thread only — these are std::strings Rack's tooltips read while
     // drawing. MASTER overrides to add its 4x4 LED matrix.
     virtual void applyOwnLabels() {
-        using namespace vcvoid::labels;
+        using namespace voidbot::labels;
         applyPortBank(this, Port::INPUT, 0, numIns_, 'I', registerLabels, "I%d");
         applyPortBank(this, Port::OUTPUT, 0, numOuts_, 'O', registerLabels, "O%d");
         applyPortBank(this, Port::OUTPUT, numOuts_, numGateOuts_, 'G',
@@ -1034,7 +1034,7 @@ public:
                 int first, n;
                 int32_t lost = consumeUpstreamMidi(mf, port, lastMidiTotalUp[port], first, n);
                 if (lost > 0)
-                    WARN("vcvoid: x7 upstream MIDI window overflow, port %d: %d event(s) lost", port, lost);
+                    WARN("voidbot: x7 upstream MIDI window overflow, port %d: %d event(s) lost", port, lost);
                 for (int k = first; k < first + n; k++)
                     engine->sendMidiIn(x7PhysicalPort(port), mf.ev[port][k]);
                 lastMidiTotalUp[port] = mf.total[port];
@@ -1415,7 +1415,7 @@ public:
         json_object_set_new(root, "showRegisterLabels",
             json_boolean(registerLabels.show));
         json_object_set_new(root, "circuitStateStore", storeToJson(storeCopy));
-        // Kept for DOWNGRADE compatibility: a vcvoid build from before issue #42
+        // Kept for DOWNGRADE compatibility: a voidbot build from before issue #42
         // reads only this key, and finds exactly what it used to — the currently
         // loaded patch's state. Newer builds prefer circuitStateStore and only
         // fall back to this when the store key is absent.
@@ -1553,8 +1553,8 @@ inline std::string readPatchLine(const std::string& path, int line) {
         if (!std::getline(f, s)) return std::string();
     while (!s.empty() && (s.back() == '\r' || s.back() == ' ' || s.back() == '\t'))
         s.pop_back();
-    if (s.size() > vcvoid::status::kWrapWidth)
-        s = s.substr(0, vcvoid::status::kWrapWidth - 3) + "...";
+    if (s.size() > voidbot::status::kWrapWidth)
+        s = s.substr(0, voidbot::status::kWrapWidth - 3) + "...";
     return s;
 }
 
@@ -1601,8 +1601,8 @@ struct DroidMasterBaseWidget : ModuleWidget {
         if (args.fb) return;
         DroidMasterBase* m = getModule<DroidMasterBase>();
         if (!m) return;   // browser preview: no module, no state to report
-        vcvoid::status::RGB c;
-        if (!vcvoid::status::ringColor(m->statusState(), c)) return;   // running: no ring
+        voidbot::status::RGB c;
+        if (!voidbot::status::ringColor(m->statusState(), c)) return;   // running: no ring
         dw::drawStatusRing(args.vg, box.size, dw::toNVG(c));
     }
 
@@ -1748,7 +1748,7 @@ struct DroidMasterBaseWidget : ModuleWidget {
 
     // What the patch asks for, snapshotted under the engine lock exactly the
     // way appendMasterMenu does.
-    vcvoid::chainplan::Plan computeChainPlan(
+    voidbot::chainplan::Plan computeChainPlan(
             DroidMasterBase* m, const std::vector<droid::chain::ModelId>& slots) {
         std::vector<std::string> declared;
         bool wantX7 = false;
@@ -1765,12 +1765,12 @@ struct DroidMasterBaseWidget : ModuleWidget {
                          (m->engine->patchUsesMidi() && !m->engine->midiAvailable());
             }
         }
-        return vcvoid::chainplan::compute(declared, wantX7, slots);
+        return voidbot::chainplan::compute(declared, wantX7, slots);
     }
 
     // The same plan, walking the chain itself — for the callers that only want
     // the words (the menu item, the tooltip line).
-    vcvoid::chainplan::Plan computeChainPlan() {
+    voidbot::chainplan::Plan computeChainPlan() {
         DroidMasterBase* m = getModule<DroidMasterBase>();
         if (!m) return {};
         std::vector<droid::chain::ModelId> slots;
@@ -1788,7 +1788,7 @@ struct DroidMasterBaseWidget : ModuleWidget {
         std::vector<droid::chain::ModelId> slots;
         std::vector<ModuleWidget*> slotWidgets;
         collectChainSlots(m, slots, &slotWidgets);
-        vcvoid::chainplan::Plan plan = computeChainPlan(m, slots);
+        voidbot::chainplan::Plan plan = computeChainPlan(m, slots);
         res.blocker = plan.blocker;
         if (!plan.blocker.empty() || plan.empty()) return res;
 
@@ -1802,7 +1802,7 @@ struct DroidMasterBaseWidget : ModuleWidget {
         batch->name = "add missing controllers";
         ModuleWidget* prev = nullptr;
         int prevSlot = -2;   // no plan can carry this, so the first insert never matches
-        for (const vcvoid::chainplan::Insert& ins : plan.inserts) {
+        for (const voidbot::chainplan::Insert& ins : plan.inserts) {
             // The anchor the new module goes to the right of: the master for
             // -1, the named chain slot otherwise — or the module this loop
             // just inserted, when several inserts share an anchor and so
@@ -1916,7 +1916,7 @@ struct DroidMasterBaseWidget : ModuleWidget {
             // same trigger. Outside the lock above — computeChainPlan() takes
             // engineMutex itself — and cheap enough here because this whole
             // block only runs when the chain or the patch actually changed.
-            vcvoid::chainplan::Plan fix = computeChainPlan();
+            voidbot::chainplan::Plan fix = computeChainPlan();
             m->chainFix = fix.summary();
             m->chainFixBlocker = fix.blocker;
             m->statusDirty.store(true);   // the chain verdict just moved (#46)
@@ -1969,8 +1969,8 @@ struct DroidMasterBaseWidget : ModuleWidget {
                           const std::string& stateStatus, unsigned ramUsed,
                           const std::vector<std::string>& declared,
                           const std::vector<std::string>& physical) {
-        vcvoid::status::Report rep = m->statusReport();
-        vcvoid::status::Status s = vcvoid::status::evaluate(rep);
+        voidbot::status::Report rep = m->statusReport();
+        voidbot::status::Status s = voidbot::status::evaluate(rep);
         std::string fileName = patchPath.empty() ? std::string()
                                                  : system::getFilename(patchPath);
         // Rack sizes a menu to its widest child, so every sentence the card
@@ -1980,15 +1980,15 @@ struct DroidMasterBaseWidget : ModuleWidget {
         // line 99", "Running with 3 warnings"), never free text, and the
         // coloured square has to sit on the same row as its words.
         auto addWrapped = [&menu](const std::string& text) {
-            for (const std::string& l : vcvoid::status::wrapLines(text))
+            for (const std::string& l : voidbot::status::wrapLines(text))
                 menu->addChild(createMenuLabel(l));
         };
 
         if (!s.title.empty()) {
             auto* title = new StatusTitleLabel;
             title->text = s.title;
-            vcvoid::status::RGB c;
-            if (vcvoid::status::ringColor(s.state, c))
+            voidbot::status::RGB c;
+            if (voidbot::status::ringColor(s.state, c))
                 title->color = dw::toNVG(c);
             menu->addChild(title);
         }
@@ -1996,7 +1996,7 @@ struct DroidMasterBaseWidget : ModuleWidget {
             addWrapped(s.message);
         // A chain error's fix is "plug in what the patch asks for", so spell out
         // both sides rather than only the slot that differs.
-        if (s.state == vcvoid::status::State::ChainError) {
+        if (s.state == voidbot::status::State::ChainError) {
             auto list = [](const std::vector<std::string>& v) {
                 if (v.empty()) return std::string("nothing");
                 std::string out;
@@ -2022,7 +2022,7 @@ struct DroidMasterBaseWidget : ModuleWidget {
         // The file name is elided in the middle rather than wrapped: a name is
         // recognised by its two ends, and a row that starts mid-word reads as a
         // different file.
-        std::string shortName = vcvoid::status::elideMiddle(fileName, 32);
+        std::string shortName = voidbot::status::elideMiddle(fileName, 32);
         if (!fileName.empty()) {
             std::string line = shortName;
             if (ramUsed) line += string::f(" · %u bytes RAM", ramUsed);
@@ -2033,8 +2033,8 @@ struct DroidMasterBaseWidget : ModuleWidget {
         // issue #69: a chain error's one mechanical fix, offered where the
         // error is explained and ahead of Reload — reloading the same patch
         // into the same chain cannot help, adding the missing modules can.
-        if (s.state == vcvoid::status::State::ChainError) {
-            vcvoid::chainplan::Plan plan = computeChainPlan();
+        if (s.state == voidbot::status::State::ChainError) {
+            voidbot::chainplan::Plan plan = computeChainPlan();
             if (!plan.blocker.empty())
                 menu->addChild(createMenuItem(
                     "Add missing controllers — blocked: " + plan.blocker,

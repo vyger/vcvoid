@@ -7,7 +7,7 @@ costs nothing.
 
 Usage: tools/inicompress.py in.ini > out.ini
 Shorts come from the Forge's droidfirmware.json (vendored via droidcheck),
-plus vcvoid's experimental-circuit overlay (engine/experimental.json).
+plus voidbot's experimental-circuit overlay (engine/experimental.json).
 
 The engine measures the same thing in C++ (droid::deployedPatchSize, issue
 #41); `make sizecheck` diffs the two over every patch in patches/.

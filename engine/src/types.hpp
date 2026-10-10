@@ -14,10 +14,10 @@ enum class MasterType { Master16, Master18 };
 //
 //   Global — the whole patch is refused, all 16 LEDs flash the colour.
 //   Local  — one line is at fault, some LEDs flash the colour and the rest
-//            spell out the line number (see vcvoid::status::blinkCode).
+//            spell out the line number (see voidbot::status::blinkCode).
 //
-// `Unmapped` is for errors vcvoid raises that the hardware has no code for
-// (they come from the Forge's stricter static analysis, or from vcvoid's own
+// `Unmapped` is for errors voidbot raises that the hardware has no code for
+// (they come from the Forge's stricter static analysis, or from voidbot's own
 // "circuit not implemented yet" gate). They are real errors and are reported in
 // full as text; they simply have no blink code to show. See the mapping table
 // in plugin/src/MasterStatus.hpp.
@@ -28,13 +28,13 @@ enum class ErrorCode {
     TooManyControllers,   // red
     PatchTooBig,          // blue
     OutOfMemory,          // cyan
-    InvalidFirmware,      // magenta   (no vcvoid equivalent)
-    NoSdCard,             // white     (no vcvoid equivalent)
+    InvalidFirmware,      // magenta   (no voidbot equivalent)
+    NoSdCard,             // white     (no voidbot equivalent)
     // --- local (colour + line number in the LEDs) ---
     UnknownRegister,      // yellow
     UnknownParameter,     // orange
     UnknownCircuit,       // red
-    LineTooLong,          // blue      (no vcvoid equivalent)
+    LineTooLong,          // blue      (no voidbot equivalent)
     CableMisuse,          // green
     InvalidSyntax,        // magenta
 };
@@ -59,7 +59,7 @@ struct LoadOptions {
     // reports the honest footprint.
     bool ignoreMemoryLimits = false;
 
-    // Allow vcvoid-only EXPERIMENTAL circuits (#12) to load. Off by default:
+    // Allow voidbot-only EXPERIMENTAL circuits (#12) to load. Off by default:
     // an experimental circuit does not exist on DROID hardware and is unknown
     // to the Forge, so a patch using one is refused unless the user opts in.
     // See docs/adr/0001-experimental-circuits.md.

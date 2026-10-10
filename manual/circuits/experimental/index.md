@@ -1,7 +1,7 @@
-# Experimental circuits (vcvoid only)
+# Experimental circuits (voidbot only)
 
 > **⚠️ Nothing on this page is DROID.**
-> These circuits exist only in [vcvoid](../../../README.md). They are not part
+> These circuits exist only in [voidbot](../../../README.md). They are not part
 > of any DROID firmware, the Droid Forge does not know them, and a patch using
 > one **will not run on DROID hardware**. Everything else under `manual/` is a
 > transcription of the real DROID manual; this directory is the one place that
@@ -9,7 +9,7 @@
 
 ## Using them
 
-1. In vcvoid, open the master module's context menu and enable
+1. In voidbot, open the master module's context menu and enable
    **"Allow experimental circuits"** (under *Experimental*, next to *Ignore
    memory limits*). Until you do, loading a patch that uses one fails with an
    error naming the circuit.

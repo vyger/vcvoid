@@ -83,7 +83,7 @@ struct ImagePanel : widget::Widget {
             nvgFill(args.vg);
         } else {
             if (!warnedMissing) {   // draw() fires every frame; warn just once
-                WARN("vcvoid: missing faceplate %s", path.c_str());
+                WARN("voidbot: missing faceplate %s", path.c_str());
                 warnedMissing = true;
             }
             nvgBeginPath(args.vg);
@@ -188,7 +188,7 @@ struct DroidKnobSmall : DroidKnob {
 // hierarchies but the same gesture.
 template <typename TBase>
 struct HoldableButton : TBase, HoldableControl {
-    vcvoid::ButtonHold hold;
+    voidbot::ButtonHold hold;
     bool heldLast = false;     // for the one release write when a hold ends
     bool firstStep = true;
 
@@ -570,7 +570,7 @@ inline std::string chipText(NVGcontext* vg, const droid::RegisterLabel& l,
 struct LabelOverlay : rack::widget::TransparentWidget {
     const droid::layout::ModuleLayout* layout = nullptr;
     ArtMap art{1.f, 1.f, Vec(1.f, 1.f)};
-    const vcvoid::labels::ModuleLabels* labels = nullptr;   // module-owned; null in the browser
+    const voidbot::labels::ModuleLabels* labels = nullptr;   // module-owned; null in the browser
 
     void draw(const DrawArgs& args) override {
         if (!layout || !labels || !labels->show || !labels->active) return;
@@ -621,7 +621,7 @@ struct LabelOverlay : rack::widget::TransparentWidget {
 // of a widget constructor so the chips draw over the controls.
 inline LabelOverlay* addLabelOverlay(rack::app::ModuleWidget* w, const char* slug,
                                      ArtMap art,
-                                     const vcvoid::labels::ModuleLabels* labels) {
+                                     const voidbot::labels::ModuleLabels* labels) {
     auto* o = new LabelOverlay;
     o->layout = droid::layout::find(slug);
     o->art = art;
@@ -633,20 +633,20 @@ inline LabelOverlay* addLabelOverlay(rack::app::ModuleWidget* w, const char* slu
 
 } // namespace dw
 
-// Shared base for every vcvoid controller/expander ModuleWidget. The UAT bridge
+// Shared base for every voidbot controller/expander ModuleWidget. The UAT bridge
 // drains its UI queue through a single invisible BridgeWidget attached to the
 // scene; that attach can only happen on the UI thread once APP->scene exists,
 // so it is driven from a module widget's step() (the first point guaranteed to
 // run with the scene attached — widget ctors run before scene attach, where
 // ensureWidget() would no-op). Masters already do this from
-// DroidMasterBaseWidget::step(); every non-master vcvoid widget derives from
-// this so ANY vcvoid module present in the rack — not just a master — keeps the
+// DroidMasterBaseWidget::step(); every non-master voidbot widget derives from
+// this so ANY voidbot module present in the rack — not just a master — keeps the
 // bridge's queue serviced. ensureWidget() is idempotent and no-ops when the
-// bridge is disabled (VCVOID_UAT_BRIDGE unset). A truly-empty rack (zero vcvoid
-// modules) has no widget to run this, so at least one vcvoid module must exist
+// bridge is disabled (VOIDBOT_UAT_BRIDGE unset). A truly-empty rack (zero voidbot
+// modules) has no widget to run this, so at least one voidbot module must exist
 // before the generic rack ops (POST /modules etc.) will marshal onto the UI
 // thread — documented as the bridge's precondition.
-struct VcvoidModuleWidget : rack::app::ModuleWidget {
+struct VoidbotModuleWidget : rack::app::ModuleWidget {
     void step() override {
         rack::app::ModuleWidget::step();
         if (auto* b = uat::Bridge::instance()) b->ensureWidget();
@@ -705,7 +705,7 @@ struct VcvoidModuleWidget : rack::app::ModuleWidget {
     void appendRegisterLabelMenu(Menu* menu) {
         auto* cm = dynamic_cast<ChainModule*>(module);
         if (!cm) return;
-        vcvoid::labels::ModuleLabels* master = cm->chainMasterLabels();
+        voidbot::labels::ModuleLabels* master = cm->chainMasterLabels();
         if (!master) return;
         menu->addChild(new MenuSeparator);
         menu->addChild(createBoolPtrMenuItem("Show register labels", "",

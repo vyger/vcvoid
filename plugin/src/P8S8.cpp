@@ -33,7 +33,7 @@ struct DroidP8S8 : ChainModule {
     }
 
     void applyOwnLabels() override {
-        using namespace vcvoid::labels;
+        using namespace voidbot::labels;
         // The sliders are pots whose LEDs sit inside them, so they take the
         // L-register label too (same reasoning as a button's LED).
         applyParamBank(this, SLIDER_PARAMS, 8, 'P', registerLabels, "P%d", true);
@@ -43,7 +43,7 @@ struct DroidP8S8 : ChainModule {
     void process(const ProcessArgs& args) override { relay(args.sampleTime); }
 };
 
-struct DroidP8S8Widget : VcvoidModuleWidget {
+struct DroidP8S8Widget : VoidbotModuleWidget {
     DroidP8S8Widget(DroidP8S8* module) {
         setModule(module);
         // Layout -> render px through the faceplate art (dw::ArtMap): the

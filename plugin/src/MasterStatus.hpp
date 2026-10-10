@@ -18,9 +18,9 @@
 //      colours of the MASTER's 16 matrix LEDs.
 //
 // ---------------------------------------------------------------------------
-// How vcvoid's load errors map onto the hardware's error codes
+// How voidbot's load errors map onto the hardware's error codes
 // ---------------------------------------------------------------------------
-// The hardware has a fixed, small vocabulary of error codes; vcvoid's loader
+// The hardware has a fixed, small vocabulary of error codes; voidbot's loader
 // (and the Forge's stricter static analysis that it mirrors) raises a longer
 // list. droid::ErrorCode is the join: every push_back in the loader/parser is
 // tagged with the hardware code it belongs to.
@@ -33,7 +33,7 @@
 //   Unknown circuit '…'                                      UnknownCircuit (red)
 //   Circuit '…' is experimental                              UnknownCircuit (red)
 //   Circuit '…' needs a MASTER18                             UnknownCircuit (red)
-//   circuit '…' is not yet implemented in vcvoid             UnknownCircuit (red)
+//   circuit '…' is not yet implemented in voidbot             UnknownCircuit (red)
 //   Circuit '…' has no parameter '…'                         UnknownParameter (orange)
 //   There is no register … / refers to controller …          UnknownRegister (yellow)
 //   register … cannot be used as an output                   UnknownRegister (yellow)
@@ -50,10 +50,10 @@
 // output register" is a bad VALUE for a parameter, which is the third meaning
 // of the hardware's magenta.
 //
-// Hardware codes vcvoid never raises: TooManyControllers (red, global — vcvoid
+// Hardware codes voidbot never raises: TooManyControllers (red, global — voidbot
 // has no 16-controller ceiling check), InvalidFirmware (magenta, global — there
 // is no firmware file to corrupt), NoSdCard (white, global — no card), and
-// LineTooLong (blue, local — vcvoid does not enforce the 63-character line
+// LineTooLong (blue, local — voidbot does not enforce the 63-character line
 // limit). They are in the enum so the table is complete and so the colours are
 // documented where the encoder lives.
 //
@@ -66,12 +66,12 @@
 #include <string>
 #include <vector>
 
-namespace vcvoid {
+namespace voidbot {
 namespace status {
 
 // --- fitting the words into a window -------------------------------------
 // The messages are sentences, and some of them are long ones ("Circuit 'x' is
-// experimental (vcvoid only, …). Enable "Allow experimental circuits" in the
+// experimental (voidbot only, …). Enable "Allow experimental circuits" in the
 // module's context menu to load this patch."). Rack sizes both a tooltip and a
 // menu to the widest line it is given, so an unwrapped message drags the error
 // card clean off the screen. Everything the card and the tooltip show is
@@ -296,7 +296,7 @@ inline bool errorColor(droid::ErrorCode code, RGB& out, bool& global) {
 
 // The same table in words: the stable machine-readable name of one hardware
 // error code and of the colour it blinks. Empty strings for Unmapped — an
-// error vcvoid raises that the hardware has no code for reports NOTHING rather
+// error voidbot raises that the hardware has no code for reports NOTHING rather
 // than a plausible-looking guess, so a caller can tell "we know the hardware
 // code" from "we only have the text".
 //
@@ -368,7 +368,7 @@ constexpr int kMaxBlinkLine = 3699;
 // for the ONES, with white input LEDs for the HUNDREDS.
 //
 // Two judgement calls the manual leaves open:
-//   - A local code with no line number (vcvoid raises a couple of whole-patch
+//   - A local code with no line number (voidbot raises a couple of whole-patch
 //     analysis errors that the hardware would never see, e.g. "Output register
 //     O5 is just used as an input"), or a line past 3699, cannot be spelled.
 //     It falls back to the GLOBAL form — all 16 LEDs in the reason colour — so
@@ -516,4 +516,4 @@ inline Status evaluate(const Report& r) {
 }
 
 }  // namespace status
-}  // namespace vcvoid
+}  // namespace voidbot

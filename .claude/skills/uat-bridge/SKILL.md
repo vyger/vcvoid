@@ -1,13 +1,13 @@
 ---
 name: uat-bridge
-description: Drive VCV Rack's localhost UAT bridge (127.0.0.1:2601) to run pre-release verification of the vcvoid plugin without a human clicking through Rack. EXPLICIT INVOCATION ONLY — trigger exclusively when the user runs /uat-bridge or unambiguously asks in this turn for a live UAT/Rack-driving session ("run the UAT", "drive rack", "verify in rack", "pre-release check"). Never trigger proactively or infer it from surrounding work: writing patches, engine/plugin changes, or a failing test do NOT imply a UAT run. Launching Rack can disturb the user's loaded session; when in doubt, ask instead of firing.
+description: Drive VCV Rack's localhost UAT bridge (127.0.0.1:2601) to run pre-release verification of the voidbot plugin without a human clicking through Rack. EXPLICIT INVOCATION ONLY — trigger exclusively when the user runs /uat-bridge or unambiguously asks in this turn for a live UAT/Rack-driving session ("run the UAT", "drive rack", "verify in rack", "pre-release check"). Never trigger proactively or infer it from surrounding work: writing patches, engine/plugin changes, or a failing test do NOT imply a UAT run. Launching Rack can disturb the user's loaded session; when in doubt, ask instead of firing.
 ---
 
 # uat-bridge
 
-Reference card for the `UatBridge` HTTP endpoint hand-rolled into the vcvoid
+Reference card for the `UatBridge` HTTP endpoint hand-rolled into the voidbot
 plugin (`plugin/src/uatbridge/Bridge.cpp`), active only when the plugin is
-launched with `VCVOID_UAT_BRIDGE=1`. Everything below is verified against the
+launched with `VOIDBOT_UAT_BRIDGE=1`. Everything below is verified against the
 actual dispatch table and handlers — not the design spec's aspiration.
 Bridge is single-threaded (one accept loop): calls are effectively
 serialized; a long `/probe` blocks every other request for its window.
@@ -19,12 +19,12 @@ itself permission to launch Rack.
 ## Launch recipe
 
 ```sh
-cd plugin && make install                 # rebuilds & installs; bakes VCVOID_GIT_HASH
+cd plugin && make install                 # rebuilds & installs; bakes VOIDBOT_GIT_HASH
 SESSION=$(mktemp -t uat-session-XXXXXX).vcv   # UNIQUE per run — /rack/save writes
 cp tests/smoketest_default.vcv "$SESSION"     # back to this path, so a fixed name
                                               # gets dirtied by one run and silently
                                               # reused by the next (seen 2026-07-12)
-VCVOID_UAT_BRIDGE=1 "/Applications/VCV Rack 2 Free.app/Contents/MacOS/Rack" \
+VOIDBOT_UAT_BRIDGE=1 "/Applications/VCV Rack 2 Free.app/Contents/MacOS/Rack" \
   "$SESSION" &
 ```
 
@@ -73,12 +73,12 @@ the endpoint reference below is for triage and ad-hoc checks.
    Poll `GET /master/{id}/status` until it returns 200 (404 = not
    registered yet). Discover the master's Rack module id from the autosave
    JSON (`~/Library/Application Support/Rack2/autosave/patch.json`,
-   `.modules[] | select(.plugin=="vcvoid" and .model=="master")`) or
+   `.modules[] | select(.plugin=="voidbot" and .model=="master")`) or
    self-assemble more modules with `POST /modules` (see below). **Precondition:
-   at least one vcvoid module must already be in the rack** — the bridge's
-   UI-queue drain widget is attached only from a vcvoid module widget's
+   at least one voidbot module must already be in the rack** — the bridge's
+   UI-queue drain widget is attached only from a voidbot module widget's
    `step()` (the HTTP thread cannot attach it), so a truly-empty rack (zero
-   vcvoid modules) 503s every UI-thread route, including `POST /modules`
+   voidbot modules) 503s every UI-thread route, including `POST /modules`
    itself. Launch from the runbook template (which places a master) or add one
    by hand before driving.
 4. When done: `POST /rack/quit` for a graceful shutdown (saves
@@ -152,7 +152,7 @@ structured fields, so a check never has to regex a human-readable sentence.
 
 - **This is the panel's own verdict, serialised.** `state`, `severity`,
   `title`, `message`, `line` and `code` all come out of
-  `vcvoid::status::evaluate` (`plugin/src/MasterStatus.hpp`, issue #46) — the
+  `voidbot::status::evaluate` (`plugin/src/MasterStatus.hpp`, issue #46) — the
   same pure model that paints the module's ring, the MASTER's blink code, the
   hover tooltip and the context-menu error card. There is no second derivation
   anywhere: asserting on this record IS asserting on what a human would see,
@@ -251,7 +251,7 @@ returns values in DROID's normalized **−1…+1** engine domain (the project's
 ±10 V ↔ ±1 convention — `MasterBase.hpp` writes `outputs[i].setVoltage(
 getRegister(...) * 10.f)` to go from register to Rack port). `GET /probe`,
 by contrast, always samples the **actual Rack port voltage** (`Port::
-getVoltage()`, so roughly ±10 V, whichever backend — vcvoid ring buffer or
+getVoltage()`, so roughly ±10 V, whichever backend — voidbot ring buffer or
 foreign per-ms sampling) — the same number a cable-hover tooltip shows. When
 cross-checking a register readback against a probe of the same signal,
 multiply/divide by 10 to compare like for like: `register × 10 ≈ probe.avg`.
@@ -294,11 +294,11 @@ button the bridge was pressing). Nothing else ends an un-timed hold: if a run
 aborts between hold and release, the finger stays down until the next patch
 load or quit.
 
-`503 {"error":"ui bridge not attached; add any vcvoid module or launch from
+`503 {"error":"ui bridge not attached; add any voidbot module or launch from
 the runbook template"}` is returned by every route that marshals onto the UI
 thread (all "Generic rack ops" plus midi-ports/midi-port and the mutating
-half of tick-rate) if no vcvoid widget has attached the drain hook yet — add
-any vcvoid module (e.g. via a template patch) if you see this on a clean
+half of tick-rate) if no voidbot widget has attached the drain hook yet — add
+any voidbot module (e.g. via a template patch) if you see this on a clean
 launch.
 
 ### Rack lifecycle
@@ -321,18 +321,18 @@ DROID register: `O1` = outputs[0], `O4` = outputs[3], etc.
   fraction of the expected period (needs `edges >= 3` to be meaningful —
   0/1 edges always report `periodStddevMs: 0`, which is "no data," not
   "steady"). FIXED (2026-07-12, issue #5): probe timestamps are no longer
-  reconstructed from a wall-clock window. vcvoid-master probes are
+  reconstructed from a wall-clock window. voidbot-master probes are
   frame-accurate — each sample's timestamp is derived from the true
   audio-thread sample rate (`args.sampleRate`, captured live alongside the
   sample write, not looked up after the fact), so `sampleRateHz` reports the
   real engine rate and `periodStddevMs` is honest. Absolute asserts like
   `periodStddevMs < 2 ms` on a clean square are now legitimate for master
-  probes. Foreign-module probes (any non-vcvoid module) get a real
+  probes. Foreign-module probes (any non-voidbot module) get a real
   `steady_clock` timestamp per sample instead of an assumed-uniform 1 ms
   grid, so their `periodStddevMs` reflects actual HTTP-thread scheduling
   jitter at ~1 kHz resolution — expect looser tolerances there than on a
   master probe.
-  `sampleRateHz` tells you the probe's time resolution for that call (vcvoid
+  `sampleRateHz` tells you the probe's time resolution for that call (voidbot
   masters: the true audio engine rate via a ring buffer; any other module:
   actual samples-over-actual-span at ~1 kHz on the HTTP thread).
 - **DC / level check**: probe over a short window (~50–200 ms is plenty for

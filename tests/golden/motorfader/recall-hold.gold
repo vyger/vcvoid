@@ -1,6 +1,6 @@
 # motorfader: a recall HOLDS while the fader is held (issue #45). The motor is
 # disabled while a finger is on the fader/plate, so the physical position stays
-# where it was and vcvoid's panel echoes it into the engine every frame
+# where it was and voidbot's panel echoes it into the engine every frame
 # (plugin/src/MasterBase.hpp, touch-gated moveFader) -- modelled here by the
 # repeated `move F1 <same position>`. A `loadpreset` / `clear` / `startvalue`
 # recall must survive that echo until the position REALLY changes.

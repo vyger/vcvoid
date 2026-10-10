@@ -1,4 +1,4 @@
-"""vcvoid's experimental-circuit overlay (engine/experimental.json), shared by
+"""voidbot's experimental-circuit overlay (engine/experimental.json), shared by
 its two consumers so the merge policy exists exactly once:
 
   * tools/jackgen/jackgen.py    — engine jack tables (engine/gen/jacktables.gen.*)
@@ -19,7 +19,7 @@ def load(firmware_circuits, path=None):
 
     Sorted so codegen output is deterministic. A name that already exists in
     the firmware is a hard error rather than a silent override: the point of
-    the overlay is to ADD circuits vcvoid alone has, never to redefine a
+    the overlay is to ADD circuits voidbot alone has, never to redefine a
     hardware one (which would make a patch look hardware-valid when it is not).
     """
     p = pathlib.Path(path) if path else OVERLAY

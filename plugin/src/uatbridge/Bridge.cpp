@@ -18,8 +18,8 @@
 #include <thread>
 #include <unistd.h>
 
-#ifndef VCVOID_GIT_HASH
-#define VCVOID_GIT_HASH "unknown"
+#ifndef VOIDBOT_GIT_HASH
+#define VOIDBOT_GIT_HASH "unknown"
 #endif
 
 namespace uat {
@@ -70,7 +70,7 @@ static json_t* jerr(const char* msg) {
 }
 
 void Bridge::start() {
-    const char* env = std::getenv("VCVOID_UAT_BRIDGE");
+    const char* env = std::getenv("VOIDBOT_UAT_BRIDGE");
     if (!env || !*env || g_bridge) return;
     g_bridge = new Bridge();
     // Rack's APP macro resolves a THREAD-LOCAL context (context.hpp: "You
@@ -175,7 +175,7 @@ std::string Bridge::handleMasterStatus(DroidMasterBase* m, int* code) {
     // next frame — so the reply used to describe the state BEFORE the load
     // (a failing patch over a running one replied "running").
     json_object_set_new(o, "state",
-        json_string(vcvoid::status::stateName(m->currentState())));
+        json_string(voidbot::status::stateName(m->currentState())));
     json_object_set_new(o, "midiWarning", json_boolean(midiWarn));
     json_object_set_new(o, "timingMode",
         json_string(timingMode == DroidMasterBase::TimingMode::Adaptive
@@ -191,7 +191,7 @@ std::string Bridge::handleMasterStatus(DroidMasterBase* m, int* code) {
 // caller has to re-parse with its own regex.
 //
 // It is the PANEL's verdict, serialised: state, title, message, line and the
-// hardware error code all come out of vcvoid::status::evaluate (MasterStatus.hpp,
+// hardware error code all come out of voidbot::status::evaluate (MasterStatus.hpp,
 // issue #46), the same pure model that paints the ring, the blink code and the
 // context-menu card. There is deliberately no second derivation here — a test
 // that asserts on this record is asserting on what a human would see on the
@@ -216,12 +216,12 @@ std::string Bridge::handleMasterDiagnostics(DroidMasterBase* m, int* code) {
     }
     // statusReport() takes engineMutex itself, hence the separate block above —
     // exactly the arrangement handleMasterStatus already uses for currentState().
-    vcvoid::status::Status s = vcvoid::status::evaluate(m->statusReport());
-    vcvoid::status::CodeNames cn = vcvoid::status::codeNames(s.code);
+    voidbot::status::Status s = voidbot::status::evaluate(m->statusReport());
+    voidbot::status::CodeNames cn = voidbot::status::codeNames(s.code);
     json_t* o = json_object();
-    json_object_set_new(o, "state", json_string(vcvoid::status::stateName(s.state)));
+    json_object_set_new(o, "state", json_string(voidbot::status::stateName(s.state)));
     json_object_set_new(o, "severity",
-        json_string(vcvoid::status::severityName(vcvoid::status::severityFor(s.state))));
+        json_string(voidbot::status::severityName(voidbot::status::severityFor(s.state))));
     json_object_set_new(o, "code", json_string(cn.code));
     json_object_set_new(o, "codeColor", json_string(cn.color));
     json_object_set_new(o, "line", json_integer(s.line));
@@ -379,7 +379,7 @@ std::string Bridge::handleMasterResetState(DroidMasterBase* m, int* code) {
 bool Bridge::checkParamTarget(int64_t moduleId, int paramId, int* code, std::string* body) {
     if (!uiAttached()) {
         *code = 503;
-        *body = "{\"error\":\"ui bridge not attached; add any vcvoid module or launch from the runbook template\"}";
+        *body = "{\"error\":\"ui bridge not attached; add any voidbot module or launch from the runbook template\"}";
         return false;
     }
     rack::engine::Module* mod = APP->engine->getModule(moduleId);
@@ -653,7 +653,7 @@ static json_t* probeStatsToJson(const ProbeStats& st) {
 // at UAT scale (one client, short probes).
 //
 // Two backends:
-//  - Registered vcvoid master: arms the ring buffer in DroidMasterBase
+//  - Registered voidbot master: arms the ring buffer in DroidMasterBase
 //    (armProbe/disarmProbe, MasterBase.hpp), which process() fills every
 //    audio frame under probeMutex_. Best timing fidelity (audio-rate).
 //  - Any other module: sampled right here on the HTTP thread, once per
@@ -740,10 +740,10 @@ std::string Bridge::handleProbe(const Request& req, int* code) {
         stats = computeProbeStats(samples, timestampsMs, rateHz);
     } else {
         // Foreign backend needs APP (thread-local context) — not yet applied
-        // if no vcvoid widget has stepped (installBridgeWidget notes it).
+        // if no voidbot widget has stepped (installBridgeWidget notes it).
         if (!rack::contextGet()) {
             *code = 503;
-            return "{\"error\":\"rack context not yet available; add a vcvoid module\"}";
+            return "{\"error\":\"rack context not yet available; add a voidbot module\"}";
         }
         rack::engine::Module* mod = APP->engine->getModule(moduleId);
         if (!mod) {
@@ -804,7 +804,7 @@ std::string Bridge::handleProbe(const Request& req, int* code) {
 template <class F>
 static std::string uiCall(F fn, int* code) {
     static const char* kUnattached =
-        "{\"error\":\"ui bridge not attached; add any vcvoid module or launch from the runbook template\"}";
+        "{\"error\":\"ui bridge not attached; add any voidbot module or launch from the runbook template\"}";
     Bridge* b = Bridge::instance();
     if (!b || !b->uiAttached()) {
         *code = 503;
@@ -1850,7 +1850,7 @@ std::string Bridge::handlePing(int* code) {
     // 2 -> 3: added POST /master/{id}/add-missing-controllers and the
     // chainFix/chainFixBlocker fields on /diagnostics (issue #69).
     json_object_set_new(o, "bridgeVersion", json_integer(3));
-    json_object_set_new(o, "gitHash", json_string(VCVOID_GIT_HASH));
+    json_object_set_new(o, "gitHash", json_string(VOIDBOT_GIT_HASH));
     return dumpAndFree(o);
 }
 

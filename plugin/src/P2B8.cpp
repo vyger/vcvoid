@@ -29,7 +29,7 @@ struct DroidP2B8 : ChainModule {
     }
 
     void applyOwnLabels() override {
-        using namespace vcvoid::labels;
+        using namespace voidbot::labels;
         applyParamBank(this, POT_PARAMS, 2, 'P', registerLabels, "P%d");
         applyParamBank(this, BUTTON_PARAMS, 8, 'B', registerLabels, "B%d", true);
     }
@@ -37,7 +37,7 @@ struct DroidP2B8 : ChainModule {
     void process(const ProcessArgs& args) override { relay(args.sampleTime); }
 };
 
-struct DroidP2B8Widget : VcvoidModuleWidget {
+struct DroidP2B8Widget : VoidbotModuleWidget {
     DroidP2B8Widget(DroidP2B8* module) {
         setModule(module);
         // Layout -> render px through the faceplate art (dw::ArtMap): the

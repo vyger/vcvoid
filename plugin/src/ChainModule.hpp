@@ -46,18 +46,18 @@ struct ChainModule : Module {
     // MIRROR of the master's flag, re-pushed every frame — a DROID system is
     // one instrument, so its labels turn on and off together. Do not persist
     // it here; the master owns it.
-    vcvoid::labels::ModuleLabels registerLabels;
+    voidbot::labels::ModuleLabels registerLabels;
     virtual void applyOwnLabels() {}
 
     // True when a master sits at the head of the chain to my left. A module
     // dragged off the chain keeps whatever labels it was given until it notices
-    // this, so its widget clears them (see VcvoidModuleWidget::step).
+    // this, so its widget clears them (see VoidbotModuleWidget::step).
     bool onMasterChain();
 
     // The label state of the master at the head of my chain, or null when I am
     // not on one. This is where the "Show register labels" toggle lives, so
     // right-clicking any module of a system flips the whole system.
-    vcvoid::labels::ModuleLabels* chainMasterLabels();
+    voidbot::labels::ModuleLabels* chainMasterLabels();
 
   protected:
     // Packs `n` momentary-button params (starting at `firstParamId`) into a

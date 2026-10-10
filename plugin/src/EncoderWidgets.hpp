@@ -33,7 +33,7 @@
 // travel replayed), or a deliberate hold (real push level, survives turning).
 struct DroidEndlessEncoder : OpaqueWidget, dw::HoldableControl {
     uint32_t* detentCount = nullptr;           // module-owned monotonic counter (wraps)
-    vcvoid::EncoderGesture* gesture = nullptr; // module-owned click/turn/push classifier
+    voidbot::EncoderGesture* gesture = nullptr; // module-owned click/turn/push classifier
     float accum = 0.f;                 // sub-detent drag accumulator (px)
     // Shift-hold / Latch on the PUSH (issue #39). The push is a B register like
     // any other DROID button, so a patch can chord with it; the drawn buttons

@@ -9,7 +9,7 @@ namespace droid {
 // Bad jack access is a circuit-author (engine) bug, not patch input —
 // fail loudly instead of UB-indexing.
 [[noreturn]] static void jackFatal(const gen::CircuitDef* def, const char* name, const char* why) {
-    std::fprintf(stderr, "vcvoid: fatal jack access in circuit '%s', jack '%s': %s\n",
+    std::fprintf(stderr, "voidbot: fatal jack access in circuit '%s', jack '%s': %s\n",
                  def ? def->name : "?", name, why);
     std::abort();
 }
@@ -109,10 +109,10 @@ int Circuit::memoSlot(const char* name, int index, bool wantInput) {
             JackMemo& e = jackTable_[pos];
             if (!e.ptr) break;   // insert-only table: empty slot ends the probe
             if (e.ptr == name && e.index == index && e.isInput == wantInput) {
-#if VCVOID_VERIFY_MEMO
+#if VOIDBOT_VERIFY_MEMO
                 // Pointer-identity hit. Dynamically verify the repo-wide
                 // invariant (same pointer => same content). Compiled only
-                // when VCVOID_VERIFY_MEMO is defined (unittests/droidtest —
+                // when VOIDBOT_VERIFY_MEMO is defined (unittests/droidtest —
                 // see root Makefile): the Rack SDK builds this plugin with
                 // -O3 and no -DNDEBUG, so a plain assert() here would still
                 // run (and could abort the audio thread) in the shipped
@@ -121,7 +121,7 @@ int Circuit::memoSlot(const char* name, int index, bool wantInput) {
                 // exist to prove the invariant.
                 if (std::strcmp(e.name.c_str(), name) != 0) {
                     std::fprintf(stderr,
-                        "VCVOID_VERIFY_MEMO: memo pointer/content mismatch in circuit '%s': "
+                        "VOIDBOT_VERIFY_MEMO: memo pointer/content mismatch in circuit '%s': "
                         "pointer matched but name changed from '%s' to '%s'\n",
                         def ? def->name : "?", e.name.c_str(), name);
                     std::abort();

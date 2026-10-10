@@ -30,9 +30,9 @@ struct DroidMaster : DroidMasterBase {
     void applyOwnLabels() override {
         DroidMasterBase::applyOwnLabels();
         for (int i = 0; i < 16; i++) {
-            vcvoid::labels::applyLight(
+            voidbot::labels::applyLight(
                 lightInfos[MATRIX_LIGHTS + i * 3],
-                vcvoid::labels::compose(registerLabels.find('R', unsigned(i) + 1)),
+                voidbot::labels::compose(registerLabels.find('R', unsigned(i) + 1)),
                 i < 8 ? string::f("Input %d", i + 1)
                       : string::f("Output %d", i - 7));
             // #46: when the matrix is flashing an error blink code, these LEDs
@@ -70,13 +70,13 @@ struct DroidMaster : DroidMasterBase {
     // mode latched on the last tick frame (the per-sample gate below needs it
     // every sample, the targets only once per tick).
     float blinkPhase_ = 0.f;
-    int matrixMode_ = (int) vcvoid::status::Matrix::Mirror;
+    int matrixMode_ = (int) voidbot::status::Matrix::Mirror;
 
     void process(const ProcessArgs& args) override {
         DroidMasterBase::process(args);
         blinkPhase_ += args.sampleTime;
-        if (blinkPhase_ >= vcvoid::status::kBlinkPeriod)
-            blinkPhase_ -= vcvoid::status::kBlinkPeriod;
+        if (blinkPhase_ >= voidbot::status::kBlinkPeriod)
+            blinkPhase_ -= voidbot::status::kBlinkPeriod;
         // [droid] ledbrightness dims the master's matrix LEDs (manual: "the 24
         // LEDs of the master and the G8"); jack voltages are unaffected.
         //
@@ -88,7 +88,7 @@ struct DroidMaster : DroidMasterBase {
         // visible LED rate.
         if (frameCounter == 0) {
             matrixMode_ = matrixMode.load(std::memory_order_acquire);
-            using MM = vcvoid::status::Matrix;
+            using MM = voidbot::status::Matrix;
             if (matrixMode_ == (int) MM::Dark) {
                 // No patch: dark, deliberately unlike the hardware's forever
                 // "patch not found" flash (see MasterStatus.hpp). Also the
@@ -126,8 +126,8 @@ struct DroidMaster : DroidMasterBase {
         // The blink itself: the targets hold the code's colours, this gates
         // them on and off. setBrightnessSmooth snaps up and decays, so the
         // result reads as a flashing LED rather than a sine pulse.
-        float gate = (matrixMode_ == (int) vcvoid::status::Matrix::Blink &&
-                      blinkPhase_ >= vcvoid::status::kBlinkPeriod * 0.5f) ? 0.f : 1.f;
+        float gate = (matrixMode_ == (int) voidbot::status::Matrix::Blink &&
+                      blinkPhase_ >= voidbot::status::kBlinkPeriod * 0.5f) ? 0.f : 1.f;
         for (int i = 0; i < 16; i++) {
             int base = MATRIX_LIGHTS + 3 * i;
             for (int c = 0; c < 3; c++)

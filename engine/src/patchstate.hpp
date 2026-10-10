@@ -5,7 +5,7 @@
 // patch is on that card, matching circuits by type + per-type ordinal
 // (manual/hardware.md §11.1). Its escape hatch for "I want different state for
 // a different patch" is a second SD card. A Rack module has no card slot, so a
-// vcvoid master keeps a STORE of snapshots instead, keyed by what the patch
+// voidbot master keeps a STORE of snapshots instead, keyed by what the patch
 // structurally IS, and picks the right one when a patch is loaded.
 //
 // Everything here is Rack-free and deterministic so it can be unit-tested

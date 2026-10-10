@@ -67,7 +67,7 @@ static DroidMasterBase* chainMasterOf(Module* self) {
 
 bool ChainModule::onMasterChain() { return chainMasterOf(this) != nullptr; }
 
-vcvoid::labels::ModuleLabels* ChainModule::chainMasterLabels() {
+voidbot::labels::ModuleLabels* ChainModule::chainMasterLabels() {
     DroidMasterBase* m = chainMasterOf(this);
     return m ? &m->registerLabels : nullptr;
 }

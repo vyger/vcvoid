@@ -14,7 +14,7 @@ namespace droid {
 // numbers circuits. `values` is a flat list of doubles tagged with `version`
 // (JSON-friendly / diffable), opaque to everything but the circuit itself.
 //
-// `signature` is vcvoid's own addition (issue #42): the sorted, de-duplicated
+// `signature` is voidbot's own addition (issue #42): the sorted, de-duplicated
 // set of targets this circuit's OUTPUTS are bound to (internal cable names and
 // register names), or — when the circuit binds no outputs — the targets its
 // inputs read. It is not used by restoreState (which stays byte-for-byte the

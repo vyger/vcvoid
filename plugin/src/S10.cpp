@@ -33,7 +33,7 @@ struct DroidS10 : ChainModule {
     void applyDownstream(const droid::chain::DownstreamBlock&, float) override {}   // no LEDs
 
     void applyOwnLabels() override {
-        using namespace vcvoid::labels;
+        using namespace voidbot::labels;
         // S1-S2 are the rotaries, S3-S10 the three-way toggles.
         applyParamBank(this, ROTARY_PARAMS, 2, 'S', registerLabels, "S%d");
         applyParamBank(this, TOGGLE_PARAMS, 8, 'S', registerLabels, "S%d", false, 3);
@@ -56,7 +56,7 @@ struct DroidKnobSnap : dw::DroidKnob {
     }
 };
 
-struct DroidS10Widget : VcvoidModuleWidget {
+struct DroidS10Widget : VoidbotModuleWidget {
     DroidS10Widget(DroidS10* module) {
         setModule(module);
         // Layout -> render px through the faceplate art (dw::ArtMap): the

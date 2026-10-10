@@ -29,7 +29,7 @@ struct DroidDB8E : ChainModule {
     // Encoder click/turn/push classifier (EncoderGesture.hpp): the widget
     // feeds it press/move/release on the UI thread; process() steps its
     // timers and fillUpstream publishes its level() as the push bit.
-    vcvoid::EncoderGesture gest;
+    voidbot::EncoderGesture gest;
     // Select-gated ring image (issue #15; see chain.hpp DownstreamBlock).
     uint8_t ringFlags = 0;
     float ringValue = 0.f;
@@ -86,7 +86,7 @@ struct DroidDB8E : ChainModule {
         // B9 (the encoder's push) and the encoder itself are custom widgets with
         // no ParamQuantity, so only the eight face buttons take tooltips; their
         // labels still draw as panel chips.
-        vcvoid::labels::applyParamBank(this, BUTTON_PARAMS, 8, 'B', registerLabels,
+        voidbot::labels::applyParamBank(this, BUTTON_PARAMS, 8, 'B', registerLabels,
                                        "B%d", true);
     }
 
@@ -206,7 +206,7 @@ struct DB8ERingWidget : Widget {
     }
 };
 
-struct DroidDB8EWidget : VcvoidModuleWidget {
+struct DroidDB8EWidget : VoidbotModuleWidget {
     DroidDB8EWidget(DroidDB8E* module) {
         setModule(module);
         // Layout -> render px through the faceplate art (dw::ArtMap): the

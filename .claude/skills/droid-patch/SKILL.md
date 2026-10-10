@@ -1,6 +1,6 @@
 ---
 name: droid-patch
-description: Write or edit a DROID patch file (droid.ini or any other .ini name) and validate it. USER-INVOCABLE ONLY — trigger exclusively when the user explicitly runs /droid-patch or directly asks in this turn to "write me a droid patch" / "edit this droid.ini" / equivalent. Never trigger proactively or infer this intent from surrounding work (e.g. touching the vcvoid engine/plugin code does not imply the user wants a patch written).
+description: Write or edit a DROID patch file (droid.ini or any other .ini name) and validate it. USER-INVOCABLE ONLY — trigger exclusively when the user explicitly runs /droid-patch or directly asks in this turn to "write me a droid patch" / "edit this droid.ini" / equivalent. Never trigger proactively or infer this intent from surrounding work (e.g. touching the voidbot engine/plugin code does not imply the user wants a patch written).
 ---
 
 # droid-patch
@@ -37,7 +37,7 @@ Before writing anything non-trivial, check:
 
 ## Experimental circuits — opt-in only, never by default
 
-`manual/circuits/experimental/` documents **vcvoid-only** circuits (today:
+`manual/circuits/experimental/` documents **voidbot-only** circuits (today:
 `trigseq`). They are NOT DROID: no firmware has them, the Forge rejects them,
 and a patch using one **will not run on hardware**.
 
@@ -110,7 +110,7 @@ text becomes the tooltip, is not length-constrained, and may be omitted.
 ### `[SHORT]` is 7-8 characters, hard
 
 `[SHORT]` is what the on-panel chip shows, and **only 7 or 8 characters
-reliably stay visible in both the Forge and vcvoid** — spaces included. Longer
+reliably stay visible in both the Forge and voidbot** — spaces included. Longer
 text is silently ellipsized, so the end of the name is simply lost on the
 panel. Treat 8 as the ceiling and prefer 7.
 

@@ -1,6 +1,6 @@
 {
   "_comment": [
-    "vcvoid-only EXPERIMENTAL circuits — see docs/adr/0001-experimental-circuits.md.",
+    "voidbot-only EXPERIMENTAL circuits — see docs/adr/0001-experimental-circuits.md.",
     "These do not exist in DROID firmware and are unknown to the Droid Forge.",
     "Schema is the Forge's droidfirmware.json circuit schema, so the same file",
     "feeds BOTH consumers: tools/jackgen/jackgen.py (engine jack tables) and",

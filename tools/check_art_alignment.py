@@ -47,7 +47,7 @@ PX_PER_MM = 22.75
 #   - m4 "B" registers are the touch plates (manual/hardware.md "The touch
 #     plates"). The faceplate is blank there -- the widget draws a standard
 #     VCV light-button (the vendor art's icon graphic was DMMDM branding,
-#     removed in the vcvoid rebrand) -- so there is no circle in the art to
+#     removed in the voidbot rebrand) -- so there is no circle in the art to
 #     detect.
 EXCLUDE = {
     "p8s8": {"P"},

@@ -1,19 +1,19 @@
-# 1. vcvoid-only experimental circuits, gated at load
+# 1. voidbot-only experimental circuits, gated at load
 
 Date: 2026-07-25
 Status: Accepted
-Issue: [#12](https://github.com/vyger/vcvoid/issues/12)
+Issue: [#12](https://github.com/vyger/voidbot/issues/12)
 
 ## Context
 
-vcvoid emulates DROID hardware. The project's central promise is fidelity: every
-circuit it runs exists on a real master, and a patch that loads in vcvoid loads
+voidbot emulates DROID hardware. The project's central promise is fidelity: every
+circuit it runs exists on a real master, and a patch that loads in voidbot loads
 in the Droid Forge. The `manual/` tree is a transcription of the DROID manual and
 is treated as the spec; `tools/droidcheck` exists purely to answer "would the
 real Forge accept this patch?"; the engine's jack tables are *generated* from the
 Forge's own `droidfirmware.json` so they cannot drift.
 
-That fidelity also means vcvoid cannot do anything the hardware does not — even
+That fidelity also means voidbot cannot do anything the hardware does not — even
 where the emulator has freedoms the firmware lacks (no flash budget, no
 8-bit-era parser, no firmware release to review). We wanted a declarative
 trigger sequencer that no DROID circuit provides. Adding one naively would have
@@ -30,7 +30,7 @@ broken three things quietly:
 ## Decision
 
 Introduce a distinct class of circuit — the **experimental circuit** — that
-exists only in vcvoid, and gate it at patch load.
+exists only in voidbot, and gate it at patch load.
 
 - **Declaration.** Experimental circuits live in `engine/experimental.json`,
   written in the Forge firmware file's own schema. `tools/jackgen` merges it with
@@ -59,7 +59,7 @@ exists only in vcvoid, and gate it at patch load.
 
 **Good.**
 
-- The default experience is unchanged: vcvoid remains exactly as faithful as
+- The default experience is unchanged: voidbot remains exactly as faithful as
   before, and a patch built without touching the toggle still runs on hardware.
 - Failure is loud and actionable — a load error naming the circuit and the
   switch, rather than silence now and a mystery on the master later.
@@ -71,7 +71,7 @@ exists only in vcvoid, and gate it at patch load.
 
 - The generated jack table is no longer a pure function of the Forge's firmware
   file. This is the surprising part, and the reason this ADR exists.
-- A "vcvoid patch" and a "DROID patch" are now potentially different things.
+- A "voidbot patch" and a "DROID patch" are now potentially different things.
   Anyone sharing a patch that uses an experimental circuit must say so.
 - Two places describe circuits (firmware JSON, overlay), so the overlay must
   keep tracking the Forge's schema if the Forge changes it.
@@ -79,7 +79,7 @@ exists only in vcvoid, and gate it at patch load.
 **Deliberately not done.**
 
 - No attempt to make hardware or the Forge run these circuits.
-- No second mechanism for "vcvoid extensions" to existing firmware circuits —
+- No second mechanism for "voidbot extensions" to existing firmware circuits —
   extra jacks on a real circuit would be a *different* and much more dangerous
   decision, because such a patch would look hardware-valid.
 

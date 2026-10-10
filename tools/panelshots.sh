@@ -9,6 +9,6 @@ RACK_USER="${RACK_USER:-$HOME/Library/Application Support/Rack2}"
 "$RACK_APP" -t 3   # zoom 3 => ~14.2 px/mm; writes $RACK_USER/screenshots/<plugin>/<module>.png
 OUT=build/panelshots
 mkdir -p "$OUT"
-cp "$RACK_USER/screenshots/vcvoid/"*.png "$OUT/"
+cp "$RACK_USER/screenshots/voidbot/"*.png "$OUT/"
 echo "panelshots in $OUT:"
 ls "$OUT"

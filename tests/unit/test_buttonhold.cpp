@@ -1,7 +1,7 @@
 #include "harness.hpp"
 #include "ButtonHold.hpp"
-using vcvoid::HoldArbiter;
-using vcvoid::ButtonHold;
+using voidbot::HoldArbiter;
+using voidbot::ButtonHold;
 
 // Mod-hold / Latch for the momentary DROID buttons (issue #39). A mouse can
 // only hold one momentary widget at a time, which makes every CTRL+button
